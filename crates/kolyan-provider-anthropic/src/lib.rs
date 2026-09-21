@@ -29,6 +29,12 @@ impl AnthropicProvider {
                     name: tool.name.clone(),
                     description: tool.description.clone(),
                     input_schema: tool.input_schema.clone(),
+                    cache_control: request.prompt_cache.as_ref().and_then(|cache| {
+                        cache
+                            .breakpoints
+                            .contains(&kolyan_model::CacheBreakpoint::Tools)
+                            .then(|| json!({"type":"ephemeral"}))
+                    }),
                 })
                 .collect(),
             tool_choice: tool_choice(&request.tool_choice),
@@ -36,6 +42,10 @@ impl AnthropicProvider {
                 .reasoning
                 .as_ref()
                 .map(|r| json!({"type":"enabled","budget_tokens":r.budget_tokens.unwrap_or(1024)})),
+            output_config: request
+                .output_format
+                .as_ref()
+                .map(|format| json!({"format":{"type":"json_schema","schema":format.schema}})),
             stream: true,
         }
     }
@@ -50,12 +60,19 @@ impl ModelProvider for AnthropicProvider {
                 .await
                 .map_err(anthropic_error)?;
             let model = request.model.clone();
-            let stream = response.scan(AnthropicState::default(), move |state, event| {
-                let result = event
-                    .map_err(anthropic_error)
-                    .and_then(|event| state.event(event, &model));
-                futures_util::future::ready(Some(result))
-            });
+            let structured = request.output_format.is_some();
+            let stream = response.scan(
+                AnthropicState {
+                    structured,
+                    ..AnthropicState::default()
+                },
+                move |state, event| {
+                    let result = event
+                        .map_err(anthropic_error)
+                        .and_then(|event| state.event(event, &model));
+                    futures_util::future::ready(Some(result))
+                },
+            );
             Ok(Box::pin(stream) as _)
         })
     }
@@ -69,6 +86,7 @@ struct AnthropicState {
     usage: TokenUsage,
     active_tool: Option<(String, String, String)>,
     stop_reason: Option<String>,
+    structured: bool,
 }
 impl AnthropicState {
     fn event(
@@ -173,10 +191,15 @@ impl AnthropicState {
                     Some(other) => StopReason::Other(other.into()),
                     None => StopReason::EndTurn,
                 };
+                let structured_output = self
+                    .structured
+                    .then(|| serde_json::from_str::<Value>(&self.text).ok())
+                    .flatten();
                 Ok(ModelEvent::Completed(ModelResponse {
                     id: self.id.clone(),
                     model: model.clone(),
                     content: self.blocks.clone(),
+                    structured_output,
                     stop_reason,
                     usage: self.usage.clone(),
                     metadata: json!({"provider":"anthropic"}),
@@ -215,10 +238,22 @@ fn image_source(source: &ImageSource) -> Value {
     }
 }
 fn system(request: &ModelRequest) -> Option<Value> {
+    let cache_system = request.prompt_cache.as_ref().is_some_and(|cache| {
+        cache
+            .breakpoints
+            .contains(&kolyan_model::CacheBreakpoint::System)
+    });
     let blocks = request
         .system
         .iter()
-        .map(|s| json!({"type":"text","text":s.text}))
+        .map(|s| {
+            let cached = s.cache || cache_system;
+            if cached {
+                json!({"type":"text","text":s.text,"cache_control":{"type":"ephemeral"}})
+            } else {
+                json!({"type":"text","text":s.text})
+            }
+        })
         .collect::<Vec<_>>();
     (!blocks.is_empty()).then_some(Value::Array(blocks))
 }

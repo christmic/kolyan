@@ -1,4 +1,4 @@
-use crate::{Message, ModelRef, SystemInstruction, ToolChoice, ToolDefinition};
+use crate::{Message, ModelRef, PromptCacheConfig, SystemInstruction, ToolChoice, ToolDefinition};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -11,6 +11,7 @@ pub struct ModelRequest {
     pub tools: Vec<ToolDefinition>,
     pub tool_choice: ToolChoice,
     pub output_format: Option<OutputFormat>,
+    pub prompt_cache: Option<PromptCacheConfig>,
     pub reasoning: Option<ReasoningConfig>,
     pub max_output_tokens: Option<u32>,
     pub extensions: Value,
@@ -34,6 +35,7 @@ pub struct ModelResponse {
     pub id: String,
     pub model: ModelRef,
     pub content: Vec<crate::ContentBlock>,
+    pub structured_output: Option<Value>,
     pub stop_reason: StopReason,
     pub usage: crate::TokenUsage,
     pub metadata: Value,

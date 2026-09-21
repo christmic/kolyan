@@ -1,5 +1,6 @@
 //! Provider-neutral model invocation types and interfaces.
 
+mod cache;
 mod capability;
 mod error;
 mod event;
@@ -9,6 +10,7 @@ mod tool;
 mod types;
 mod usage;
 
+pub use cache::{CacheBreakpoint, CacheRetention, PromptCacheConfig};
 pub use capability::{ModelDescriptor, ModelFeature, ModelFeatures, ModelRef};
 pub use error::{ProviderError, ProviderErrorKind, ProviderErrorPhase};
 pub use event::{ModelEvent, ProviderMetadata};

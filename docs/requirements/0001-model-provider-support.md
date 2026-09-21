@@ -52,4 +52,4 @@
 
 ## 当前实现状态
 
-已完成协议客户端、SSE 流封装、Provider-neutral 模型类型、OpenAI Responses 适配器和 Anthropic Messages 适配器。适配器统一暴露 `ModelProvider::stream`，协议客户端同时提供非流式请求方法。真实网络回归测试和完整能力矩阵留在后续 fixture/evals 任务中，不在本次提交中引入 API Key。
+已完成协议客户端、SSE 流封装、Provider-neutral 模型类型、OpenAI Responses 适配器和 Anthropic Messages 适配器。结构化输出已经统一映射到 OpenAI `text.format` 和 Anthropic `output_config.format`；Prompt Cache 已统一抽象并映射到 OpenAI prompt cache options/breakpoint 和 Anthropic `cache_control`。适配器统一暴露 `ModelProvider::stream`，协议客户端同时提供非流式请求方法。真实网络回归测试和完整能力矩阵留在后续 fixture/evals 任务中，不在本次提交中引入 API Key。

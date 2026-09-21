@@ -20,12 +20,15 @@ impl OpenAiProvider {
     }
     fn request(request: &ModelRequest) -> ResponseCreateRequest {
         ResponseCreateRequest {
-            model: request.model.model.clone(), input: json!(request.messages.iter().flat_map(openai_message).collect::<Vec<_>>()),
+            model: request.model.model.clone(), input: openai_input(request),
             instructions: join_system(request), max_output_tokens: request.max_output_tokens,
             tools: request.tools.iter().map(|tool| FunctionTool { kind: "function".into(), name: tool.name.clone(), description: tool.description.clone(), parameters: tool.input_schema.clone(), strict: false }).collect(),
             tool_choice: tool_choice(&request.tool_choice),
             text: request.output_format.as_ref().map(|format| ResponseTextConfig { format: json!({"type":"json_schema","name":format.name,"schema":format.schema,"strict":format.strict}) }),
-            reasoning: request.reasoning.as_ref().map(|r| json!({"effort":r.effort,"budget_tokens":r.budget_tokens})), stream: true,
+            reasoning: request.reasoning.as_ref().map(|r| json!({"effort":r.effort,"budget_tokens":r.budget_tokens})),
+            prompt_cache_key: request.prompt_cache.as_ref().and_then(|cache| cache.key.clone()),
+            prompt_cache_options: request.prompt_cache.as_ref().and_then(|cache| cache.retention.map(|retention| json!({"ttl": match retention { kolyan_model::CacheRetention::InMemory => "in_memory", kolyan_model::CacheRetention::TwentyFourHours => "24h" }}))),
+            stream: true,
         }
     }
 }
@@ -58,6 +61,23 @@ fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
         ContentBlock::ToolResult { result } => json!({"type":"function_call_output","call_id":result.call_id,"output":result.content}),
         ContentBlock::Reasoning { text, .. } => json!({"type":"reasoning","summary":[{"type":"summary_text","text":text}]}),
     }).collect()
+}
+
+fn openai_input(request: &ModelRequest) -> Value {
+    let mut input = request
+        .messages
+        .iter()
+        .flat_map(openai_message)
+        .collect::<Vec<_>>();
+    if request.prompt_cache.as_ref().is_some_and(|cache| {
+        cache
+            .breakpoints
+            .contains(&kolyan_model::CacheBreakpoint::Messages)
+    }) && let Some(Value::Object(item)) = input.last_mut()
+    {
+        item.insert("prompt_cache_breakpoint".into(), json!({"enabled": true}));
+    }
+    json!(input)
 }
 
 fn role(message: &kolyan_model::Message) -> &'static str {
@@ -178,6 +198,10 @@ fn map_response(
         id: string_value(value, "id"),
         model: model.clone(),
         content,
+        structured_output: value
+            .get("output_text")
+            .and_then(Value::as_str)
+            .and_then(|text| serde_json::from_str(text).ok()),
         stop_reason,
         usage: usage(value.get("usage")),
         metadata: value.clone(),
