@@ -68,6 +68,7 @@ struct AnthropicState {
     blocks: Vec<ContentBlock>,
     usage: TokenUsage,
     active_tool: Option<(String, String, String)>,
+    stop_reason: Option<String>,
 }
 impl AnthropicState {
     fn event(
@@ -142,6 +143,12 @@ impl AnthropicState {
                 })
                 .unwrap_or_else(|| Ok(ModelEvent::Provider(metadata(event.fields)))),
             "message_delta" => {
+                self.stop_reason = event
+                    .fields
+                    .get("delta")
+                    .and_then(|delta| delta.get("stop_reason"))
+                    .and_then(Value::as_str)
+                    .map(String::from);
                 if let Some(usage_value) = event.fields.get("usage") {
                     self.usage.output_tokens = usage_value
                         .get("output_tokens")
@@ -159,11 +166,18 @@ impl AnthropicState {
                         },
                     );
                 }
+                let stop_reason = match self.stop_reason.as_deref() {
+                    Some("tool_use") => StopReason::ToolUse,
+                    Some("max_tokens") => StopReason::MaxOutputTokens,
+                    Some("refusal") => StopReason::Refusal,
+                    Some(other) => StopReason::Other(other.into()),
+                    None => StopReason::EndTurn,
+                };
                 Ok(ModelEvent::Completed(ModelResponse {
                     id: self.id.clone(),
                     model: model.clone(),
                     content: self.blocks.clone(),
-                    stop_reason: StopReason::EndTurn,
+                    stop_reason,
                     usage: self.usage.clone(),
                     metadata: json!({"provider":"anthropic"}),
                 }))
