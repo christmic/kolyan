@@ -16,7 +16,10 @@
 
 ## Phase 2：基础适配器
 
-- `kolyan-model`
+- `kolyan-protocol-openai`
+- `kolyan-protocol-anthropic`
+- `kolyan-provider-openai`
+- `kolyan-provider-anthropic`
 - `kolyan-tools`
 - `kolyan-cli`
 - 最小可运行示例

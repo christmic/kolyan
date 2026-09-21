@@ -9,3 +9,8 @@ workspace = true
 
 [dependencies]
 kolyan-types = { path = "../kolyan-types" }
+futures-core.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

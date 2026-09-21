@@ -8,6 +8,10 @@
 | `kolyan-core` | Turn、Step、最小 Agent Loop | 供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
 | `kolyan-model` | LLM trait 和模型适配器 | Turn 状态机 |
+| `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
+| `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
+| `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
+| `kolyan-provider-anthropic` | Anthropic 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-tools` | Tool trait、注册、执行 | 长期记忆 |
 | `kolyan-policy` | 权限、审批、治理策略 | 模型推理 |
 | `kolyan-trace` | 执行轨迹和观测 | 作为 Ledger 权威存储 |
