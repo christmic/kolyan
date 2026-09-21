@@ -251,6 +251,20 @@ cargo test -p kolyan-integration-tests --test core_step \
   step_stream_snapshot_minimax_tool_call_over_both_protocols --ignored --nocapture
 ```
 
+To run the same Step stream contract across every configured model and both
+protocol surfaces:
+
+```bash
+cargo test -p kolyan-integration-tests --test core_step \
+  step_stream_snapshot_all_configured_models_over_both_protocols \
+  --ignored --nocapture
+```
+
+The matrix contract requires the Tool Call lifecycle and terminal event in
+order. Optional `Started`, `ReasoningDelta`, `Usage`, and provider metadata
+events remain visible in the temporary actual JSONL snapshot but are not
+required because models expose those events differently.
+
 ## What happens if a `KOLYAN_*_API_KEY` env var is unset
 
 `cfg.api_key_env` (set per provider in `live-tests.toml`) names the environment

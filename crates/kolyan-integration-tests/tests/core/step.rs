@@ -108,6 +108,96 @@ async fn step_stream_snapshot_minimax_tool_call_over_both_protocols() {
     }
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn step_stream_snapshot_all_configured_models_over_both_protocols() {
+    let config = load_config();
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_openai_stream_contract(
+                &provider,
+                entry,
+                "minimax",
+                &format!("minimax/openai_compat/{}", entry.model),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/expected/step/matrix/openai_compat/tool_call.jsonl"),
+            )
+            .await;
+        }
+    } else {
+        eprintln!(
+            "[SKIP minimax/openai_compat/matrix] env var {} not set",
+            config.minimax_openai.api_key_env
+        );
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_anthropic_stream_contract(
+                &provider,
+                entry,
+                "minimax",
+                &format!("minimax/anthropic_compat/{}", entry.model),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/expected/step/matrix/anthropic_compat/tool_call.jsonl"),
+            )
+            .await;
+        }
+    } else {
+        eprintln!(
+            "[SKIP minimax/anthropic_compat/matrix] env var {} not set",
+            config.minimax_anthropic.api_key_env
+        );
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_openai_stream_contract(
+                &provider,
+                entry,
+                "qwen",
+                &format!("qwen/openai_compat/{}", entry.model),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/expected/step/matrix/openai_compat/tool_call.jsonl"),
+            )
+            .await;
+        }
+    } else {
+        eprintln!(
+            "[SKIP qwen/openai_compat/matrix] env var {} not set",
+            config.qwen_openai.api_key_env
+        );
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_anthropic_stream_contract(
+                &provider,
+                entry,
+                "qwen",
+                &format!("qwen/anthropic_compat/{}", entry.model),
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/expected/step/matrix/anthropic_compat/tool_call.jsonl"),
+            )
+            .await;
+        }
+    } else {
+        eprintln!(
+            "[SKIP qwen/anthropic_compat/matrix] env var {} not set",
+            config.qwen_anthropic.api_key_env
+        );
+    }
+}
+
 async fn run_openai_step(
     provider: &kolyan_provider_openai::OpenAiProvider,
     config: &ProviderConfig,
@@ -204,6 +294,56 @@ async fn run_anthropic_stream_snapshot(
         collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
     assert_snapshot_file(label, &snapshot, expected_path.as_ref());
     assert_usage(&result.response.usage, &config.capabilities, label);
+}
+
+async fn run_openai_stream_contract(
+    provider: &kolyan_provider_openai::OpenAiProvider,
+    entry: &common::ModelMatrixEntry,
+    family: &str,
+    label: &str,
+    expected_path: impl AsRef<Path>,
+) {
+    let fixture = load_fixture("tool_call");
+    let executor = StepExecutor::new(provider.clone());
+    let request = StepRequest {
+        step_id: format!("step-stream-{}-{}", family, entry.model),
+        model_request: build_request(
+            family,
+            &entry.model,
+            &fixture,
+            format!("step-stream-{}-{}", family, entry.model),
+            entry.max_output_tokens,
+        ),
+    };
+    let (snapshot, result) =
+        collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
+    assert_snapshot_contract_file(label, &snapshot, expected_path.as_ref());
+    assert_usage(&result.response.usage, &entry.capabilities, label);
+}
+
+async fn run_anthropic_stream_contract(
+    provider: &kolyan_provider_anthropic::AnthropicProvider,
+    entry: &common::ModelMatrixEntry,
+    family: &str,
+    label: &str,
+    expected_path: impl AsRef<Path>,
+) {
+    let fixture = load_fixture("tool_call");
+    let executor = StepExecutor::new(provider.clone());
+    let request = StepRequest {
+        step_id: format!("step-stream-{}-{}", family, entry.model),
+        model_request: build_request(
+            family,
+            &entry.model,
+            &fixture,
+            format!("step-stream-{}-{}", family, entry.model),
+            entry.max_output_tokens,
+        ),
+    };
+    let (snapshot, result) =
+        collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
+    assert_snapshot_contract_file(label, &snapshot, expected_path.as_ref());
+    assert_usage(&result.response.usage, &entry.capabilities, label);
 }
 
 async fn collect_stream_snapshot<P: kolyan_model::ModelProvider>(
@@ -320,4 +460,57 @@ fn assert_snapshot_file(label: &str, actual: &str, expected_path: &Path) {
         temp_path.display()
     );
     fs::remove_file(temp_path).expect("successful stream snapshot should clean up temp file");
+}
+
+fn assert_snapshot_contract_file(label: &str, actual: &str, expected_path: &Path) {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock must be after unix epoch")
+        .as_nanos();
+    let temp_path = std::env::temp_dir().join(format!(
+        "kolyan-step-stream-matrix-{}-{unique}.jsonl",
+        std::process::id()
+    ));
+    fs::write(&temp_path, actual).expect("stream snapshot must write to temp file");
+    let actual_records = parse_snapshot_records(actual, label);
+    let expected = fs::read_to_string(expected_path).unwrap_or_else(|error| {
+        panic!(
+            "[{label}] expected stream contract missing at {}: {error}",
+            expected_path.display()
+        )
+    });
+    let expected_records = parse_snapshot_records(&expected, label);
+    let mut actual_index = 0;
+    for expected_record in expected_records {
+        let Some(relative_index) = actual_records[actual_index..]
+            .iter()
+            .position(|actual_record| record_contains(actual_record, &expected_record))
+        else {
+            panic!(
+                "[{label}] stream contract mismatch; expected {expected_record}, actual output is at {}",
+                temp_path.display()
+            );
+        };
+        actual_index += relative_index + 1;
+    }
+    fs::remove_file(temp_path).expect("successful stream contract should clean up temp file");
+}
+
+fn parse_snapshot_records(text: &str, label: &str) -> Vec<Value> {
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("[{label}] invalid JSONL snapshot record: {error}"))
+        })
+        .collect()
+}
+
+fn record_contains(actual: &Value, expected: &Value) -> bool {
+    let (Some(actual), Some(expected)) = (actual.as_object(), expected.as_object()) else {
+        return actual == expected;
+    };
+    expected
+        .iter()
+        .all(|(key, value)| actual.get(key) == Some(value))
 }
