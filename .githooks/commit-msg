@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+message_file=$1
+subject=$(sed -n '/^[^#]/p' "$message_file" | head -n 1)
+
+if [ -z "$subject" ]; then
+    echo "commit-msg: commit message cannot be empty" >&2
+    exit 1
+fi
+
+subject_length=$(printf '%s' "$subject" | wc -m | tr -d ' ')
+if [ "$subject_length" -gt 72 ]; then
+    echo "commit-msg: first line must be 72 characters or fewer" >&2
+    exit 1
+fi
