@@ -1,0 +1,15 @@
+[package]
+name = "kolyan-provider-anthropic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+futures-core.workspace = true
+futures-util.workspace = true
+kolyan-model = { path = "../kolyan-model" }
+kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
+serde_json.workspace = true

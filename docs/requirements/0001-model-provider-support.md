@@ -49,3 +49,7 @@
 - 流事件可以聚合为统一 `ModelResponse`；
 - 无 API Key 时可以使用 fixture / mock 完成协议测试；
 - Provider 协议错误、传输错误和能力错误可以区分。
+
+## 当前实现状态
+
+已完成协议客户端、SSE 流封装、Provider-neutral 模型类型、OpenAI Responses 适配器和 Anthropic Messages 适配器。适配器统一暴露 `ModelProvider::stream`，协议客户端同时提供非流式请求方法。真实网络回归测试和完整能力矩阵留在后续 fixture/evals 任务中，不在本次提交中引入 API Key。

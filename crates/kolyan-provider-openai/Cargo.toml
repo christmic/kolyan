@@ -1,0 +1,15 @@
+[package]
+name = "kolyan-provider-openai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+futures-core.workspace = true
+futures-util.workspace = true
+kolyan-model = { path = "../kolyan-model" }
+kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
+serde_json.workspace = true
