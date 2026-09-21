@@ -1,0 +1,51 @@
+/target/
+.DS_Store
+.AppleDouble
+.LSOverride
+*.swp
+*.swo
+
+# Rust tooling
+/.cargo/config.local.toml
+**/*.rs.bk
+
+# Test, coverage and profiling output
+/coverage/
+/lcov.info
+*.profraw
+*.profdata
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Language-specific caches
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.py[cod]
+node_modules/
+dist/
+coverage/
+.turbo/
+.pnpm-store/
+
+# IDE and local tooling state
+.idea/
+.qoder/settings.local.json
+.qoder/rules.local/
+.qoder/memory/
+.vscode/*.local.json
+
+# Claude Code local state
+.claude/settings.local.json
+CLAUDE.local.md
+
+# Logs and local runtime data
+*.log
+*.sqlite
+*.sqlite3
