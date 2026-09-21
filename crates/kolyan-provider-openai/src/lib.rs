@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex},
+};
 
 use futures_util::{Stream, StreamExt};
 use kolyan_model::{
@@ -58,7 +61,12 @@ impl ModelProvider for OpenAiProvider {
             // stream end from whatever we accumulated.
             let state = Arc::new(Mutex::new(CompletionState::default()));
             let tracked = tracked_completion(mapped, Arc::clone(&state));
-            let stream = synthesize_completion_if_missing(tracked, Arc::clone(&state), model);
+            let stream = synthesize_completion_if_missing(
+                tracked,
+                Arc::clone(&state),
+                model,
+                request.output_format.is_some(),
+            );
             Ok(Box::pin(stream) as _)
         })
     }
@@ -67,6 +75,11 @@ impl ModelProvider for OpenAiProvider {
 #[derive(Default)]
 struct CompletionState {
     completed_emitted: bool,
+    text: String,
+    reasoning: String,
+    tool_builders: BTreeMap<String, (String, String)>,
+    tool_calls: Vec<ToolCall>,
+    usage: TokenUsage,
 }
 
 /// Wrap a mapped event stream so we know whether a terminal
@@ -80,13 +93,41 @@ where
     S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
 {
     upstream.map(move |event_result| {
-        if let Ok(ModelEvent::Completed(_)) = &event_result
+        if let Ok(event) = &event_result
             && let Ok(mut s) = state.lock()
         {
-            s.completed_emitted = true;
+            remember_event(&mut s, event);
         }
         event_result
     })
+}
+
+fn remember_event(state: &mut CompletionState, event: &ModelEvent) {
+    match event {
+        ModelEvent::TextDelta(text) => state.text.push_str(text),
+        ModelEvent::ReasoningDelta(text) => state.reasoning.push_str(text),
+        ModelEvent::ToolCallStarted { id, name } => {
+            state
+                .tool_builders
+                .entry(id.clone())
+                .or_insert((name.clone(), String::new()));
+        }
+        ModelEvent::ToolCallArgumentsDelta { id, delta } => {
+            state
+                .tool_builders
+                .entry(id.clone())
+                .or_insert((String::new(), String::new()))
+                .1
+                .push_str(delta);
+        }
+        ModelEvent::ToolCallCompleted(call) => {
+            state.tool_builders.remove(&call.id);
+            state.tool_calls.push(call.clone());
+        }
+        ModelEvent::Usage(usage) => state.usage = usage.clone(),
+        ModelEvent::Completed(_) => state.completed_emitted = true,
+        ModelEvent::Started | ModelEvent::Provider(_) => {}
+    }
 }
 
 /// After the upstream stream finishes, append a synthetic `Completed`
@@ -97,6 +138,7 @@ fn synthesize_completion_if_missing<S>(
     upstream: S,
     state: Arc<Mutex<CompletionState>>,
     model: kolyan_model::ModelRef,
+    structured: bool,
 ) -> std::pin::Pin<Box<dyn Stream<Item = Result<ModelEvent, ProviderError>> + Send>>
 where
     S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
@@ -104,20 +146,54 @@ where
     use futures_util::stream::{self, StreamExt};
     let model_for_synth = model.clone();
     let tail = stream::once(async move {
-        let already = state.lock().map(|s| s.completed_emitted).unwrap_or(true);
-        if already {
+        let snapshot = state.lock().map(|s| CompletionSnapshot::from(&*s)).ok();
+        let snapshot = snapshot?;
+        if snapshot.completed_emitted {
             // Either Completed was emitted upstream, or the lock is
             // poisoned (treat as already-emitted to avoid double-firing).
             return None;
         }
+        let mut content = Vec::new();
+        if !snapshot.text.is_empty() {
+            content.push(ContentBlock::Text {
+                text: snapshot.text.clone(),
+            });
+        }
+        if !snapshot.reasoning.is_empty() {
+            content.push(ContentBlock::Reasoning {
+                text: snapshot.reasoning.clone(),
+                opaque: None,
+            });
+        }
+        let mut tool_calls = snapshot.tool_calls;
+        for (id, (name, arguments)) in snapshot.tool_builders {
+            let arguments = serde_json::from_str(&arguments).unwrap_or_else(|_| json!({}));
+            tool_calls.push(ToolCall {
+                id,
+                name,
+                arguments,
+            });
+        }
+        content.extend(
+            tool_calls
+                .iter()
+                .cloned()
+                .map(|call| ContentBlock::ToolCall { call }),
+        );
+        let structured_output = structured
+            .then(|| parse_json_relaxed(&snapshot.text))
+            .flatten();
         Some(Ok(ModelEvent::Completed(ModelResponse {
             id: String::new(),
             model: model_for_synth,
-            content: Vec::new(),
-            structured_output: None,
-            // Provider omitted the terminal frame — best guess.
-            stop_reason: StopReason::EndTurn,
-            usage: TokenUsage::default(),
+            content,
+            structured_output,
+            stop_reason: if tool_calls.is_empty() {
+                StopReason::EndTurn
+            } else {
+                StopReason::ToolUse
+            },
+            usage: snapshot.usage,
             metadata: json!({
                 "provider": "openai",
                 "synthetic_completed": true,
@@ -127,6 +203,29 @@ where
     })
     .filter_map(|x| async move { x });
     upstream.chain(tail).boxed()
+}
+
+#[derive(Clone)]
+struct CompletionSnapshot {
+    completed_emitted: bool,
+    text: String,
+    reasoning: String,
+    tool_builders: BTreeMap<String, (String, String)>,
+    tool_calls: Vec<ToolCall>,
+    usage: TokenUsage,
+}
+
+impl From<&CompletionState> for CompletionSnapshot {
+    fn from(state: &CompletionState) -> Self {
+        Self {
+            completed_emitted: state.completed_emitted,
+            text: state.text.clone(),
+            reasoning: state.reasoning.clone(),
+            tool_builders: state.tool_builders.clone(),
+            tool_calls: state.tool_calls.clone(),
+            usage: state.usage.clone(),
+        }
+    }
 }
 
 fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
@@ -544,4 +643,34 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
         }
     };
     ProviderError::new(kind, phase, message)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures_util::{StreamExt, stream};
+
+    #[tokio::test]
+    async fn synthetic_completion_preserves_text_and_structured_output() {
+        let state = Arc::new(Mutex::new(CompletionState::default()));
+        let events = stream::iter(vec![Ok(ModelEvent::TextDelta(
+            "```json\n{\"ok\":true}\n```".into(),
+        ))]);
+        let tracked = tracked_completion(events, Arc::clone(&state));
+        let mut stream = synthesize_completion_if_missing(
+            tracked,
+            state,
+            kolyan_model::ModelRef::new("test", "model"),
+            true,
+        );
+        assert!(matches!(
+            stream.next().await,
+            Some(Ok(ModelEvent::TextDelta(_)))
+        ));
+        let Some(Ok(ModelEvent::Completed(response))) = stream.next().await else {
+            panic!("expected synthetic completion");
+        };
+        assert_eq!(response.content.len(), 1);
+        assert_eq!(response.structured_output, Some(json!({"ok": true})));
+    }
 }

@@ -121,10 +121,7 @@ async fn openai_single_shot_matrix() {
             format!("openai-{}-{}", fixture_name, sanitize(&entry.model)),
             entry.max_output_tokens,
         );
-        let response = match run_scenario_labeled(&provider, request, &label).await {
-            Some(r) => r,
-            None => continue,
-        };
+        let response = run_scenario_labeled(&provider, request, &label).await;
         eprintln!("[{label}] ok stop_reason={:?}", response.stop_reason);
         assert_expectations(&response, &fixture.expectations, &label);
         assert_usage(&response.usage, &entry.capabilities, &label);

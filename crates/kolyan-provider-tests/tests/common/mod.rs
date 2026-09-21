@@ -587,33 +587,25 @@ where
 /// back to the matrix entry that produced them. Use this when you want
 /// the failing (family, surface, model, fixture) on the panic message.
 ///
-/// On error, the function logs the error with the label and returns
-/// `None` instead of panicking. Matrix callers should treat `None` as
-/// "skip this row" — servers occasionally emit `response.failed` mid-
-/// stream (rate limits, billing exhaustion, transient overload) and
-/// those aren't test bugs.
+/// Provider and aggregation errors fail the matrix row. A live regression
+/// test must not report success when the adapter returned an error; transient
+/// provider failures should be retried or explicitly quarantined instead of
+/// silently skipped.
 pub async fn run_scenario_labeled<P>(
     provider: &P,
     request: ModelRequest,
     label: &str,
-) -> Option<ModelResponse>
+) -> ModelResponse
 where
     P: ModelProvider + ?Sized,
 {
-    let stream = match provider.stream(request).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("[ERROR {label}] provider.stream returned error: {e:?}");
-            return None;
-        }
-    };
-    match aggregate_stream(stream).await {
-        Ok(r) => Some(r),
-        Err(e) => {
-            eprintln!("[ERROR {label}] aggregate_stream returned error: {e:?}");
-            None
-        }
-    }
+    let stream = provider
+        .stream(request)
+        .await
+        .unwrap_or_else(|e| panic!("[{label}] provider.stream returned error: {e:?}"));
+    aggregate_stream(stream)
+        .await
+        .unwrap_or_else(|e| panic!("[{label}] aggregate_stream returned error: {e:?}"))
 }
 
 // --------------------------------------------------------------------------

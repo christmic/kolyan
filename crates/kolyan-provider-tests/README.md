@@ -82,9 +82,10 @@ cargo test -p kolyan-provider-tests anthropic_prompt_cache_matrix -- --ignored -
 cargo test -p kolyan-provider-tests openai_dump_first_text -- --ignored --nocapture
 ```
 
-If either env var is unset, every test in the family that requires it
-panics on entry with a precise message naming the missing variable —
-silent skip would hide misconfiguration.
+If either env var is unset, matrix rows for that provider are reported as
+`[SKIP ...]` with the required variable name. Once a row has a key and starts
+running, Provider or aggregation errors fail the row; live execution never
+silently converts an adapter error into a passing test.
 
 ## Provider matrix
 
@@ -238,11 +239,10 @@ the `text` fixture, including `Completed`/`Usage`/`TextDelta` details.
 
 ## What happens if a `KOLYAN_*_API_KEY` env var is unset
 
-`require_api_key(cfg)` reads `cfg.api_key_env` (set per provider in
-`live-tests.toml`) and panics with a precise message naming the missing
-variable. The panic happens inside the test body, so it shows up under
-`--ignored` runs and never under `cargo test --workspace` (because
-every live test is `#[ignore]`'d).
+`cfg.api_key_env` (set per provider in `live-tests.toml`) names the environment
+variable read at runtime. Missing keys skip only the corresponding provider
+rows; once a key is present, request and aggregation errors fail the test with
+the full provider/model/fixture label.
 
 ## Editing endpoints or models
 

@@ -57,6 +57,11 @@ server_emits_completed   = false
 # the provider layer strips it.
 structured_output_fenced = true
 
+[[provider.minimax.openai_compat.model_matrix]]
+model = "MiniMax-M3"
+max_output_tokens = 1024
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = false, structured_output_fenced = true, supports_vision = false }
+
 [provider.minimax.anthropic_compat]
 # MiniMax China-region Anthropic-compatible endpoint. The Anthropic-compatible
 # surface is namespaced under `/anthropic`, so Kolyan's AnthropicClient will

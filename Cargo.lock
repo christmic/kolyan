@@ -518,6 +518,7 @@ dependencies = [
  "kolyan-model",
  "kolyan-protocol-openai",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

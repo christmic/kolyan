@@ -13,3 +13,6 @@ futures-util.workspace = true
 kolyan-model = { path = "../kolyan-model" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 serde_json.workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
