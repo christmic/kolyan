@@ -1,4 +1,4 @@
-use crate::{OpenAiConfig, OpenAiError, Response, ResponseCreateRequest};
+use crate::{OpenAiConfig, OpenAiError, Response, ResponseCreateRequest, ResponseStream};
 use reqwest::{Client, RequestBuilder, Response as HttpResponse};
 
 #[derive(Clone)]
@@ -24,13 +24,14 @@ impl OpenAiClient {
     pub async fn stream_response(
         &self,
         request: &ResponseCreateRequest,
-    ) -> Result<reqwest::Response, OpenAiError> {
-        Ok(self
-            .request("/v1/responses")
-            .json(request)
-            .send()
-            .await?
-            .error_for_status()?)
+    ) -> Result<ResponseStream, OpenAiError> {
+        Ok(ResponseStream::new(
+            self.request("/v1/responses")
+                .json(request)
+                .send()
+                .await?
+                .error_for_status()?,
+        ))
     }
 
     fn request(&self, path: &str) -> RequestBuilder {

@@ -11,6 +11,8 @@ pub struct MessageCreateRequest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<Tool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub thinking: Option<Value>,
     pub stream: bool,
 }

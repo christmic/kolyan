@@ -12,6 +12,8 @@ pub struct ResponseCreateRequest {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tools: Vec<FunctionTool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_choice: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<ResponseTextConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reasoning: Option<Value>,

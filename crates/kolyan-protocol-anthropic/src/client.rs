@@ -1,4 +1,4 @@
-use crate::{AnthropicConfig, AnthropicError, Message, MessageCreateRequest};
+use crate::{AnthropicConfig, AnthropicError, Message, MessageCreateRequest, MessageStream};
 use reqwest::{Client, RequestBuilder, Response as HttpResponse};
 
 #[derive(Clone)]
@@ -24,13 +24,14 @@ impl AnthropicClient {
     pub async fn stream_message(
         &self,
         request: &MessageCreateRequest,
-    ) -> Result<reqwest::Response, AnthropicError> {
-        Ok(self
-            .request("/v1/messages")
-            .json(request)
-            .send()
-            .await?
-            .error_for_status()?)
+    ) -> Result<MessageStream, AnthropicError> {
+        Ok(MessageStream::new(
+            self.request("/v1/messages")
+                .json(request)
+                .send()
+                .await?
+                .error_for_status()?,
+        ))
     }
 
     fn request(&self, path: &str) -> RequestBuilder {

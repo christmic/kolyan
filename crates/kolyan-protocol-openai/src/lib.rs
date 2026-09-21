@@ -9,4 +9,7 @@ pub mod sse;
 pub use client::OpenAiClient;
 pub use config::OpenAiConfig;
 pub use error::OpenAiError;
-pub use responses::{Response, ResponseCreateRequest, ResponseOutputItem, ResponseStreamEvent};
+pub use responses::{
+    FunctionTool, Response, ResponseCreateRequest, ResponseOutputItem, ResponseStream,
+    ResponseStreamEvent, ResponseTextConfig,
+};

@@ -454,6 +454,9 @@ dependencies = [
 name = "kolyan-protocol-anthropic"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
@@ -464,10 +467,35 @@ dependencies = [
 name = "kolyan-protocol-openai"
 version = "0.1.0"
 dependencies = [
+ "bytes",
+ "futures-core",
+ "futures-util",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror",
+]
+
+[[package]]
+name = "kolyan-provider-anthropic"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "kolyan-model",
+ "kolyan-protocol-anthropic",
+ "serde_json",
+]
+
+[[package]]
+name = "kolyan-provider-openai"
+version = "0.1.0"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "kolyan-model",
+ "kolyan-protocol-openai",
+ "serde_json",
 ]
 
 [[package]]
