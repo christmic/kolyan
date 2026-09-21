@@ -144,11 +144,6 @@ max_output_tokens = 8192
 capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
 
 [[provider.qwen.openai_compat.model_matrix]]
-model = "qwen3.6-flash"
-max_output_tokens = 8192
-capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
-
-[[provider.qwen.openai_compat.model_matrix]]
 model = "deepseek-v4.1-flash"
 max_output_tokens = 8192
 capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
@@ -208,11 +203,6 @@ model = "qwen3.7-max"
 max_output_tokens = 8192
 capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
 
-
-[[provider.qwen.anthropic_compat.model_matrix]]
-model = "qwen3.6-flash"
-max_output_tokens = 8192
-capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
 
 
 
