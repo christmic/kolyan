@@ -8,4 +8,10 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-kolyan-types = { path = "../kolyan-types" }
+kolyan-model = { path = "../kolyan-model" }
+thiserror.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["macros", "rt"] }

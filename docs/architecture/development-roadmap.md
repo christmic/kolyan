@@ -11,7 +11,8 @@
 
 - `kolyan-types`
 - `kolyan-core`
-- 内存中的 `Turn + Step`
+- 内存中的最小 `Step`
+- Step 成功/失败执行闭环
 - 固定输入、模型调用、Tool 调用、结束状态
 
 ## Phase 2：基础适配器

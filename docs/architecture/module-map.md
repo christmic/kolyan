@@ -5,7 +5,7 @@
 | 模块 | 职责 | 明确不负责 |
 | --- | --- | --- |
 | `kolyan-types` | 消息、Tool、事件和结果类型 | 执行流程、存储 |
-| `kolyan-core` | Turn、Step、最小 Agent Loop | 供应商、数据库、UI |
+| `kolyan-core` | Step、最小 Agent Loop | Turn、Session、供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
 | `kolyan-model` | LLM trait 和模型适配器 | Turn 状态机 |
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
