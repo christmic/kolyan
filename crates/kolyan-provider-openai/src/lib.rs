@@ -121,8 +121,20 @@ fn remember_event(state: &mut CompletionState, event: &ModelEvent) {
                 .push_str(delta);
         }
         ModelEvent::ToolCallCompleted(call) => {
-            state.tool_builders.remove(&call.id);
-            state.tool_calls.push(call.clone());
+            let Some((name, arguments)) = state.tool_builders.remove(&call.id) else {
+                state.tool_calls.push(call.clone());
+                return;
+            };
+            let mut call = call.clone();
+            if call.name.is_empty() {
+                call.name = name;
+            }
+            if call.arguments == json!({})
+                && let Ok(arguments) = serde_json::from_str(&arguments)
+            {
+                call.arguments = arguments;
+            }
+            state.tool_calls.push(call);
         }
         ModelEvent::Usage(usage) => state.usage = usage.clone(),
         ModelEvent::Completed(_) => state.completed_emitted = true,
@@ -477,8 +489,10 @@ fn extract_structured_output(value: &Value) -> Option<Value> {
     if let Some(Value::Array(items)) = value.get("output") {
         let joined: String = items
             .iter()
+            .filter(|item| item.get("type").and_then(Value::as_str) != Some("reasoning"))
             .flat_map(|item| item.get("content").and_then(Value::as_array).cloned())
             .flatten()
+            .filter(|block| block.get("type").and_then(Value::as_str) != Some("reasoning_text"))
             .filter_map(|block| block.get("text").and_then(Value::as_str).map(String::from))
             .collect::<Vec<_>>()
             .join("");
@@ -568,16 +582,23 @@ fn map_output(item: &Value) -> Vec<ContentBlock> {
     }
 }
 fn map_tool_call(value: &Value) -> Result<ToolCall, ProviderError> {
+    let raw_arguments = value
+        .get("arguments")
+        .and_then(Value::as_str)
+        .unwrap_or("{}");
+    let arguments = if raw_arguments.trim().is_empty() {
+        json!({})
+    } else {
+        serde_json::from_str(raw_arguments).map_err(|error| {
+            provider_error(format!(
+                "invalid function arguments ({error}); raw={raw_arguments:?}"
+            ))
+        })?
+    };
     Ok(ToolCall {
         id: string_value(value, "call_id"),
         name: string_value(value, "name"),
-        arguments: serde_json::from_str(
-            value
-                .get("arguments")
-                .and_then(Value::as_str)
-                .unwrap_or("{}"),
-        )
-        .map_err(|_| provider_error("invalid function arguments"))?,
+        arguments,
     })
 }
 fn usage(value: Option<&Value>) -> TokenUsage {
@@ -672,5 +693,26 @@ mod tests {
         };
         assert_eq!(response.content.len(), 1);
         assert_eq!(response.structured_output, Some(json!({"ok": true})));
+    }
+
+    #[test]
+    fn structured_output_ignores_reasoning_content() {
+        let response = json!({
+            "output": [
+                {
+                    "type": "reasoning",
+                    "content": [{"type": "reasoning_text", "text": "example {not json}"}]
+                },
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "{\"ok\":true}"}]
+                }
+            ]
+        });
+
+        assert_eq!(
+            extract_structured_output(&response),
+            Some(json!({"ok": true}))
+        );
     }
 }

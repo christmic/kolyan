@@ -2,4 +2,7 @@
 
 mod step;
 
-pub use step::{StepError, StepExecutor, StepRequest, StepResult};
+pub use step::{
+    StepError, StepEvent, StepEventStream, StepExecutor, StepRequest, StepResult,
+    aggregate_step_stream,
+};

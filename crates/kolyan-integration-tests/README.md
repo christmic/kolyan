@@ -238,6 +238,19 @@ cargo test -p kolyan-integration-tests openai_dump_first_text -- --ignored --noc
 This dumps every `ModelEvent` that the first matrix entry produces for
 the `text` fixture, including `Completed`/`Usage`/`TextDelta` details.
 
+The Step integration test also captures the normalized Step event stream for
+the multi-event `tool_call` fixture. It writes the actual JSONL stream to a
+temporary file and compares it with the checked-in protocol-specific snapshot
+under `tests/expected/step/`. Dynamic response IDs, text fragments, provider
+metadata, and argument values are intentionally normalized out of the snapshot.
+
+Run it with:
+
+```bash
+cargo test -p kolyan-integration-tests --test core_step \
+  step_stream_snapshot_minimax_tool_call_over_both_protocols --ignored --nocapture
+```
+
 ## What happens if a `KOLYAN_*_API_KEY` env var is unset
 
 `cfg.api_key_env` (set per provider in `live-tests.toml`) names the environment

@@ -450,6 +450,7 @@ version = "0.1.0"
 name = "kolyan-core"
 version = "0.1.0"
 dependencies = [
+ "futures-core",
  "futures-util",
  "kolyan-model",
  "serde_json",

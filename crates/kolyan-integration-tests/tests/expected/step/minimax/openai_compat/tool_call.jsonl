@@ -1,0 +1,4 @@
+{"event":"tool_call_started","name":"get_weather"}
+{"event":"tool_call_arguments_delta"}
+{"event":"tool_call_completed","name":"get_weather"}
+{"event":"completed","stop_reason":"tool_use"}

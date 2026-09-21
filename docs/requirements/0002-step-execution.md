@@ -43,13 +43,24 @@ pub struct StepExecutor<P> {
 }
 
 impl<P: ModelProvider> StepExecutor<P> {
+    pub async fn execute_stream(
+        &self,
+        request: StepRequest,
+    ) -> Result<StepEventStream, StepError>;
+
     pub async fn execute(&self, request: StepRequest) -> Result<StepResult, StepError>;
 }
 ```
 
+`execute_stream` 返回 Step 层事件，而不是直接暴露 Provider 的
+`ModelEventStream`。`execute` 内部消费同一条 Step 流并聚合
+`Completed(StepResult)`，因此结果接口和流式接口不会产生两套模型调用逻辑。
+
 ## 验收标准
 
 - Provider 成功返回 `Completed` 时，Step 返回完整 `StepResult`；
+- Step 流包含 `Started`、文本/推理增量、Tool Call、Usage 和 `Completed` 等事件；
+- `execute` 与 `execute_stream` 使用相同的 Provider 调用和事件映射路径；
 - Provider 打开或消费失败时，Step 返回 `StepError`；
 - 没有 `Completed` 的流返回协议错误；
 - Tool Call 只作为 `ModelResponse` 返回，不在 Step 内执行；

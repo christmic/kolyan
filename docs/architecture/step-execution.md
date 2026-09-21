@@ -10,8 +10,10 @@ StepRequest
 StepExecutor
     ↓ ModelProvider::stream
 ModelEventStream
-    ↓ aggregate_stream
-StepResult / StepError
+    ↓ map to StepEvent
+StepEventStream
+    ├── execute_stream → StepEventStream
+    └── execute → aggregate_step_stream → StepResult / StepError
 ```
 
 ## 状态
@@ -23,7 +25,7 @@ Pending → Running → Completed
                     ↘ Failed
 ```
 
-当前实现只在内存中执行，不对外暴露可变状态机；`StepExecutor::execute` 的成功返回代表 `Completed`，错误返回代表 `Failed`。未来需要取消、重试或持久化时，再把生命周期事件接入 Runtime、Trace 和 Storage。
+当前实现只在内存中执行，不对外暴露可变状态机。`StepExecutor::execute_stream` 对外暴露带有 Step 语义的事件流；`StepExecutor::execute` 消费同一条流并聚合为 `StepResult`，不维护第二套调用路径。成功返回代表 `Completed`，错误返回代表 `Failed`。未来需要取消、重试或持久化时，再把生命周期事件接入 Runtime、Trace 和 Storage。
 
 ## 职责
 
@@ -31,8 +33,9 @@ Pending → Running → Completed
 
 - 接收 Step ID 和完整模型请求；
 - 调用一次 Provider；
-- 消费并聚合模型事件；
-- 返回统一结果或错误。
+- 将模型事件映射为带 `step_id` 的 Step 事件；
+- 按需消费并聚合 Step 事件；
+- 返回统一事件流、结果或错误。
 
 明确不负责：
 
