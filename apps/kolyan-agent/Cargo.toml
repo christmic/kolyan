@@ -1,0 +1,12 @@
+[package]
+name = "kolyan-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kolyan-core = { path = "../../crates/kolyan-core" }
+kolyan-runtime = { path = "../../crates/kolyan-runtime" }
