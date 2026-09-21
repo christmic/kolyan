@@ -1,0 +1,35 @@
+[package]
+name = "kolyan-provider-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+description = "Real-network live regression tests for Kolyan provider adapters (MiniMax China-region OpenAI-compatible and Anthropic-compatible endpoints)."
+
+[lints]
+workspace = true
+
+[dependencies]
+# Workspace tokio only enables the "time" feature, but #[tokio::test] and the
+# multi-thread runtime require "macros", "rt", and "rt-multi-thread". Declare a
+# local dep with the full feature set instead of widening the workspace dep,
+# because no other crate needs it.
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+
+# Workspace helpers.
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+# Sibling Kolyan crates. The provider adapter crates are the unit under test;
+# the model crate is the neutral contract; the protocol crates carry the
+# OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
+kolyan-model = { path = "../kolyan-model" }
+kolyan-provider-openai = { path = "../kolyan-provider-openai" }
+kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
+kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
+kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
+
+# Workspace does not declare a TOML parser. The live-tests.toml file is read
+# once at test time via include_str! + toml::from_str.
+toml = "0.8"

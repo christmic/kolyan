@@ -1,0 +1,20 @@
+{
+  "request": {
+    "request_id": "live-text-001",
+    "system": "你是一个简洁的中文助手，回答尽量用一句话。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "用一句话介绍青岛。" }
+        ]
+      }
+    ],
+    "max_output_tokens": 256
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "requires": []
+  }
+}

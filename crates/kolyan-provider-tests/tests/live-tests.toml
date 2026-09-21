@@ -1,0 +1,246 @@
+# Kolyan live-test provider configuration
+#
+# This file is committed to the repository. It contains provider endpoints,
+# model identifiers, timeouts, and per-provider capability flags only —
+# **no API key**.
+#
+# API keys are read from environment variables at test time:
+#   * MiniMax (China)    → $KOLYAN_MINIMAX_API_KEY
+#   * Qwen / DeepSeek / Zhipu (千问 platform) → $KOLYAN_QWEN_API_KEY
+# See ../README.md for how to run the live tests.
+#
+# --------------------------------------------------------------------------
+# IMPORTANT: do NOT add a trailing `/v1` to base_url.
+# --------------------------------------------------------------------------
+# Kolyan's protocol clients append a fixed path segment to whatever base_url
+# you supply:
+#   * OpenAiClient posts to `${base_url}/v1/responses`
+#   * AnthropicClient posts to `${base_url}/v1/messages`
+# So writing `base_url = "https://api.minimaxi.com/v1"` would produce a
+# double `/v1/v1/...` URL and the server would return 404. Leave the trailing
+# `/v1` off.
+#
+# Qwen's compatible-mode endpoints are nested under `/compatible-mode/v1`
+# and `/apps/anthropic`. Because the `/v1` is appended by the client, the
+# base_url here strips it:
+#   * OpenAI  : `https://token-plan.maas.qianwenaiapi.com/compatible-mode`
+#               → final URL `/compatible-mode/v1/responses`
+#   * Anthropic: `https://token-plan.maas.qianwenaiapi.com/apps/anthropic`
+#               → final URL `/apps/anthropic/v1/messages`
+#
+# Changing this file requires a recompile because it is embedded into the
+# test binaries via `include_str!`.
+
+# =============================================================================
+# MiniMax (China)
+# =============================================================================
+
+[provider.minimax.openai_compat]
+# MiniMax China-region OpenAI-compatible endpoint. Auth is the standard
+# `Authorization: Bearer <key>` header — matches Kolyan's OpenAiClient default.
+base_url     = "https://api.minimaxi.com"
+model        = "MiniMax-M3"
+timeout_secs = 120
+api_key_env  = "KOLYAN_MINIMAX_API_KEY"
+
+[provider.minimax.openai_compat.capabilities]
+# MiniMax OpenAI-compat reports `input_tokens` and `output_tokens`.
+input_tokens_reporting   = true
+output_tokens_reporting  = true
+# MiniMax-M3 has automatic (server-side passive) prompt caching and does not
+# report cache_read_tokens / cache_creation_input_tokens.
+cache_control_ephemeral  = false
+# MiniMax Responses API on the structured-output path emits `response.completed`
+# unreliably; the provider layer synthesizes a terminal event when missing.
+server_emits_completed   = false
+# MiniMax streams JSON wrapped in a markdown fence on json_schema requests —
+# the provider layer strips it.
+structured_output_fenced = true
+
+[provider.minimax.anthropic_compat]
+# MiniMax China-region Anthropic-compatible endpoint. The Anthropic-compatible
+# surface is namespaced under `/anthropic`, so Kolyan's AnthropicClient will
+# POST to `https://api.minimaxi.com/anthropic/v1/messages`. Auth is the
+# standard `x-api-key: <key>` header (Kolyan's AnthropicClient default).
+base_url           = "https://api.minimaxi.com/anthropic"
+model              = "MiniMax-M3"
+anthropic_version  = "2023-06-01"
+timeout_secs       = 120
+api_key_env        = "KOLYAN_MINIMAX_API_KEY"
+
+[provider.minimax.anthropic_compat.capabilities]
+# MiniMax Anthropic-compat on the China region leaves `input_tokens` unset
+# in `message_start.usage`. We assert output_tokens > 0 strictly and treat
+# input_tokens as best-effort.
+input_tokens_reporting   = false
+output_tokens_reporting  = true
+cache_control_ephemeral  = false
+server_emits_completed   = true
+structured_output_fenced = false
+
+# =============================================================================
+# Qwen / 千问 (千问 platform — qwen, DeepSeek, Zhipu all share endpoints)
+# =============================================================================
+#
+# The 千问 platform exposes both OpenAI-compatible and Anthropic-compatible
+# surfaces, and multiple model families (Qwen, DeepSeek, Zhipu) sit behind
+# the same base URLs — `model_id` selects which model actually serves a
+# request. Per-model entries below let the test matrix exercise each model
+# independently.
+
+[provider.qwen.openai_compat]
+# OpenAI-compatible surface. Auth: `Authorization: Bearer <key>`.
+# model here is a default; per-model tests override it.
+base_url     = "https://token-plan.maas.qianwenaiapi.com/compatible-mode"
+model        = "qwen3.8-max"
+timeout_secs = 120
+api_key_env  = "KOLYAN_QWEN_API_KEY"
+
+[provider.qwen.openai_compat.capabilities]
+input_tokens_reporting   = true
+output_tokens_reporting  = true
+cache_control_ephemeral  = false
+server_emits_completed   = true
+structured_output_fenced = false
+
+[provider.qwen.anthropic_compat]
+# Anthropic-compatible surface. Auth: `x-api-key: <key>`.
+base_url           = "https://token-plan.maas.qianwenaiapi.com/apps/anthropic"
+model              = "qwen3.8-max"
+anthropic_version  = "2023-06-01"
+timeout_secs       = 120
+api_key_env        = "KOLYAN_QWEN_API_KEY"
+
+[provider.qwen.anthropic_compat.capabilities]
+input_tokens_reporting   = true
+output_tokens_reporting  = true
+cache_control_ephemeral  = false
+server_emits_completed   = true
+structured_output_fenced = false
+
+# ---- per-model overrides (model_matrix) ------------------------------------
+# Each [[provider.qwen.model]] entry pins a model_id for a specific test
+# scenario. The matrix currently only covers text + reasoning models; image /
+# video / audio generation is out of scope (see README §Out of scope).
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "qwen3.8-max"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "qwen3.8-flash"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "qwen3.7-plus"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "qwen3.7-max"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "qwen3.6-flash"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "deepseek-v4.1-flash"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "deepseek-v4-pro-0813"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "deepseek-v4-pro"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "deepseek-v4-flash-0731"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "glm-5.3"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.openai_compat.model_matrix]]
+model = "glm-5.2"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+# ---- per-model matrix for anthropic_compat surfaces ----
+
+[[provider.minimax.anthropic_compat.model_matrix]]
+model = "MiniMax-M3"
+max_output_tokens = 1024
+capabilities = { input_tokens_reporting = false, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "qwen3.8-max"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "qwen3.8-flash"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "qwen3.7-plus"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "qwen3.7-max"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "qwen3.6-flash"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = true }
+
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "deepseek-v4-pro-0813"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "deepseek-v4-pro"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "deepseek-v4-flash-0731"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "glm-5.3"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }
+
+
+[[provider.qwen.anthropic_compat.model_matrix]]
+model = "glm-5.2"
+max_output_tokens = 8192
+capabilities = { input_tokens_reporting = true, output_tokens_reporting = true, cache_control_ephemeral = false, server_emits_completed = true, structured_output_fenced = false, supports_vision = false }

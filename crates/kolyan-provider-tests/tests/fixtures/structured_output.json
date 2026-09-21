@@ -1,0 +1,35 @@
+{
+  "request": {
+    "request_id": "live-structured-output-001",
+    "system": "你严格按照用户给出的 JSON Schema 返回城市信息，不要包含解释或额外文字。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "请告诉我青岛的基本信息。" }
+        ]
+      }
+    ],
+    "output_format": {
+      "name": "city_info",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "城市中文名" },
+          "province": { "type": "string", "description": "所在省份" },
+          "coastal": { "type": "boolean", "description": "是否为沿海城市" }
+        },
+        "required": ["name", "province", "coastal"]
+      },
+      "strict": true
+    },
+    "max_output_tokens": 256
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "structured_output": {
+      "type": "object"
+    },
+    "requires": []
+  }
+}

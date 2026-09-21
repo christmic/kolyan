@@ -167,11 +167,10 @@ impl AnthropicState {
                     .and_then(|delta| delta.get("stop_reason"))
                     .and_then(Value::as_str)
                     .map(String::from);
-                if let Some(usage_value) = event.fields.get("usage") {
-                    self.usage.output_tokens = usage_value
-                        .get("output_tokens")
-                        .and_then(Value::as_u64)
-                        .unwrap_or_default();
+                if let Some(usage_value) = event.fields.get("usage")
+                    && let Some(n) = usage_value.get("output_tokens").and_then(Value::as_u64)
+                {
+                    self.usage.output_tokens = Some(n);
                 }
                 Ok(ModelEvent::Usage(self.usage.clone()))
             }
@@ -186,6 +185,7 @@ impl AnthropicState {
                 }
                 let stop_reason = match self.stop_reason.as_deref() {
                     Some("tool_use") => StopReason::ToolUse,
+                    Some("end_turn") => StopReason::EndTurn,
                     Some("max_tokens") => StopReason::MaxOutputTokens,
                     Some("refusal") => StopReason::Refusal,
                     Some(other) => StopReason::Other(other.into()),
@@ -193,7 +193,7 @@ impl AnthropicState {
                 };
                 let structured_output = self
                     .structured
-                    .then(|| serde_json::from_str::<Value>(&self.text).ok())
+                    .then(|| parse_json_relaxed(&self.text))
                     .flatten();
                 Ok(ModelEvent::Completed(ModelResponse {
                     id: self.id.clone(),
@@ -270,19 +270,17 @@ fn usage(value: Option<&Value>) -> TokenUsage {
     TokenUsage {
         input_tokens: value
             .and_then(|v| v.get("input_tokens"))
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+            .and_then(Value::as_u64),
         output_tokens: value
             .and_then(|v| v.get("output_tokens"))
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+            .and_then(Value::as_u64),
         cache_read_tokens: value
             .and_then(|v| v.get("cache_read_input_tokens"))
             .and_then(Value::as_u64),
         cache_write_tokens: value
             .and_then(|v| v.get("cache_creation_input_tokens"))
             .and_then(Value::as_u64),
-        ..TokenUsage::default()
+        reasoning_tokens: None,
     }
 }
 fn string_value(value: &Value, key: &str) -> String {
@@ -318,4 +316,46 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
         }
     };
     ProviderError::new(kind, phase, message)
+}
+
+/// Parse JSON from a string that may or may not be wrapped in a markdown
+/// ```json ... ``` fence. Mirrors the openai provider's relaxed parser
+/// because some Anthropic-compatible servers (notably MiniMax's
+/// Anthropic-compat surface) emit their JSON inside a fenced block. Returns
+/// `None` on parse failure (not an error — the caller decides what to do
+/// with a non-JSON response).
+#[allow(clippy::collapsible_if)]
+fn parse_json_relaxed(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed)
+        && (v.is_object() || v.is_array())
+    {
+        return Some(v);
+    }
+    let stripped = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```JSON"))
+        .or_else(|| trimmed.strip_prefix("```"));
+    let stripped = stripped.unwrap_or(trimmed);
+    let stripped = stripped.strip_suffix("```").unwrap_or(stripped);
+    if stripped != trimmed
+        && let Ok(v) = serde_json::from_str::<Value>(stripped.trim())
+        && (v.is_object() || v.is_array())
+    {
+        return Some(v);
+    }
+    if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('['))
+        && let Some(end_rel) = trimmed.rfind(['}', ']'])
+    {
+        let candidate = &trimmed[start..=end_rel];
+        if let Ok(v) = serde_json::from_str::<Value>(candidate)
+            && (v.is_object() || v.is_array())
+        {
+            return Some(v);
+        }
+    }
+    None
 }

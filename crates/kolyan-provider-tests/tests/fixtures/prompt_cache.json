@@ -1,0 +1,27 @@
+{
+  "request": {
+    "request_id_prefix": "live-prompt-cache-001",
+    "system": "下面是一段较长的稳定前缀，用于触发服务端 prompt cache：Python 的 GIL（Global Interpreter Lock，全局解释器锁）最早由 Guido van Rossum 在 1990 年代为简化 CPython 实现而引入，目的是让所有 Python 字节码在单线程上执行，从而避免多线程内存管理带来的复杂度。GIL 的存在使得 CPython 在 CPU 密集型多线程程序中无法利用多核并行，但 I/O 密集型任务受影响较小。多年来社区提出了多种移除 GIL 的方案，包括 PyPy 的软件事务内存、Greg Stein 的 Gilectomy 实验、以及 PEP 703 提出的 per-interpreter GIL。最终 Python 3.13 在 PEP 703 的推动下引入了可选的 free-threaded 构建（--disable-gil），使 CPython 可以在没有 GIL 的情况下运行。这是 Python 历史上最重要的运行时变革之一，但完全移除 GIL 仍需要生态系统的长期适配。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "请用一句话总结 GIL 在 Python 3.13 中的变化。" }
+        ]
+      }
+    ],
+    "prompt_cache": {
+      "key": "kolyan-live-cache-test",
+      "breakpoints": ["system", "tools"]
+    },
+    "max_output_tokens": 128
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "prompt_cache": {
+      "second_cache_read_tokens_gt_first": true
+    },
+    "requires": ["cache_control_ephemeral"]
+  }
+}

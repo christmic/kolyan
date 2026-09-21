@@ -1,4 +1,6 @@
-use futures_util::StreamExt;
+use std::sync::{Arc, Mutex};
+
+use futures_util::{Stream, StreamExt};
 use kolyan_model::{
     ContentBlock, ImageSource, ModelEvent, ModelProvider, ModelRequest, ModelResponse,
     ProviderError, ProviderErrorKind, ProviderErrorPhase, ProviderFuture, StopReason, TokenUsage,
@@ -42,14 +44,89 @@ impl ModelProvider for OpenAiProvider {
                 .await
                 .map_err(openai_error)?;
             let model = request.model.clone();
-            let stream = response.map(move |event| {
+            let model_for_map = model.clone();
+            let mapped = response.map(move |event| {
                 event
                     .map_err(openai_error)
-                    .and_then(|event| map_event(event, &model))
+                    .and_then(|event| map_event(event, &model_for_map))
             });
+            // Some compatible servers (notably MiniMax on the structured
+            // output path) end the stream without ever emitting
+            // `response.completed`. `aggregate_stream` then errors out
+            // waiting for a terminal event. We compensate by tracking
+            // whether Completed has been emitted and synthesizing one at
+            // stream end from whatever we accumulated.
+            let state = Arc::new(Mutex::new(CompletionState::default()));
+            let tracked = tracked_completion(mapped, Arc::clone(&state));
+            let stream = synthesize_completion_if_missing(tracked, Arc::clone(&state), model);
             Ok(Box::pin(stream) as _)
         })
     }
+}
+
+#[derive(Default)]
+struct CompletionState {
+    completed_emitted: bool,
+}
+
+/// Wrap a mapped event stream so we know whether a terminal
+/// `ModelEvent::Completed` was ever emitted, regardless of what came
+/// before it.
+fn tracked_completion<S>(
+    upstream: S,
+    state: Arc<Mutex<CompletionState>>,
+) -> impl Stream<Item = Result<ModelEvent, ProviderError>> + Send
+where
+    S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
+{
+    upstream.map(move |event_result| {
+        if let Ok(ModelEvent::Completed(_)) = &event_result
+            && let Ok(mut s) = state.lock()
+        {
+            s.completed_emitted = true;
+        }
+        event_result
+    })
+}
+
+/// After the upstream stream finishes, append a synthetic `Completed`
+/// event if the server never sent one. This keeps `aggregate_stream` from
+/// erroring on MiniMax-style providers that close the connection
+/// without emitting `response.completed`.
+fn synthesize_completion_if_missing<S>(
+    upstream: S,
+    state: Arc<Mutex<CompletionState>>,
+    model: kolyan_model::ModelRef,
+) -> std::pin::Pin<Box<dyn Stream<Item = Result<ModelEvent, ProviderError>> + Send>>
+where
+    S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
+{
+    use futures_util::stream::{self, StreamExt};
+    let model_for_synth = model.clone();
+    let tail = stream::once(async move {
+        let already = state.lock().map(|s| s.completed_emitted).unwrap_or(true);
+        if already {
+            // Either Completed was emitted upstream, or the lock is
+            // poisoned (treat as already-emitted to avoid double-firing).
+            return None;
+        }
+        Some(Ok(ModelEvent::Completed(ModelResponse {
+            id: String::new(),
+            model: model_for_synth,
+            content: Vec::new(),
+            structured_output: None,
+            // Provider omitted the terminal frame — best guess.
+            stop_reason: StopReason::EndTurn,
+            usage: TokenUsage::default(),
+            metadata: json!({
+                "provider": "openai",
+                "synthetic_completed": true,
+                "reason": "server stream ended without response.completed",
+            }),
+        })))
+    })
+    .filter_map(|x| async move { x });
+    upstream.chain(tail).boxed()
 }
 
 fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
@@ -154,13 +231,30 @@ fn map_event(
                     raw: Some(Value::Object(event.fields.into_iter().collect())),
                 }))
             }),
-        "response.output_item.done" => event
-            .fields
-            .get("item")
-            .map(map_tool_call)
-            .transpose()?
-            .map(ModelEvent::ToolCallCompleted)
-            .ok_or_else(|| provider_error("missing function call item")),
+        "response.output_item.done" => {
+            // Only function_call items produce a ToolCallCompleted. Other
+            // item types (message, reasoning, ...) silently close as
+            // Provider metadata — without this guard, message items were
+            // being mapped to ToolCallCompleted with empty name/arguments,
+            // which broke `aggregate_stream`'s first-call-wins assumption.
+            let item = event.fields.get("item");
+            let is_function_call = item
+                .and_then(Value::as_object)
+                .and_then(|i| i.get("type"))
+                .and_then(Value::as_str)
+                == Some("function_call");
+            if is_function_call {
+                item.map(map_tool_call)
+                    .transpose()?
+                    .map(ModelEvent::ToolCallCompleted)
+                    .ok_or_else(|| provider_error("missing function call item"))
+            } else {
+                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: "openai".into(),
+                    raw: Some(Value::Object(event.fields.into_iter().collect())),
+                }))
+            }
+        }
         "response.completed" => event
             .fields
             .get("response")
@@ -168,6 +262,28 @@ fn map_event(
             .transpose()?
             .map(ModelEvent::Completed)
             .ok_or_else(|| provider_error("missing completed response")),
+        // `response.incomplete` is sent when the server stops mid-stream
+        // (most commonly because `max_output_tokens` was hit on a reasoning
+        // model that spent the entire budget on `reasoning_tokens`).
+        // Surface it as a terminal `Completed` with `MaxOutputTokens` so
+        // `aggregate_stream` doesn't error out waiting for `response.completed`.
+        "response.incomplete" => event
+            .fields
+            .get("response")
+            .map(|response| map_incomplete_response(response, model))
+            .transpose()?
+            .map(ModelEvent::Completed)
+            .ok_or_else(|| provider_error("missing incomplete response body")),
+        // `response.created` / `response.in_progress` carry the response
+        // shell with status=queued/in_progress. They're informational —
+        // surface as Provider metadata so tests can see them, but never
+        // terminate the stream.
+        "response.created" | "response.in_progress" => {
+            Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                provider: "openai".into(),
+                raw: Some(Value::Object(event.fields.into_iter().collect())),
+            }))
+        }
         "response.failed" => Err(provider_error("OpenAI response failed")),
         _ => Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
             provider: "openai".into(),
@@ -198,14 +314,127 @@ fn map_response(
         id: string_value(value, "id"),
         model: model.clone(),
         content,
-        structured_output: value
-            .get("output_text")
-            .and_then(Value::as_str)
-            .and_then(|text| serde_json::from_str(text).ok()),
+        structured_output: extract_structured_output(value),
         stop_reason,
         usage: usage(value.get("usage")),
         metadata: value.clone(),
     })
+}
+
+/// Like [`map_response`] but for `response.incomplete` frames. Forces
+/// `stop_reason = MaxOutputTokens` when the body carries
+/// `incomplete_details.reason = "max_output_tokens"`; otherwise falls back
+/// to `EndTurn`. Output content (text / reasoning / tool calls) is
+/// preserved from the partial response.
+fn map_incomplete_response(
+    value: &Value,
+    model: &kolyan_model::ModelRef,
+) -> Result<ModelResponse, ProviderError> {
+    let mut response = map_response(value, model)?;
+    let stop = value
+        .get("incomplete_details")
+        .and_then(|d| d.get("reason"))
+        .and_then(Value::as_str);
+    response.stop_reason = match stop {
+        Some("max_output_tokens") => StopReason::MaxOutputTokens,
+        Some("content_filter") => StopReason::Refusal,
+        _ => response.stop_reason,
+    };
+    Ok(response)
+}
+
+/// Try, in order, to obtain a parsed JSON object from a Responses API
+/// terminal frame:
+///
+/// 1. `output[].parsed` (official path when `text.format=json_schema`).
+/// 2. `parsed` at top level.
+/// 3. `output_text` at top level — strip a leading/trailing markdown
+///    ```json fence (some compatible servers wrap their JSON that way)
+///    before parsing.
+/// 4. Concatenate `output[].content[].text` and parse — last-resort for
+///    servers that only stream text deltas and never populate
+///    `output_text`/`parsed`.
+#[allow(clippy::collapsible_if)]
+fn extract_structured_output(value: &Value) -> Option<Value> {
+    if let Some(parsed) = value.get("parsed") {
+        if parsed.is_object() || parsed.is_array() {
+            return Some(parsed.clone());
+        }
+    }
+    if let Some(Value::Array(items)) = value.get("output") {
+        for item in items {
+            if let Some(parsed) = item.get("parsed") {
+                if parsed.is_object() || parsed.is_array() {
+                    return Some(parsed.clone());
+                }
+            }
+        }
+    }
+    if let Some(text) = value.get("output_text").and_then(Value::as_str) {
+        if let Some(parsed) = parse_json_relaxed(text) {
+            return Some(parsed);
+        }
+    }
+    if let Some(Value::Array(items)) = value.get("output") {
+        let joined: String = items
+            .iter()
+            .flat_map(|item| item.get("content").and_then(Value::as_array).cloned())
+            .flatten()
+            .filter_map(|block| block.get("text").and_then(Value::as_str).map(String::from))
+            .collect::<Vec<_>>()
+            .join("");
+        if let Some(parsed) = parse_json_relaxed(&joined) {
+            return Some(parsed);
+        }
+    }
+    None
+}
+
+/// Parse JSON from a string that may or may not be wrapped in a markdown
+/// ```json ... ``` fence. Returns `None` on parse failure (not an error —
+/// the caller decides what to do with a non-JSON response).
+#[allow(clippy::collapsible_if)]
+fn parse_json_relaxed(text: &str) -> Option<Value> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+        if v.is_object() || v.is_array() {
+            return Some(v);
+        }
+    }
+    // Strip ```json ... ``` (with or without language tag) and retry.
+    let stripped = strip_markdown_fence(trimmed);
+    if stripped != trimmed {
+        if let Ok(v) = serde_json::from_str::<Value>(stripped.trim()) {
+            if v.is_object() || v.is_array() {
+                return Some(v);
+            }
+        }
+    }
+    // Last-ditch: find the first {...} or [...] block and parse it.
+    if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('[')) {
+        if let Some(end_rel) = trimmed.rfind(['}', ']']) {
+            let candidate = &trimmed[start..=end_rel];
+            if let Ok(v) = serde_json::from_str::<Value>(candidate)
+                && (v.is_object() || v.is_array())
+            {
+                return Some(v);
+            }
+        }
+    }
+    None
+}
+
+fn strip_markdown_fence(text: &str) -> &str {
+    let trimmed = text.trim();
+    let stripped = trimmed
+        .strip_prefix("```json")
+        .or_else(|| trimmed.strip_prefix("```JSON"))
+        .or_else(|| trimmed.strip_prefix("```"));
+    let stripped = stripped.unwrap_or(trimmed);
+    stripped.strip_suffix("```").unwrap_or(stripped)
 }
 fn map_output(item: &Value) -> Vec<ContentBlock> {
     match item.get("type").and_then(Value::as_str) {
@@ -256,17 +485,16 @@ fn usage(value: Option<&Value>) -> TokenUsage {
     TokenUsage {
         input_tokens: value
             .and_then(|v| v.get("input_tokens"))
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+            .and_then(Value::as_u64),
         output_tokens: value
             .and_then(|v| v.get("output_tokens"))
-            .and_then(Value::as_u64)
-            .unwrap_or_default(),
+            .and_then(Value::as_u64),
         reasoning_tokens: value
             .and_then(|v| v.get("output_tokens_details"))
             .and_then(|v| v.get("reasoning_tokens"))
             .and_then(Value::as_u64),
-        ..TokenUsage::default()
+        cache_read_tokens: None,
+        cache_write_tokens: None,
     }
 }
 fn string(fields: &std::collections::BTreeMap<String, Value>, key: &str) -> String {
