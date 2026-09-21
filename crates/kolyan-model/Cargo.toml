@@ -1,0 +1,11 @@
+[package]
+name = "kolyan-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kolyan-types = { path = "../kolyan-types" }
