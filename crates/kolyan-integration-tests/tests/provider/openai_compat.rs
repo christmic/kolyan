@@ -1,16 +1,17 @@
 //! Live regression tests for **every** OpenAI-compatible provider family
-//! registered in `tests/live-tests.toml`.
+//! registered in `tests/config/live-tests.toml`.
 //!
 //! This file contains no test-case logic — every assertion lives in the
 //! fixture's `expectations` block. To add a new case, drop a JSON file
 //! under `tests/fixtures/` and register its name in `common::load_fixture`.
-//! To add a new provider, add a section to `tests/live-tests.toml` only.
+//! To add a new provider, add a section to `tests/config/live-tests.toml` only.
 //!
 //! Every test is `#[ignore]` so `cargo test --workspace` (CI) compiles and
 //! skips them. Run explicitly with
-//! `cargo test -p kolyan-provider-tests -- --ignored`. See `README.md` for
+//! `cargo test -p kolyan-integration-tests -- --ignored`. See `README.md` for
 //! how to set the per-family API-key env vars.
 
+#[path = "../common/mod.rs"]
 mod common;
 
 use common::{

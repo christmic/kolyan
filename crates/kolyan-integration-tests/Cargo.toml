@@ -1,10 +1,22 @@
 [package]
-name = "kolyan-provider-tests"
+name = "kolyan-integration-tests"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish = false
 description = "Real-network live regression tests for Kolyan provider adapters (MiniMax China-region OpenAI-compatible and Anthropic-compatible endpoints)."
+
+[[test]]
+name = "provider_openai_compat"
+path = "tests/provider/openai_compat.rs"
+
+[[test]]
+name = "provider_anthropic_compat"
+path = "tests/provider/anthropic_compat.rs"
+
+[[test]]
+name = "core_step"
+path = "tests/core/step.rs"
 
 [lints]
 workspace = true
@@ -24,6 +36,7 @@ serde_json.workspace = true
 # Sibling Kolyan crates. The provider adapter crates are the unit under test;
 # the model crate is the neutral contract; the protocol crates carry the
 # OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
+kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }

@@ -1,4 +1,4 @@
-# kolyan-provider-tests
+# kolyan-integration-tests
 
 Real-network live regression tests for Kolyan's two provider adapters, run
 against both **MiniMax China-region** and the **Qwen (千问) platform**
@@ -28,10 +28,10 @@ crate exists to catch the failure modes that mocks cannot:
 ## Layered separation
 
 ```
-        test code (this crate, tests/*.rs)
+        test code (this crate, tests/provider/ + tests/core/)
               │
               ▼  reads
-        local config (tests/live-tests.toml — committed, no API key)
+        local config (tests/config/live-tests.toml — committed, no API key)
               │
               ▼  injected via
         env vars (KOLYAN_*_API_KEY — never committed)
@@ -46,17 +46,16 @@ A test case has three layered pieces, all kept separate:
 
 ```
   tests/fixtures/<name>.json     ← inputs + expected outputs (data)
-  tests/live-tests.toml          ← provider × model matrix (config)
-  tests/*.rs                     ← pure runner (code)
+  tests/config/live-tests.toml   ← provider × model matrix (config)
+  tests/provider/ + tests/core/  ← runners (code)
 ```
 
 To **add a new test case**: drop a JSON file under `tests/fixtures/` and
 register its name in `common::load_fixture()`. No test code changes.
 
 To **add a new provider**: add a `[provider.<family>.<surface>]` section
-to `tests/live-tests.toml` and add one entry to the family list in each
-of `tests/openai_compat.rs` and `tests/anthropic_compat.rs`. No fixture
-or assertion code changes.
+to `tests/config/live-tests.toml`; provider protocol runners live under
+`tests/provider/`. No fixture or assertion code changes.
 
 To **add a new model** under an existing provider: add a
 `[[provider.<family>.<surface>.model_matrix]]` entry. No code changes.
@@ -72,14 +71,17 @@ export KOLYAN_MINIMAX_API_KEY="<your-minimax-key>"
 export KOLYAN_QWEN_API_KEY="<your-qwen-key>"
 
 # 2. From the Kolyan workspace root, run all live tests.
-cargo test -p kolyan-provider-tests -- --ignored --nocapture
+cargo test -p kolyan-integration-tests -- --ignored --nocapture
 
 # 3. Or run a single scenario.
-cargo test -p kolyan-provider-tests openai_single_shot_matrix -- --ignored --nocapture
-cargo test -p kolyan-provider-tests anthropic_prompt_cache_matrix -- --ignored --nocapture
+cargo test -p kolyan-integration-tests openai_single_shot_matrix -- --ignored --nocapture
+cargo test -p kolyan-integration-tests anthropic_prompt_cache_matrix -- --ignored --nocapture
 
 # 4. Diagnostic dumps — see exactly what each event looks like on the wire.
-cargo test -p kolyan-provider-tests openai_dump_first_text -- --ignored --nocapture
+cargo test -p kolyan-integration-tests openai_dump_first_text -- --ignored --nocapture
+
+# 5. Run the Step layer against MiniMax using both protocol surfaces.
+cargo test -p kolyan-integration-tests --test core_step -- --ignored --nocapture
 ```
 
 If either env var is unset, matrix rows for that provider are reported as
@@ -89,7 +91,7 @@ silently converts an adapter error into a passing test.
 
 ## Provider matrix
 
-Configured in `tests/live-tests.toml`:
+Configured in `tests/config/live-tests.toml`:
 
 | Family  | Surface             | Base URL (host part — `/v1/...` is appended by the client) | API key env var        |
 |---------|---------------------|------------------------------------------------------------|------------------------|
@@ -112,7 +114,6 @@ all of these via `model_id`):
 | qwen3.8-flash        |  ✓   |    ✓      |   ✓    |
 | qwen3.7-plus         |  ✓   |    ✓      |   ✓    |
 | qwen3.7-max          |  ✓   |    ✓      |        |
-| qwen3.6-flash        |  ✓   |    ✓      |   ✓    |
 | deepseek-v4.1-flash  |  ✓   |    ✓      |        |
 | deepseek-v4-pro-0813 |  ✓   |    ✓      |        |
 | deepseek-v4-pro      |  ✓   |    ✓      |        |
@@ -186,7 +187,7 @@ block. The runner uses these to choose how strictly to assert on the
 | `structured_output_fenced` | Informational — the OpenAI provider layer strips markdown fences unconditionally; this flag documents whether a particular surface needs it. |
 | `supports_vision`          | Informational — there are no vision-only fixtures yet, so this flag is forward-looking. |
 
-Current defaults (in `tests/live-tests.toml`):
+Current defaults (in `tests/config/live-tests.toml`):
 
 | Family  | Surface          | input | output | cache_ephemeral | server_emits_completed | fenced |
 |---------|------------------|:-----:|:------:|:---------------:|:----------------------:|:------:|
@@ -219,7 +220,7 @@ Notes on the defaults:
 live test is `#[ignore]`'d, so CI sees zero network calls, zero key
 usage, and zero cost. CI does **not** run the `--ignored` set.
 
-`cargo test -p kolyan-provider-tests -- --ignored` requires both keys
+`cargo test -p kolyan-integration-tests -- --ignored` requires both keys
 (or whichever families you want to exercise) to be exported in the
 caller's shell.
 
@@ -227,11 +228,11 @@ caller's shell.
 
 When a test fails, the failure message embeds the full
 `family/surface/model/fixture` label so you can correlate with
-`tests/live-tests.toml` directly. To see raw SSE events for a given
+`tests/config/live-tests.toml` directly. To see raw SSE events for a given
 provider, run:
 
 ```bash
-cargo test -p kolyan-provider-tests openai_dump_first_text -- --ignored --nocapture
+cargo test -p kolyan-integration-tests openai_dump_first_text -- --ignored --nocapture
 ```
 
 This dumps every `ModelEvent` that the first matrix entry produces for
@@ -246,6 +247,6 @@ the full provider/model/fixture label.
 
 ## Editing endpoints or models
 
-Edit `tests/live-tests.toml`. The file is embedded into each test
+Edit `tests/config/live-tests.toml`. The file is embedded into each test
 binary at compile time via `include_str!`, so a rebuild is required for
 changes to take effect.

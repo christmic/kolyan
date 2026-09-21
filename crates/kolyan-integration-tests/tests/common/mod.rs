@@ -26,10 +26,10 @@ use serde::Deserialize;
 use serde_json::Value;
 
 // --------------------------------------------------------------------------
-// Configuration (parses tests/live-tests.toml at compile time).
+// Configuration (parses tests/config/live-tests.toml at compile time).
 // --------------------------------------------------------------------------
 
-const LIVE_TESTS_TOML: &str = include_str!("../live-tests.toml");
+const LIVE_TESTS_TOML: &str = include_str!("../config/live-tests.toml");
 
 /// Provider-family identifiers — stable string keys used both to address
 /// entries in `live-tests.toml` and to label `ModelRef::provider`.
@@ -181,8 +181,8 @@ pub struct LiveTestConfig {
 
 /// Read `live-tests.toml` (embedded via `include_str!`) into a typed config.
 pub fn load_config() -> LiveTestConfig {
-    let raw: RawConfig =
-        toml::from_str(LIVE_TESTS_TOML).expect("tests/live-tests.toml must parse into RawConfig");
+    let raw: RawConfig = toml::from_str(LIVE_TESTS_TOML)
+        .expect("tests/config/live-tests.toml must parse into RawConfig");
     LiveTestConfig {
         minimax_openai: from_openai(raw.provider.minimax.openai_compat),
         minimax_anthropic: from_anthropic(raw.provider.minimax.anthropic_compat),

@@ -17,6 +17,7 @@
 | `kolyan-trace` | 执行轨迹和观测 | 作为 Ledger 权威存储 |
 | `kolyan-storage` | Session、Ledger、持久化 | Agent Loop |
 | `kolyan-cli` | 命令行入口 | 核心业务规则 |
+| `kolyan-integration-tests` | 跨模块、Provider 和真实网络集成测试 | 业务实现、生产运行时 |
 
 ## 应用和其他语言
 
