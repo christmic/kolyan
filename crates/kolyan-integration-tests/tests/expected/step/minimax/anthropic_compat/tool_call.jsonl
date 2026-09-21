@@ -3,4 +3,4 @@
 {"event":"tool_call_arguments_delta"}
 {"event":"tool_call_completed","name":"get_weather"}
 {"event":"usage"}
-{"event":"completed","stop_reason":"tool_use"}
+{"event":"completed","stop_reason":"tool_use","structured_output":false}

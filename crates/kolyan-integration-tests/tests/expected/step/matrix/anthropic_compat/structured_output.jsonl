@@ -1,0 +1,2 @@
+{"event":"reasoning_delta","optional":true}
+{"event":"completed","stop_reason":"end_turn","structured_output":true}

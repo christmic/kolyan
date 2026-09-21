@@ -21,6 +21,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const FIXTURES: &[&str] = &["text", "tool_call", "structured_output"];
+const MATRIX_FIXTURES: &[&str] = &["text", "tool_call", "structured_output"];
 
 #[tokio::test]
 #[ignore = "real-network test: requires KOLYAN_MINIMAX_API_KEY"]
@@ -117,15 +118,19 @@ async fn step_stream_snapshot_all_configured_models_over_both_protocols() {
         let key = require_api_key(&config.minimax_openai);
         let provider = build_openai_provider(&config.minimax_openai, &key);
         for entry in &config.minimax_openai.model_matrix {
-            run_openai_stream_contract(
-                &provider,
-                entry,
-                "minimax",
-                &format!("minimax/openai_compat/{}", entry.model),
-                Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/expected/step/matrix/openai_compat/tool_call.jsonl"),
-            )
-            .await;
+            for fixture_name in MATRIX_FIXTURES {
+                run_openai_stream_contract(
+                    &provider,
+                    entry,
+                    "minimax",
+                    fixture_name,
+                    &format!("minimax/openai_compat/{}/{}", entry.model, fixture_name),
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+                        "tests/expected/step/matrix/openai_compat/{fixture_name}.jsonl"
+                    )),
+                )
+                .await;
+            }
         }
     } else {
         eprintln!(
@@ -138,15 +143,19 @@ async fn step_stream_snapshot_all_configured_models_over_both_protocols() {
         let key = require_api_key_anthropic(&config.minimax_anthropic);
         let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
         for entry in &config.minimax_anthropic.model_matrix {
-            run_anthropic_stream_contract(
-                &provider,
-                entry,
-                "minimax",
-                &format!("minimax/anthropic_compat/{}", entry.model),
-                Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/expected/step/matrix/anthropic_compat/tool_call.jsonl"),
-            )
-            .await;
+            for fixture_name in MATRIX_FIXTURES {
+                run_anthropic_stream_contract(
+                    &provider,
+                    entry,
+                    "minimax",
+                    fixture_name,
+                    &format!("minimax/anthropic_compat/{}/{}", entry.model, fixture_name),
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+                        "tests/expected/step/matrix/anthropic_compat/{fixture_name}.jsonl"
+                    )),
+                )
+                .await;
+            }
         }
     } else {
         eprintln!(
@@ -159,15 +168,19 @@ async fn step_stream_snapshot_all_configured_models_over_both_protocols() {
         let key = require_api_key(&config.qwen_openai);
         let provider = build_openai_provider(&config.qwen_openai, &key);
         for entry in &config.qwen_openai.model_matrix {
-            run_openai_stream_contract(
-                &provider,
-                entry,
-                "qwen",
-                &format!("qwen/openai_compat/{}", entry.model),
-                Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/expected/step/matrix/openai_compat/tool_call.jsonl"),
-            )
-            .await;
+            for fixture_name in MATRIX_FIXTURES {
+                run_openai_stream_contract(
+                    &provider,
+                    entry,
+                    "qwen",
+                    fixture_name,
+                    &format!("qwen/openai_compat/{}/{}", entry.model, fixture_name),
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+                        "tests/expected/step/matrix/openai_compat/{fixture_name}.jsonl"
+                    )),
+                )
+                .await;
+            }
         }
     } else {
         eprintln!(
@@ -180,15 +193,19 @@ async fn step_stream_snapshot_all_configured_models_over_both_protocols() {
         let key = require_api_key_anthropic(&config.qwen_anthropic);
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
-            run_anthropic_stream_contract(
-                &provider,
-                entry,
-                "qwen",
-                &format!("qwen/anthropic_compat/{}", entry.model),
-                Path::new(env!("CARGO_MANIFEST_DIR"))
-                    .join("tests/expected/step/matrix/anthropic_compat/tool_call.jsonl"),
-            )
-            .await;
+            for fixture_name in MATRIX_FIXTURES {
+                run_anthropic_stream_contract(
+                    &provider,
+                    entry,
+                    "qwen",
+                    fixture_name,
+                    &format!("qwen/anthropic_compat/{}/{}", entry.model, fixture_name),
+                    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+                        "tests/expected/step/matrix/anthropic_compat/{fixture_name}.jsonl"
+                    )),
+                )
+                .await;
+            }
         }
     } else {
         eprintln!(
@@ -300,10 +317,11 @@ async fn run_openai_stream_contract(
     provider: &kolyan_provider_openai::OpenAiProvider,
     entry: &common::ModelMatrixEntry,
     family: &str,
+    fixture_name: &str,
     label: &str,
     expected_path: impl AsRef<Path>,
 ) {
-    let fixture = load_fixture("tool_call");
+    let fixture = load_fixture(fixture_name);
     let executor = StepExecutor::new(provider.clone());
     let request = StepRequest {
         step_id: format!("step-stream-{}-{}", family, entry.model),
@@ -325,10 +343,11 @@ async fn run_anthropic_stream_contract(
     provider: &kolyan_provider_anthropic::AnthropicProvider,
     entry: &common::ModelMatrixEntry,
     family: &str,
+    fixture_name: &str,
     label: &str,
     expected_path: impl AsRef<Path>,
 ) {
-    let fixture = load_fixture("tool_call");
+    let fixture = load_fixture(fixture_name);
     let executor = StepExecutor::new(provider.clone());
     let request = StepRequest {
         step_id: format!("step-stream-{}-{}", family, entry.model),
@@ -421,7 +440,11 @@ fn stable_stream_record(event: &StepEvent) -> Option<Value> {
         StepEvent::Usage { .. } => json!({"event": "usage"}),
         StepEvent::Provider { .. } => return None,
         StepEvent::Completed(result) => {
-            json!({"event": "completed", "stop_reason": stop_reason_name(&result.response)})
+            json!({
+                "event": "completed",
+                "stop_reason": stop_reason_name(&result.response),
+                "structured_output": result.response.structured_output.is_some()
+            })
         }
     };
     Some(record)
@@ -482,6 +505,20 @@ fn assert_snapshot_contract_file(label: &str, actual: &str, expected_path: &Path
     let expected_records = parse_snapshot_records(&expected, label);
     let mut actual_index = 0;
     for expected_record in expected_records {
+        if expected_record.get("optional") == Some(&Value::Bool(true)) {
+            let mut optional_record = expected_record.clone();
+            optional_record
+                .as_object_mut()
+                .expect("optional snapshot record must be an object")
+                .remove("optional");
+            if actual_records
+                .iter()
+                .any(|actual_record| record_contains(actual_record, &optional_record))
+            {
+                continue;
+            }
+            continue;
+        }
         let Some(relative_index) = actual_records[actual_index..]
             .iter()
             .position(|actual_record| record_contains(actual_record, &expected_record))

@@ -1,0 +1,3 @@
+{"event":"text_delta"}
+{"event":"reasoning_delta","optional":true}
+{"event":"completed","stop_reason":"end_turn"}
