@@ -9,7 +9,8 @@ pub use step::{
     StepValidator, aggregate_step_stream,
 };
 pub use turn::{
-    NoopToolExecutor, ToolDispatchMode, ToolDispatchPolicy, ToolDispatchResult, ToolError,
-    ToolErrorPolicy, ToolExecutor, ToolFuture, TurnConfig, TurnControl, TurnError, TurnEvent,
-    TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest, TurnResult, TurnState,
+    NoopToolExecutor, ToolCallBatch, ToolDispatchMode, ToolDispatchPolicy, ToolDispatchResult,
+    ToolError, ToolErrorPolicy, ToolExecutor, ToolFuture, TurnConfig, TurnControl, TurnError,
+    TurnEvent, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest, TurnResult,
+    TurnState,
 };

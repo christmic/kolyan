@@ -5,6 +5,7 @@ use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
     ToolResult,
 };
+use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{
@@ -62,6 +63,52 @@ impl Default for ToolDispatchPolicy {
 pub struct ToolDispatchResult {
     pub call_id: String,
     pub result: Result<ToolResult, ToolError>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToolCallBatch {
+    calls: Vec<ToolCall>,
+}
+
+impl ToolCallBatch {
+    pub fn calls(&self) -> &[ToolCall] {
+        &self.calls
+    }
+
+    pub fn len(&self) -> usize {
+        self.calls.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.calls.is_empty()
+    }
+
+    pub fn into_calls(self) -> Vec<ToolCall> {
+        self.calls
+    }
+}
+
+impl TryFrom<Vec<ToolCall>> for ToolCallBatch {
+    type Error = ToolError;
+
+    fn try_from(calls: Vec<ToolCall>) -> Result<Self, Self::Error> {
+        if calls.is_empty() {
+            return Err(ToolError::InvalidBatch {
+                message: "tool call batch must not be empty".into(),
+            });
+        }
+
+        let mut call_ids = HashSet::with_capacity(calls.len());
+        for call in &calls {
+            if !call_ids.insert(call.id.clone()) {
+                return Err(ToolError::InvalidBatch {
+                    message: format!("duplicate tool call id: {}", call.id),
+                });
+            }
+        }
+
+        Ok(Self { calls })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +209,8 @@ pub enum TurnError {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum ToolError {
+    #[error("invalid tool call batch: {message}")]
+    InvalidBatch { message: String },
     #[error("tool is unavailable: {name}")]
     Unavailable { name: String },
     #[error("tool execution failed: {message}")]
@@ -344,7 +393,8 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         role: MessageRole::Assistant,
                         content: step.response.content.clone(),
                     });
-                    let calls = tool_calls(&step.response.content);
+                    let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
+                    let calls = batch.into_calls();
                     for call in &calls {
                         events.push(TurnEvent::ToolCallRequested {
                             turn_id: turn_id.clone(),
@@ -839,5 +889,38 @@ mod tests {
             event,
             TurnEvent::ToolResult { result, .. } if result.call_id == "call-parallel"
         )));
+    }
+
+    #[test]
+    fn tool_call_batch_rejects_empty_calls() {
+        let error = ToolCallBatch::try_from(Vec::new()).expect_err("empty batch must fail");
+
+        assert!(matches!(
+            error,
+            ToolError::InvalidBatch { message } if message == "tool call batch must not be empty"
+        ));
+    }
+
+    #[test]
+    fn tool_call_batch_rejects_duplicate_call_ids() {
+        let calls = vec![
+            ToolCall {
+                id: "duplicate".into(),
+                name: "file.read".into(),
+                arguments: serde_json::json!({"path": "a.txt"}),
+            },
+            ToolCall {
+                id: "duplicate".into(),
+                name: "file.read".into(),
+                arguments: serde_json::json!({"path": "b.txt"}),
+            },
+        ];
+
+        let error = ToolCallBatch::try_from(calls).expect_err("duplicate ids must fail");
+
+        assert!(matches!(
+            error,
+            ToolError::InvalidBatch { message } if message == "duplicate tool call id: duplicate"
+        ));
     }
 }
