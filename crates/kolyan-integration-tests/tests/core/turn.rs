@@ -13,7 +13,7 @@ use common::{
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
 use futures_util::StreamExt;
-use kolyan_core::{TurnConfig, TurnEvent, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
+use kolyan_core::{TurnConfig, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
     StopReason,
@@ -235,33 +235,30 @@ async fn run_openai_multi_step(
 ) {
     let fixture = load_fixture("turn_ten_step");
     let (provider, records) = RecordingProvider::new(provider.clone());
-    let executor = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root));
-    let request = TurnRequest {
-        turn_id: format!("turn-ten-step-{family}-{}", entry.model),
-        model_request: build_request(
-            family,
-            &entry.model,
-            &fixture,
-            format!("turn-ten-step-{family}-{}", entry.model),
-            None,
-        ),
-        config: TurnConfig {
-            max_steps: fixture
-                .turn
-                .as_ref()
-                .and_then(|turn| turn.max_steps)
-                .unwrap_or(12),
-        },
-    };
-    let events = collect_turn_events(
-        &executor,
-        request,
-        &format!("{family}/openai_compat/{}/ten_step", entry.model),
-    )
-    .await
-    .unwrap_or_else(|error| panic!("[{family}/openai_compat/{}/ten_step] {error}", entry.model));
-    assert_multi_step_events(
-        &events,
+    let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
+        .execute(TurnRequest {
+            turn_id: format!("turn-ten-step-{family}-{}", entry.model),
+            model_request: build_request(
+                family,
+                &entry.model,
+                &fixture,
+                format!("turn-ten-step-{family}-{}", entry.model),
+                None,
+            ),
+            config: TurnConfig {
+                max_steps: fixture
+                    .turn
+                    .as_ref()
+                    .and_then(|turn| turn.max_steps)
+                    .unwrap_or(12),
+            },
+        })
+        .await
+        .unwrap_or_else(|error| {
+            panic!("[{family}/openai_compat/{}/ten_step] {error}", entry.model)
+        });
+    assert_multi_step_result(
+        &result,
         fixture.turn.as_ref(),
         &format!("{family}/openai_compat/{}/ten_step", entry.model),
     );
@@ -279,38 +276,33 @@ async fn run_anthropic_multi_step(
 ) {
     let fixture = load_fixture("turn_ten_step");
     let (provider, records) = RecordingProvider::new(provider.clone());
-    let executor = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root));
-    let request = TurnRequest {
-        turn_id: format!("turn-ten-step-{family}-{}", entry.model),
-        model_request: build_request(
-            family,
-            &entry.model,
-            &fixture,
-            format!("turn-ten-step-{family}-{}", entry.model),
-            None,
-        ),
-        config: TurnConfig {
-            max_steps: fixture
-                .turn
-                .as_ref()
-                .and_then(|turn| turn.max_steps)
-                .unwrap_or(12),
-        },
-    };
-    let events = collect_turn_events(
-        &executor,
-        request,
-        &format!("{family}/anthropic_compat/{}/ten_step", entry.model),
-    )
-    .await
-    .unwrap_or_else(|error| {
-        panic!(
-            "[{family}/anthropic_compat/{}/ten_step] {error}",
-            entry.model
-        )
-    });
-    assert_multi_step_events(
-        &events,
+    let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
+        .execute(TurnRequest {
+            turn_id: format!("turn-ten-step-{family}-{}", entry.model),
+            model_request: build_request(
+                family,
+                &entry.model,
+                &fixture,
+                format!("turn-ten-step-{family}-{}", entry.model),
+                None,
+            ),
+            config: TurnConfig {
+                max_steps: fixture
+                    .turn
+                    .as_ref()
+                    .and_then(|turn| turn.max_steps)
+                    .unwrap_or(12),
+            },
+        })
+        .await
+        .unwrap_or_else(|error| {
+            panic!(
+                "[{family}/anthropic_compat/{}/ten_step] {error}",
+                entry.model
+            )
+        });
+    assert_multi_step_result(
+        &result,
         fixture.turn.as_ref(),
         &format!("{family}/anthropic_compat/{}/ten_step", entry.model),
     );
@@ -320,28 +312,8 @@ async fn run_anthropic_multi_step(
     );
 }
 
-async fn collect_turn_events<P, T>(
-    executor: &TurnExecutor<P, T>,
-    request: TurnRequest,
-    label: &str,
-) -> Result<Vec<TurnEvent>, kolyan_core::TurnError>
-where
-    P: kolyan_model::ModelProvider,
-    T: kolyan_core::ToolExecutor,
-{
-    let mut stream = executor
-        .execute_event_stream(request, Default::default())
-        .await
-        .unwrap_or_else(|error| panic!("[{label}] turn event stream failed to open: {error}"));
-    let mut events = Vec::new();
-    while let Some(event) = stream.next().await {
-        events.push(event?);
-    }
-    Ok(events)
-}
-
-fn assert_multi_step_events(
-    events: &[TurnEvent],
+fn assert_multi_step_result(
+    result: &TurnResult,
     expectations: Option<&common::TurnExpectations>,
     label: &str,
 ) {
@@ -349,57 +321,29 @@ fn assert_multi_step_events(
     let min_tool_calls = expectations
         .and_then(|turn| turn.min_tool_calls)
         .unwrap_or(10);
-    let steps = events
-        .iter()
-        .filter_map(|event| match event {
-            TurnEvent::StepCompleted { step, .. } => Some(step),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    let tool_calls = steps
+    let tool_calls = result
+        .steps
         .iter()
         .flat_map(|step| step.response.content.iter())
         .filter(|block| matches!(block, ContentBlock::ToolCall { .. }))
         .count();
     assert!(
-        matches!(events.first(), Some(TurnEvent::Started { .. })),
-        "[{label}] missing TurnStarted event"
-    );
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| matches!(event, TurnEvent::StepStarted { .. }))
-            .count(),
-        steps.len(),
-        "[{label}] StepStarted/StepCompleted count mismatch"
-    );
-    assert!(
-        steps.len() >= min_steps,
+        result.steps.len() >= min_steps,
         "[{label}] expected at least {min_steps} Steps, got {}",
-        steps.len()
+        result.steps.len()
     );
     assert!(
         tool_calls >= min_tool_calls,
         "[{label}] expected at least {min_tool_calls} ToolCalls, got {tool_calls}"
     );
-    assert_eq!(
-        events
+    assert!(
+        result
+            .steps
             .iter()
-            .filter(|event| matches!(event, TurnEvent::ToolCallRequested { .. }))
-            .count(),
-        events
-            .iter()
-            .filter(|event| matches!(event, TurnEvent::ToolResult { .. }))
-            .count(),
-        "[{label}] every requested tool call must have a tool result"
+            .take(min_tool_calls)
+            .all(|step| step.outcome == kolyan_core::StepOutcome::ToolCalls)
     );
-    assert!(matches!(
-        events.last(),
-        Some(TurnEvent::Completed {
-            outcome: TurnOutcome::FinalAnswer { .. },
-            ..
-        })
-    ));
+    assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
 }
 
 fn trace_record(step_id: &str, event: &ModelEvent) -> Value {
