@@ -1,0 +1,20 @@
+{"event":"started"}
+{"event":"step_started"}
+{"event":"step_completed","outcome":"tool_calls"}
+{"event":"tool_call_requested","name":"file.write","arguments":{"path":"batch-one-a.txt","content":"batch-one-a"}}
+{"event":"tool_execution_started","name":"file.write"}
+{"event":"tool_call_requested","name":"file.write","arguments":{"path":"batch-one-b.txt","content":"batch-one-b"}}
+{"event":"tool_execution_started","name":"file.write"}
+{"event":"tool_result","is_error":false,"content":"wrote 11 bytes"}
+{"event":"tool_result","is_error":false,"content":"wrote 11 bytes"}
+{"event":"step_started"}
+{"event":"step_completed","outcome":"tool_calls"}
+{"event":"tool_call_requested","name":"file.write","arguments":{"path":"batch-two-a.txt","content":"batch-two-a"}}
+{"event":"tool_execution_started","name":"file.write"}
+{"event":"tool_call_requested","name":"file.write","arguments":{"path":"batch-two-b.txt","content":"batch-two-b"}}
+{"event":"tool_execution_started","name":"file.write"}
+{"event":"tool_result","is_error":false,"content":"wrote 11 bytes"}
+{"event":"tool_result","is_error":false,"content":"wrote 11 bytes"}
+{"event":"step_started"}
+{"event":"step_completed","outcome":"final_answer"}
+{"event":"completed","outcome":"final_answer"}

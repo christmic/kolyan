@@ -399,6 +399,52 @@ async fn turn_parallel_context_contains_the_complete_tool_batch() {
     fs::remove_dir_all(&root).expect("parallel-context root should be removed");
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_multi_batch_file_writes_run_across_configured_models() {
+    let config = load_config();
+    let root = std::env::temp_dir().join(format!("kolyan-multi-batch-turn-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("multi-batch root should be created");
+    let policy = ToolDispatchPolicy {
+        mode: ToolDispatchMode::Parallel,
+        on_error: ToolErrorPolicy::FailTurn,
+    };
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("multi-batch root should be removed");
+}
+
 fn selected_model(model: &str) -> bool {
     std::env::var("KOLYAN_TURN_MODEL_FILTER")
         .ok()
@@ -732,6 +778,67 @@ async fn run_parallel_context<P>(
     );
     fs::remove_file(root.join("parallel-a.txt")).expect("parallel-a should be removed");
     fs::remove_file(root.join("parallel-b.txt")).expect("parallel-b should be removed");
+}
+
+async fn run_multi_batch_file_writes<P>(
+    provider: &P,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &std::path::Path,
+    policy: ToolDispatchPolicy,
+) where
+    P: kolyan_model::ModelProvider + Clone,
+{
+    let fixture = load_fixture("turn_multi_batch_file_writes");
+    let executor = TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root))
+        .with_tool_dispatch_policy(policy);
+    let execution = executor
+        .execute_with_events(
+            TurnRequest {
+                turn_id: format!("turn-multi-batch-{family}-{}", entry.model),
+                model_request: build_request(
+                    family,
+                    &entry.model,
+                    &fixture,
+                    format!("turn-multi-batch-{family}-{}", entry.model),
+                    entry.max_output_tokens,
+                ),
+                config: TurnConfig {
+                    max_steps: fixture
+                        .turn
+                        .as_ref()
+                        .and_then(|turn| turn.max_steps)
+                        .unwrap_or(5),
+                },
+            },
+            Default::default(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{}/multi_batch] {error}", entry.model));
+
+    let label = format!("{family}/{}/multi_batch", entry.model);
+    assert_turn_event_trace(&execution.events, "turn_multi_batch_file_writes", &label);
+    assert!(matches!(
+        execution.result.outcome,
+        TurnOutcome::FinalAnswer { .. }
+    ));
+    assert!(
+        execution.result.steps.len() >= 3,
+        "[{label}] expected two batches and final step"
+    );
+    for (path, content) in [
+        ("batch-one-a.txt", "batch-one-a"),
+        ("batch-one-b.txt", "batch-one-b"),
+        ("batch-two-a.txt", "batch-two-a"),
+        ("batch-two-b.txt", "batch-two-b"),
+    ] {
+        assert_eq!(
+            fs::read_to_string(root.join(path))
+                .unwrap_or_else(|error| panic!("[{label}] {path}: {error}")),
+            content
+        );
+        fs::remove_file(root.join(path)).expect("multi-batch file should be removed");
+    }
 }
 
 async fn run_openai_event_stream(

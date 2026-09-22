@@ -1,0 +1,44 @@
+{
+  "request": {
+    "request_id": "live-turn-multi-batch-file-writes-001",
+    "system": "这是一个多轮、多批次工具测试。第一轮必须在同一次回复中同时调用两个 file.write：写入 batch-one-a.txt 和 batch-one-b.txt。收到两个工具结果后，第二轮必须在同一次回复中同时调用两个 file.write：写入 batch-two-a.txt 和 batch-two-b.txt。收到第二批两个工具结果后，再用一句中文结束。不得调用 file.read。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "请严格执行两轮写入：第一轮同时写 batch-one-a.txt= batch-one-a、batch-one-b.txt= batch-one-b；第二轮同时写 batch-two-a.txt= batch-two-a、batch-two-b.txt= batch-two-b。每一轮的两个 file.write 必须在同一次模型回复中发出。"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "file.write",
+        "description": "写入工作区内的 UTF-8 文件。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "content": { "type": "string" }
+          },
+          "required": ["path", "content"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 80960
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "requires": []
+  },
+  "turn": {
+    "min_steps": 3,
+    "min_tool_calls": 4,
+    "max_steps": 5
+  }
+}

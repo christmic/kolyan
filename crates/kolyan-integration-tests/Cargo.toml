@@ -22,6 +22,10 @@ path = "tests/core/step.rs"
 name = "core_turn"
 path = "tests/core/turn.rs"
 
+[[test]]
+name = "turn_contract"
+path = "tests/core/turn_contract.rs"
+
 [lints]
 workspace = true
 
