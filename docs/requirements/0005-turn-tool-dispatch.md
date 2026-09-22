@@ -84,6 +84,31 @@ pub enum ToolErrorPolicy {
 
 V1.2 默认使用 \`Serial + FailTurn\`，保持 V0 的安全行为；\`Parallel\` 和 \`ContinueBatch\` 都必须通过显式策略启用。
 
+### 策略由谁决定
+
+V1.2 中，串行/并行不是由模型返回内容或工具声明自动推断，而是由 TurnExecutor 的调用方显式注入 ToolDispatchPolicy。工具声明只描述工具能力和参数契约，不承诺线程安全、幂等性或调用之间不存在依赖。
+
+因此当前决策链为：
+
+```text
+应用/上层治理配置
+        ↓
+TurnExecutor::with_tool_dispatch_policy
+        ↓
+Turn Tool Dispatch
+        ↓
+ToolExecutor
+```
+
+后续应在更高层增加策略决策器，综合以下信息后生成最终策略：
+
+- 应用或任务级约束：是否允许并行、最大并发数、是否允许副作用工具；
+- 工具元数据：是否幂等、是否有副作用、是否可并行、资源类别；
+- 当前 Turn 状态：取消、预算、审批和已有调用依赖；
+- 运行环境治理：沙箱、租户、权限、限流和成本限制。
+
+最终仍由 Turn Dispatch 执行已决策的策略；不要让 ToolExecutor 或单个工具自行改变批次调度模式。该决策器属于后续 V1.3 治理范围。
+
 ### 执行结果
 
 \`\`\`rust
