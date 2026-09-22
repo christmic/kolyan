@@ -59,7 +59,7 @@ impl Default for ToolDispatchPolicy {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ToolDispatchResult {
     pub call_id: String,
     pub result: Result<ToolResult, ToolError>,
@@ -85,6 +85,54 @@ impl ToolCallBatch {
 
     pub fn into_calls(self) -> Vec<ToolCall> {
         self.calls
+    }
+
+    fn call(&self, call_id: &str) -> Option<&ToolCall> {
+        self.calls.iter().find(|call| call.id == call_id)
+    }
+
+    fn validate_results(&self, results: &[ToolDispatchResult]) -> Result<(), ToolError> {
+        if results.len() != self.calls.len() {
+            return Err(ToolError::InvalidBatch {
+                message: format!(
+                    "expected {} tool results, got {}",
+                    self.calls.len(),
+                    results.len()
+                ),
+            });
+        }
+
+        let mut result_ids = HashSet::with_capacity(results.len());
+        for dispatch in results {
+            let Some(call) = self.call(&dispatch.call_id) else {
+                return Err(ToolError::InvalidBatch {
+                    message: format!("unknown tool result call id: {}", dispatch.call_id),
+                });
+            };
+            if !result_ids.insert(dispatch.call_id.clone()) {
+                return Err(ToolError::InvalidBatch {
+                    message: format!("duplicate tool result call id: {}", dispatch.call_id),
+                });
+            }
+            if let Ok(result) = &dispatch.result
+                && result.call_id != call.id
+            {
+                return Err(ToolError::InvalidBatch {
+                    message: format!(
+                        "tool result call id mismatch: expected {}, got {}",
+                        call.id, result.call_id
+                    ),
+                });
+            }
+        }
+
+        if self.calls.iter().any(|call| !result_ids.contains(&call.id)) {
+            return Err(ToolError::InvalidBatch {
+                message: "tool result batch is missing a call id".into(),
+            });
+        }
+
+        Ok(())
     }
 }
 
@@ -465,14 +513,9 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 }
                 StepOutcome::ToolCalls => {
                     state = state.transition(TurnState::WaitingTool)?;
-                    model_request.messages.push(Message {
-                        role: MessageRole::Assistant,
-                        content: step.response.content.clone(),
-                    });
                     let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
-                    let calls = batch.into_calls();
                     state = state.transition(TurnState::ExecutingTools)?;
-                    for call in &calls {
+                    for call in batch.calls() {
                         events.push(TurnEvent::ToolCallRequested {
                             turn_id: turn_id.clone(),
                             call: call.clone(),
@@ -485,37 +528,43 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     }
                     let results = match self.tool_dispatch.mode {
                         ToolDispatchMode::Serial => {
-                            let mut results = Vec::with_capacity(calls.len());
-                            for call in calls {
-                                results
-                                    .push((call.clone(), self.tool_executor.execute(call).await));
+                            let mut results = Vec::with_capacity(batch.len());
+                            for call in batch.calls() {
+                                results.push(ToolDispatchResult {
+                                    call_id: call.id.clone(),
+                                    result: self.tool_executor.execute(call.clone()).await,
+                                });
                             }
                             results
                         }
                         ToolDispatchMode::Parallel => {
-                            let futures = calls
+                            let futures = batch
+                                .calls()
                                 .iter()
                                 .cloned()
                                 .map(|call| self.tool_executor.execute(call));
                             join_all(futures)
                                 .await
                                 .into_iter()
-                                .zip(calls)
-                                .map(|(result, call)| (call, result))
+                                .zip(batch.calls())
+                                .map(|(result, call)| ToolDispatchResult {
+                                    call_id: call.id.clone(),
+                                    result,
+                                })
                                 .collect()
                         }
                     };
-                    for (call, result) in results {
-                        match result {
+                    batch.validate_results(&results)?;
+                    let mut tool_results = Vec::with_capacity(results.len());
+                    for dispatch in results {
+                        let call = batch.call(&dispatch.call_id).expect("validated call id");
+                        match dispatch.result {
                             Ok(result) => {
                                 events.push(TurnEvent::ToolResult {
                                     turn_id: turn_id.clone(),
                                     result: result.clone(),
                                 });
-                                model_request.messages.push(Message {
-                                    role: MessageRole::User,
-                                    content: vec![ContentBlock::ToolResult { result }],
-                                });
+                                tool_results.push(result);
                             }
                             Err(error) => {
                                 events.push(TurnEvent::ToolExecutionFailed {
@@ -531,7 +580,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                     }
                                     ToolErrorPolicy::ContinueBatch => {
                                         let result = ToolResult {
-                                            call_id: call.id,
+                                            call_id: call.id.clone(),
                                             content: error.to_string(),
                                             is_error: true,
                                         };
@@ -539,15 +588,17 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                             turn_id: turn_id.clone(),
                                             result: result.clone(),
                                         });
-                                        model_request.messages.push(Message {
-                                            role: MessageRole::User,
-                                            content: vec![ContentBlock::ToolResult { result }],
-                                        });
+                                        tool_results.push(result);
                                     }
                                 }
                             }
                         }
                     }
+                    append_tool_context(
+                        &mut model_request.messages,
+                        &step.response.content,
+                        tool_results,
+                    );
                     state = state.transition(TurnState::Running)?;
                     model_request.tool_choice = ToolChoice::Auto;
                 }
@@ -599,6 +650,21 @@ fn tool_calls(content: &[ContentBlock]) -> Vec<ToolCall> {
             _ => None,
         })
         .collect()
+}
+
+fn append_tool_context(
+    messages: &mut Vec<Message>,
+    assistant_content: &[ContentBlock],
+    results: Vec<ToolResult>,
+) {
+    messages.push(Message {
+        role: MessageRole::Assistant,
+        content: assistant_content.to_vec(),
+    });
+    messages.extend(results.into_iter().map(|result| Message {
+        role: MessageRole::User,
+        content: vec![ContentBlock::ToolResult { result }],
+    }));
 }
 
 #[cfg(test)]
@@ -1001,6 +1067,60 @@ mod tests {
         assert!(matches!(
             error,
             ToolError::InvalidBatch { message } if message == "duplicate tool call id: duplicate"
+        ));
+    }
+
+    #[test]
+    fn tool_call_batch_requires_matching_result_ids() {
+        let batch = ToolCallBatch::try_from(vec![ToolCall {
+            id: "call-1".into(),
+            name: "file.read".into(),
+            arguments: serde_json::json!({"path": "a.txt"}),
+        }])
+        .expect("batch should be valid");
+        let result = ToolDispatchResult {
+            call_id: "unknown".into(),
+            result: Ok(ToolResult {
+                call_id: "unknown".into(),
+                content: "content".into(),
+                is_error: false,
+            }),
+        };
+
+        let error = batch
+            .validate_results(&[result])
+            .expect_err("unknown result id must fail");
+
+        assert!(matches!(
+            error,
+            ToolError::InvalidBatch { message } if message == "unknown tool result call id: unknown"
+        ));
+    }
+
+    #[test]
+    fn tool_call_batch_rejects_result_payload_id_mismatch() {
+        let batch = ToolCallBatch::try_from(vec![ToolCall {
+            id: "call-1".into(),
+            name: "file.read".into(),
+            arguments: serde_json::json!({"path": "a.txt"}),
+        }])
+        .expect("batch should be valid");
+        let result = ToolDispatchResult {
+            call_id: "call-1".into(),
+            result: Ok(ToolResult {
+                call_id: "call-2".into(),
+                content: "content".into(),
+                is_error: false,
+            }),
+        };
+
+        let error = batch
+            .validate_results(&[result])
+            .expect_err("payload id mismatch must fail");
+
+        assert!(matches!(
+            error,
+            ToolError::InvalidBatch { message } if message == "tool result call id mismatch: expected call-1, got call-2"
         ));
     }
 

@@ -72,6 +72,35 @@ impl<P: ModelProvider> ModelProvider for RecordingProvider<P> {
     }
 }
 
+#[derive(Clone)]
+struct RequestRecordingProvider<P> {
+    inner: P,
+    requests: Arc<Mutex<Vec<ModelRequest>>>,
+}
+
+impl<P> RequestRecordingProvider<P> {
+    fn new(inner: P) -> (Self, Arc<Mutex<Vec<ModelRequest>>>) {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        (
+            Self {
+                inner,
+                requests: Arc::clone(&requests),
+            },
+            requests,
+        )
+    }
+}
+
+impl<P: ModelProvider> ModelProvider for RequestRecordingProvider<P> {
+    fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+        self.requests
+            .lock()
+            .expect("request recording lock must not be poisoned")
+            .push(request.clone());
+        self.inner.stream(request)
+    }
+}
+
 #[tokio::test]
 #[ignore = "real-network test: requires configured provider API keys"]
 async fn turn_one_step_completes_across_configured_models() {
@@ -321,6 +350,55 @@ async fn turn_parallel_file_writes_run_across_configured_models() {
     fs::remove_dir_all(&root).expect("parallel-turn root should be removed");
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_parallel_context_contains_the_complete_tool_batch() {
+    let config = load_config();
+    let root = std::env::temp_dir().join(format!(
+        "kolyan-parallel-context-turn-{}",
+        std::process::id()
+    ));
+    fs::create_dir_all(&root).expect("parallel-context root should be created");
+    let policy = ToolDispatchPolicy {
+        mode: ToolDispatchMode::Parallel,
+        on_error: ToolErrorPolicy::FailTurn,
+    };
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_parallel_context(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_parallel_context(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_parallel_context(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_parallel_context(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("parallel-context root should be removed");
+}
+
 fn selected_model(model: &str) -> bool {
     std::env::var("KOLYAN_TURN_MODEL_FILTER")
         .ok()
@@ -562,6 +640,84 @@ async fn run_parallel_file_writes<P>(
 
     let label = format!("{family}/{}/parallel_file_writes", entry.model);
     assert_turn_event_trace(&execution.events, "turn_parallel_file_writes", &label);
+    assert!(matches!(
+        execution.result.outcome,
+        TurnOutcome::FinalAnswer { .. }
+    ));
+    assert_eq!(
+        fs::read_to_string(root.join("parallel-a.txt")).expect("parallel-a should exist"),
+        "parallel-a"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("parallel-b.txt")).expect("parallel-b should exist"),
+        "parallel-b"
+    );
+    fs::remove_file(root.join("parallel-a.txt")).expect("parallel-a should be removed");
+    fs::remove_file(root.join("parallel-b.txt")).expect("parallel-b should be removed");
+}
+
+async fn run_parallel_context<P>(
+    provider: &P,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &std::path::Path,
+    policy: ToolDispatchPolicy,
+) where
+    P: kolyan_model::ModelProvider + Clone,
+{
+    let fixture = load_fixture("turn_parallel_file_writes");
+    let (provider, requests) = RequestRecordingProvider::new(provider.clone());
+    let execution = TurnExecutor::with_tools(provider, RestrictedFileTool::new(root))
+        .with_tool_dispatch_policy(policy)
+        .execute_with_events(
+            TurnRequest {
+                turn_id: format!("turn-parallel-context-{family}-{}", entry.model),
+                model_request: build_request(
+                    family,
+                    &entry.model,
+                    &fixture,
+                    format!("turn-parallel-context-{family}-{}", entry.model),
+                    entry.max_output_tokens,
+                ),
+                config: TurnConfig {
+                    max_steps: fixture
+                        .turn
+                        .as_ref()
+                        .and_then(|turn| turn.max_steps)
+                        .unwrap_or(3),
+                },
+            },
+            Default::default(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{}/parallel_context] {error}", entry.model));
+
+    let request_snapshots = requests
+        .lock()
+        .expect("request recording lock must not be poisoned")
+        .clone();
+    assert!(
+        request_snapshots.iter().any(|request| {
+            request
+                .messages
+                .iter()
+                .filter(|message| {
+                    message
+                        .content
+                        .iter()
+                        .any(|block| matches!(block, ContentBlock::ToolResult { .. }))
+                })
+                .count()
+                == 2
+        }),
+        "[{family}/{}/parallel_context] second model request must contain both tool results",
+        entry.model
+    );
+    assert_turn_event_trace(
+        &execution.events,
+        "turn_parallel_file_writes",
+        &format!("{family}/{}/parallel_context", entry.model),
+    );
     assert!(matches!(
         execution.result.outcome,
         TurnOutcome::FinalAnswer { .. }
