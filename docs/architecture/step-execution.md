@@ -7,9 +7,11 @@ Step 是一次模型调用，不是对话会话。它不拥有消息历史，也
 ```text
 StepRequest
     ↓
-StepExecutor
+StepExecutor::start
     ↓ ModelProvider::stream
-ModelEventStream
+StepExecution
+    ├── StepControl
+    └── ModelEventStream
     ↓ map to StepEvent
 StepEventStream
     ├── execute_stream → StepEventStream
@@ -25,7 +27,7 @@ Pending → Running → Completed
                     ↘ Failed
 ```
 
-当前实现只在内存中执行，不对外暴露可变状态机。`StepExecutor::execute_stream` 对外暴露带有 Step 语义的事件流；`StepExecutor::execute` 消费同一条流并聚合为 `StepResult`，不维护第二套调用路径。成功返回代表 `Completed`，错误返回代表 `Failed`。未来需要取消、重试或持久化时，再把生命周期事件接入 Runtime、Trace 和 Storage。
+当前实现只在内存中执行，不对外暴露可变状态机。`StepExecutor::start` 返回数据面 `StepEventStream` 和控制面 `StepControl`；`execute_stream` 是只返回流的兼容便捷接口；`execute` 消费同一条流并聚合为 `StepResult`，不维护第二套调用路径。成功返回代表 `Completed`，主动停止和超时分别代表 `Cancelled`、`TimedOut`，Provider/协议问题返回 `StepError`。
 
 ## 职责
 
@@ -35,6 +37,9 @@ Pending → Running → Completed
 - 调用一次 Provider；
 - 将模型事件映射为带 `step_id` 的 Step 事件；
 - 按需消费并聚合 Step 事件；
+- 将 Provider 的结束原因映射为统一的 `StepOutcome`；
+- 在事件边界检查取消和 deadline；
+- 校验事件顺序和唯一终止状态；
 - 返回统一事件流、结果或错误。
 
 明确不负责：
@@ -43,3 +48,6 @@ Pending → Running → Completed
 - 修改消息历史；
 - 创建下一个 Step；
 - Session、Turn、Ledger、权限和调度。
+- Tool 执行、重试、消息历史和轨迹持久化。
+
+更完整的流、控制和终止状态契约见 [Step 流与执行控制](../requirements/0003-step-stream-control.md)。
