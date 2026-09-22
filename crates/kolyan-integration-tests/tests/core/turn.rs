@@ -13,7 +13,10 @@ use common::{
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
 use futures_util::StreamExt;
-use kolyan_core::{TurnConfig, TurnEvent, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
+use kolyan_core::{
+    ToolDispatchMode, ToolDispatchPolicy, ToolErrorPolicy, TurnConfig, TurnEvent, TurnExecutor,
+    TurnOutcome, TurnRequest, TurnResult,
+};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
     StopReason,
@@ -234,6 +237,52 @@ async fn turn_file_read_write_runs_across_configured_models() {
     fs::remove_dir_all(&root).expect("file-turn root should be removed");
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_parallel_file_writes_run_across_configured_models() {
+    let config = load_config();
+    let root = std::env::temp_dir().join(format!("kolyan-parallel-turn-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("parallel-turn root should be created");
+    let policy = ToolDispatchPolicy {
+        mode: ToolDispatchMode::Parallel,
+        on_error: ToolErrorPolicy::FailTurn,
+    };
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_parallel_file_writes(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_parallel_file_writes(&provider, entry, "minimax", &root, policy).await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_parallel_file_writes(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_parallel_file_writes(&provider, entry, "qwen", &root, policy).await;
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("parallel-turn root should be removed");
+}
+
 fn selected_model(model: &str) -> bool {
     std::env::var("KOLYAN_TURN_MODEL_FILTER")
         .ok()
@@ -389,6 +438,60 @@ async fn run_file_read_write<P, T>(
         "[{label}] expected write, read, and final Steps"
     );
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
+}
+
+async fn run_parallel_file_writes<P>(
+    provider: &P,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &std::path::Path,
+    policy: ToolDispatchPolicy,
+) where
+    P: kolyan_model::ModelProvider + Clone,
+{
+    let fixture = load_fixture("turn_parallel_file_writes");
+    let executor = TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root))
+        .with_tool_dispatch_policy(policy);
+    let execution = executor
+        .execute_with_events(
+            TurnRequest {
+                turn_id: format!("turn-parallel-file-writes-{family}-{}", entry.model),
+                model_request: build_request(
+                    family,
+                    &entry.model,
+                    &fixture,
+                    format!("turn-parallel-file-writes-{family}-{}", entry.model),
+                    entry.max_output_tokens,
+                ),
+                config: TurnConfig {
+                    max_steps: fixture
+                        .turn
+                        .as_ref()
+                        .and_then(|turn| turn.max_steps)
+                        .unwrap_or(3),
+                },
+            },
+            Default::default(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{}/parallel_file_writes] {error}", entry.model));
+
+    let label = format!("{family}/{}/parallel_file_writes", entry.model);
+    assert_turn_event_trace(&execution.events, "turn_parallel_file_writes", &label);
+    assert!(matches!(
+        execution.result.outcome,
+        TurnOutcome::FinalAnswer { .. }
+    ));
+    assert_eq!(
+        fs::read_to_string(root.join("parallel-a.txt")).expect("parallel-a should exist"),
+        "parallel-a"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("parallel-b.txt")).expect("parallel-b should exist"),
+        "parallel-b"
+    );
+    fs::remove_file(root.join("parallel-a.txt")).expect("parallel-a should be removed");
+    fs::remove_file(root.join("parallel-b.txt")).expect("parallel-b should be removed");
 }
 
 async fn run_openai_event_stream(
@@ -678,7 +781,7 @@ fn turn_event_record(event: &TurnEvent) -> Value {
             json!({"event": "step_completed", "outcome": step_outcome_name(step.outcome)})
         }
         TurnEvent::ToolCallRequested { call, .. } => {
-            json!({"event": "tool_call_requested", "name": call.name})
+            json!({"event": "tool_call_requested", "name": call.name, "arguments": call.arguments})
         }
         TurnEvent::ToolExecutionStarted { name, .. } => {
             json!({"event": "tool_execution_started", "name": name})

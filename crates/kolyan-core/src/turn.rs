@@ -1,6 +1,6 @@
 use crate::{StepError, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult};
 use futures_core::Stream;
-use futures_util::stream;
+use futures_util::{future::join_all, stream};
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
     ToolResult,
@@ -56,6 +56,12 @@ impl Default for ToolDispatchPolicy {
             on_error: ToolErrorPolicy::FailTurn,
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ToolDispatchResult {
+    pub call_id: String,
+    pub result: Result<ToolResult, ToolError>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -146,8 +152,6 @@ pub enum TurnError {
     Step(#[from] StepError),
     #[error("turn tool execution failed: {0}")]
     Tool(#[from] ToolError),
-    #[error("tool dispatch mode is not supported: {mode:?}")]
-    UnsupportedToolDispatch { mode: ToolDispatchMode },
     #[error("turn was cancelled")]
     Cancelled,
     #[error("turn timed out")]
@@ -336,16 +340,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::ToolCalls => {
-                    if self.tool_dispatch.mode == ToolDispatchMode::Parallel {
-                        return Err(TurnError::UnsupportedToolDispatch {
-                            mode: ToolDispatchMode::Parallel,
-                        });
-                    }
                     model_request.messages.push(Message {
                         role: MessageRole::Assistant,
                         content: step.response.content.clone(),
                     });
-                    for call in tool_calls(&step.response.content) {
+                    let calls = tool_calls(&step.response.content);
+                    for call in &calls {
                         events.push(TurnEvent::ToolCallRequested {
                             turn_id: turn_id.clone(),
                             call: call.clone(),
@@ -355,7 +355,31 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             call_id: call.id.clone(),
                             name: call.name.clone(),
                         });
-                        match self.tool_executor.execute(call.clone()).await {
+                    }
+                    let results = match self.tool_dispatch.mode {
+                        ToolDispatchMode::Serial => {
+                            let mut results = Vec::with_capacity(calls.len());
+                            for call in calls {
+                                results
+                                    .push((call.clone(), self.tool_executor.execute(call).await));
+                            }
+                            results
+                        }
+                        ToolDispatchMode::Parallel => {
+                            let futures = calls
+                                .iter()
+                                .cloned()
+                                .map(|call| self.tool_executor.execute(call));
+                            join_all(futures)
+                                .await
+                                .into_iter()
+                                .zip(calls)
+                                .map(|(result, call)| (call, result))
+                                .collect()
+                        }
+                    };
+                    for (call, result) in results {
+                        match result {
                             Ok(result) => {
                                 events.push(TurnEvent::ToolResult {
                                     turn_id: turn_id.clone(),
@@ -778,37 +802,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn parallel_dispatch_is_rejected_until_parallel_execution_is_enabled() {
+    async fn parallel_dispatch_preserves_tool_result_order() {
         let call = ToolCall {
             id: "call-parallel".into(),
             name: "shell.query".into(),
             arguments: serde_json::json!({"command": "count_lines"}),
         };
-        let executor = TurnExecutor::with_tools(
-            MockProvider {
-                stop_reason: StopReason::ToolUse,
-                content: vec![ContentBlock::ToolCall { call }],
+        let provider = ScriptedProvider {
+            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tool_call: call,
+        };
+        let executor = TurnExecutor::with_tools(provider, MockTool).with_tool_dispatch_policy(
+            ToolDispatchPolicy {
+                mode: ToolDispatchMode::Parallel,
+                on_error: ToolErrorPolicy::FailTurn,
             },
-            MockTool,
-        )
-        .with_tool_dispatch_policy(ToolDispatchPolicy {
-            mode: ToolDispatchMode::Parallel,
-            on_error: ToolErrorPolicy::FailTurn,
-        });
-        let error = executor
-            .execute(TurnRequest {
-                turn_id: "turn-parallel".into(),
-                model_request: request(),
-                config: TurnConfig { max_steps: 1 },
-            })
+        );
+        let execution = executor
+            .execute_with_events(
+                TurnRequest {
+                    turn_id: "turn-parallel".into(),
+                    model_request: request(),
+                    config: TurnConfig { max_steps: 2 },
+                },
+                TurnControl::default(),
+            )
             .await
-            .expect_err("parallel mode must not silently run serially");
+            .expect("parallel mode should execute tool calls");
 
         assert!(matches!(
-            error,
-            TurnError::UnsupportedToolDispatch {
-                mode: ToolDispatchMode::Parallel
-            }
+            execution.result.outcome,
+            TurnOutcome::FinalAnswer { .. }
         ));
+        assert!(execution.events.iter().any(|event| matches!(
+            event,
+            TurnEvent::ToolResult { result, .. } if result.call_id == "call-parallel"
+        )));
     }
 }

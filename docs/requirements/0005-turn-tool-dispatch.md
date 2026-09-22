@@ -63,7 +63,7 @@ pub enum ToolDispatchMode {
 - \`Serial\`：按照模型返回顺序逐个执行。默认模式，结果顺序稳定，适合有副作用或存在依赖的工具。
 - \`Parallel\`：同一个 Step 返回的独立 ToolCall 并行执行；结果仍按原始 ToolCall 顺序回填，避免模型上下文出现非确定顺序。
 
-V1.2 默认只开放 \`Serial\`。\`Parallel\` 在策略和测试完成后开放，不通过隐式行为启用。
+V1.2 默认使用 \`Serial\`；调用方显式选择 \`Parallel\` 时启用并行执行，不通过隐式行为改变默认语义。
 
 ### 工具调用策略
 
@@ -82,7 +82,7 @@ pub enum ToolErrorPolicy {
 - \`FailTurn\`：任意工具失败，当前 Turn 立即失败。
 - \`ContinueBatch\`：当前批次继续执行其他 ToolCall，并为失败调用生成 \`ToolResult { is_error: true }\`，然后由模型决定下一步。
 
-V1.2 默认使用 \`Serial + FailTurn\`，保持 V0 的安全行为；\`ContinueBatch\` 需要独立测试后启用。
+V1.2 默认使用 \`Serial + FailTurn\`，保持 V0 的安全行为；\`Parallel\` 和 \`ContinueBatch\` 都必须通过显式策略启用。
 
 ### 执行结果
 

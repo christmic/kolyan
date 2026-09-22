@@ -1,0 +1,44 @@
+{
+  "request": {
+    "request_id": "live-turn-parallel-file-writes-001",
+    "system": "这是一个并行工具测试。请在同一次回复中同时调用两个互相独立的 file.write：写入 parallel-a.txt 和 parallel-b.txt。两个调用都完成后再用一句中文结束。不得调用 file.read。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "请同时写入两个文件：parallel-a.txt 的内容必须是 parallel-a，parallel-b.txt 的内容必须是 parallel-b。两个 file.write 必须在同一次模型回复中发出。"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "file.write",
+        "description": "写入工作区内的 UTF-8 文件。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "content": { "type": "string" }
+          },
+          "required": ["path", "content"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 80960
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "requires": []
+  },
+  "turn": {
+    "min_steps": 2,
+    "min_tool_calls": 2,
+    "max_steps": 3
+  }
+}

@@ -468,6 +468,7 @@ pub fn load_fixture(name: &str) -> Fixture {
         "prompt_cache" => include_str!("../fixtures/prompt_cache.json"),
         "turn_ten_step" => include_str!("../fixtures/turn_ten_step.json"),
         "turn_file_read_write" => include_str!("../fixtures/turn_file_read_write.json"),
+        "turn_parallel_file_writes" => include_str!("../fixtures/turn_parallel_file_writes.json"),
         other => panic!("unknown fixture name: {other}"),
     };
     serde_json::from_str(raw).expect("fixture JSON must deserialize into Fixture")
