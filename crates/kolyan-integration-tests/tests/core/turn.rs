@@ -414,7 +414,9 @@ async fn turn_multi_batch_file_writes_run_across_configured_models() {
         let key = require_api_key(&config.minimax_openai);
         let provider = build_openai_provider(&config.minimax_openai, &key);
         for entry in &config.minimax_openai.model_matrix {
-            run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+            if selected_model(&entry.model) {
+                run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+            }
         }
     }
 
@@ -422,7 +424,9 @@ async fn turn_multi_batch_file_writes_run_across_configured_models() {
         let key = require_api_key_anthropic(&config.minimax_anthropic);
         let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
         for entry in &config.minimax_anthropic.model_matrix {
-            run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+            if selected_model(&entry.model) {
+                run_multi_batch_file_writes(&provider, entry, "minimax", &root, policy).await;
+            }
         }
     }
 
@@ -430,7 +434,9 @@ async fn turn_multi_batch_file_writes_run_across_configured_models() {
         let key = require_api_key(&config.qwen_openai);
         let provider = build_openai_provider(&config.qwen_openai, &key);
         for entry in &config.qwen_openai.model_matrix {
-            run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+            if selected_model(&entry.model) {
+                run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+            }
         }
     }
 
@@ -438,7 +444,9 @@ async fn turn_multi_batch_file_writes_run_across_configured_models() {
         let key = require_api_key_anthropic(&config.qwen_anthropic);
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
-            run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+            if selected_model(&entry.model) {
+                run_multi_batch_file_writes(&provider, entry, "qwen", &root, policy).await;
+            }
         }
     }
 

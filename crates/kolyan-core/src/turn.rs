@@ -1,5 +1,6 @@
 use crate::{StepError, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult};
 use futures_core::Stream;
+use futures_util::task::AtomicWaker;
 use futures_util::{future::join_all, stream};
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
@@ -12,6 +13,8 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use std::task::{Context, Poll};
+use std::time::Duration;
 use thiserror::Error;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -314,6 +317,8 @@ impl TurnError {
             Self::Cancelled => TurnEndReason::Cancelled,
             Self::TimedOut => TurnEndReason::TimedOut,
             Self::MaxSteps => TurnEndReason::MaxSteps,
+            Self::Tool(ToolError::Cancelled) => TurnEndReason::Cancelled,
+            Self::Tool(ToolError::TimedOut) => TurnEndReason::TimedOut,
             Self::InvalidRequest { .. }
             | Self::Step(_)
             | Self::Tool(_)
@@ -330,6 +335,10 @@ pub enum ToolError {
     Unavailable { name: String },
     #[error("tool execution failed: {message}")]
     Failed { message: String },
+    #[error("tool execution was cancelled")]
+    Cancelled,
+    #[error("tool execution timed out")]
+    TimedOut,
 }
 
 pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + 'a>>;
@@ -349,16 +358,49 @@ impl ToolExecutor for NoopToolExecutor {
 
 #[derive(Clone, Default)]
 pub struct TurnControl {
-    cancelled: Arc<AtomicBool>,
+    state: Arc<TurnControlState>,
+}
+
+#[derive(Default)]
+struct TurnControlState {
+    cancelled: AtomicBool,
+    waker: AtomicWaker,
 }
 
 impl TurnControl {
     pub fn cancel(&self) {
-        self.cancelled.store(true, Ordering::Release);
+        self.state.cancelled.store(true, Ordering::Release);
+        self.state.waker.wake();
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.cancelled.load(Ordering::Acquire)
+        self.state.cancelled.load(Ordering::Acquire)
+    }
+
+    fn wait_cancelled(&self) -> CancellationFuture {
+        CancellationFuture {
+            state: Arc::clone(&self.state),
+        }
+    }
+}
+
+struct CancellationFuture {
+    state: Arc<TurnControlState>,
+}
+
+impl Future for CancellationFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.state.cancelled.load(Ordering::Acquire) {
+            return Poll::Ready(());
+        }
+        self.state.waker.register(cx.waker());
+        if self.state.cancelled.load(Ordering::Acquire) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
     }
 }
 
@@ -366,6 +408,7 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     step_executor: StepExecutor<P>,
     tool_executor: T,
     tool_dispatch: ToolDispatchPolicy,
+    tool_timeout: Option<Duration>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -374,6 +417,7 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             step_executor: StepExecutor::new(provider),
             tool_executor: NoopToolExecutor,
             tool_dispatch: ToolDispatchPolicy::default(),
+            tool_timeout: None,
         }
     }
 }
@@ -384,6 +428,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             step_executor: StepExecutor::new(provider),
             tool_executor,
             tool_dispatch: ToolDispatchPolicy::default(),
+            tool_timeout: None,
         }
     }
 
@@ -392,6 +437,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             step_executor,
             tool_executor,
             tool_dispatch: ToolDispatchPolicy::default(),
+            tool_timeout: None,
         }
     }
 
@@ -399,9 +445,35 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
         self.tool_dispatch = policy;
         self
     }
+
+    pub fn with_tool_timeout(mut self, timeout: Duration) -> Self {
+        self.tool_timeout = Some(timeout);
+        self
+    }
 }
 
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
+    async fn execute_tool(
+        &self,
+        call: ToolCall,
+        control: &TurnControl,
+    ) -> Result<ToolResult, ToolError> {
+        let execute = self.tool_executor.execute(call);
+        let execute_with_cancel = async {
+            tokio::select! {
+                result = execute => result,
+                _ = control.wait_cancelled() => Err(ToolError::Cancelled),
+            }
+        };
+        if let Some(timeout) = self.tool_timeout {
+            tokio::time::timeout(timeout, execute_with_cancel)
+                .await
+                .unwrap_or(Err(ToolError::TimedOut))
+        } else {
+            execute_with_cancel.await
+        }
+    }
+
     pub async fn execute(&self, request: TurnRequest) -> Result<TurnResult, TurnError> {
         Ok(self
             .execute_with_events(request, TurnControl::default())
@@ -532,7 +604,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             for call in batch.calls() {
                                 results.push(ToolDispatchResult {
                                     call_id: call.id.clone(),
-                                    result: self.tool_executor.execute(call.clone()).await,
+                                    result: self.execute_tool(call.clone(), &control).await,
                                 });
                             }
                             results
@@ -542,7 +614,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                 .calls()
                                 .iter()
                                 .cloned()
-                                .map(|call| self.tool_executor.execute(call));
+                                .map(|call| self.execute_tool(call, &control));
                             join_all(futures)
                                 .await
                                 .into_iter()
@@ -1165,6 +1237,14 @@ mod tests {
             })
             .end_reason(),
             TurnEndReason::Failed
+        );
+        assert_eq!(
+            TurnError::Tool(ToolError::Cancelled).end_reason(),
+            TurnEndReason::Cancelled
+        );
+        assert_eq!(
+            TurnError::Tool(ToolError::TimedOut).end_reason(),
+            TurnEndReason::TimedOut
         );
     }
 }

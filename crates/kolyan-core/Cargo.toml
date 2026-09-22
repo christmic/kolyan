@@ -12,6 +12,7 @@ futures-core.workspace = true
 futures-util.workspace = true
 kolyan-model = { path = "../kolyan-model" }
 thiserror.workspace = true
+tokio.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

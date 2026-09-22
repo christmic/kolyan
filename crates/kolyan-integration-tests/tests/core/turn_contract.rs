@@ -15,6 +15,7 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicUsize, Ordering},
 };
+use std::time::Duration;
 
 #[derive(Clone)]
 struct ScriptedProvider {
@@ -82,6 +83,14 @@ impl ModelProvider for FailingProvider {
 #[derive(Clone)]
 struct SelectiveTool {
     fail_call_id: Option<String>,
+}
+
+struct HangingTool;
+
+impl ToolExecutor for HangingTool {
+    fn execute(&self, _call: ToolCall) -> ToolFuture<'_> {
+        Box::pin(async { std::future::pending::<Result<ToolResult, ToolError>>().await })
+    }
 }
 
 impl ToolExecutor for SelectiveTool {
@@ -261,6 +270,53 @@ async fn provider_failure_does_not_start_a_tool_or_second_step() {
         .expect_err("provider failure must propagate");
 
     assert!(matches!(error, TurnError::Step(_)));
+}
+
+#[tokio::test]
+async fn cancellation_interrupts_a_running_tool() {
+    let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
+    let executor = TurnExecutor::with_tools(provider, HangingTool);
+    let control = TurnControl::default();
+    let task_control = control.clone();
+    let task = tokio::spawn(async move {
+        executor
+            .execute_with_control(
+                TurnRequest {
+                    turn_id: "turn-tool-cancelled".into(),
+                    model_request: request(),
+                    config: TurnConfig { max_steps: 1 },
+                },
+                task_control,
+            )
+            .await
+    });
+
+    tokio::time::sleep(Duration::from_millis(10)).await;
+    control.cancel();
+    let error = task
+        .await
+        .expect("cancelled tool task must join")
+        .expect_err("cancelled tool must fail the Turn");
+
+    assert!(matches!(error, TurnError::Tool(ToolError::Cancelled)));
+}
+
+#[tokio::test]
+async fn tool_timeout_interrupts_a_running_tool() {
+    let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
+    let executor = TurnExecutor::with_tools(provider, HangingTool)
+        .with_tool_timeout(Duration::from_millis(10));
+
+    let error = executor
+        .execute(TurnRequest {
+            turn_id: "turn-tool-timeout".into(),
+            model_request: request(),
+            config: TurnConfig { max_steps: 1 },
+        })
+        .await
+        .expect_err("timed out tool must fail the Turn");
+
+    assert!(matches!(error, TurnError::Tool(ToolError::TimedOut)));
 }
 
 fn request() -> ModelRequest {

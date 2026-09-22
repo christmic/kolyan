@@ -1,14 +1,14 @@
 {
   "request": {
     "request_id": "live-turn-multi-batch-file-writes-001",
-    "system": "这是一个多轮、多批次工具测试。第一轮必须在同一次回复中同时调用两个 file.write：写入 batch-one-a.txt 和 batch-one-b.txt。收到两个工具结果后，第二轮必须在同一次回复中同时调用两个 file.write：写入 batch-two-a.txt 和 batch-two-b.txt。收到第二批两个工具结果后，再用一句中文结束。不得调用 file.read。",
+    "system": "这是一个严格的两阶段工具协议测试，不是普通的一次性写文件任务。你必须完整执行两个阶段，任何阶段都不能提前结束。阶段一：在同一次回复中同时调用两个 file.write，写入 batch-one-a.txt 和 batch-one-b.txt。收到阶段一的两个 ToolResult 后，禁止输出最终文本，必须立即进入阶段二。阶段二：在同一次回复中同时调用两个 file.write，写入 batch-two-a.txt 和 batch-two-b.txt。只有收到阶段二的两个 ToolResult 后，才允许用一句中文结束。不得调用 file.read；如果只执行一个阶段，测试即失败。",
     "messages": [
       {
         "role": "user",
         "content": [
           {
             "type": "text",
-            "text": "请严格执行两轮写入：第一轮同时写 batch-one-a.txt= batch-one-a、batch-one-b.txt= batch-one-b；第二轮同时写 batch-two-a.txt= batch-two-a、batch-two-b.txt= batch-two-b。每一轮的两个 file.write 必须在同一次模型回复中发出。"
+            "text": "请执行完整的两阶段流程：第一阶段同时调用 file.write(batch-one-a.txt, batch-one-a) 和 file.write(batch-one-b.txt, batch-one-b)；收到这两个结果后，第二阶段同时调用 file.write(batch-two-a.txt, batch-two-a) 和 file.write(batch-two-b.txt, batch-two-b)。在第二阶段完成前绝对不能结束。每一阶段的两个调用必须在同一次模型回复中发出。"
           }
         ]
       }
