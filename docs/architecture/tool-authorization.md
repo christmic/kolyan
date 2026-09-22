@@ -34,6 +34,14 @@ trait PolicyResolver {
 }
 ```
 
+批次决策使用同一个 `PolicyEngine`，但额外接收 `PolicyContext`：
+
+```rust
+let plan = engine.resolve_batch(&context, &tool_calls);
+```
+
+`PolicyContext` 目前包含 Agent/User/Task/Turn 标识、workspace、剩余 ToolCall 预算和此前副作用；其中预算已参与 v1.1 的 fail-closed 判断。
+
 决策结果：
 
 - `Allow`：可以生成 `ExecutionGrant`。
@@ -65,11 +73,25 @@ PolicyEngine::decide
               ToolExecutor
 ```
 
+批次流程：
+
+```text
+ToolCallBatch
+      ↓
+逐调用 PolicyDecision
+      ↓
+提取 ResourceClaim / Effect
+      ↓
+资源冲突图
+      ├─ 无冲突 → 同一 Parallel Stage
+      ├─ 读写冲突 → 有序 Serial Stages
+      └─ Deny/Approval → 不进入执行 Stage
+```
+
 ## 6. 后续扩展顺序
 
-1. 将 `PolicyInput` 增加 agent、user、task、turn、预算和环境属性。
+1. 将 `BatchExecutionPlan` 接入 `kolyan-core::ToolCallBatch` 和 TurnExecutor。
 2. 增加审批记录与单调用/本 Turn/持久会话三种审批范围。
-3. 在 ToolCallBatch 上做资源冲突图，决定并行、串行、拆批或拒绝。
-4. 将约束真正接入超时、输出大小、网络和沙箱执行器。
-5. 为 Manifest 增加来源、信任级别和签名校验。
-6. 将 Decision、Grant、Approval 和实际结果写入统一审计事件。
+3. 将约束真正接入超时、输出大小、网络和沙箱执行器。
+4. 为 Manifest 增加来源、信任级别和签名校验。
+5. 将 Decision、Grant、Approval 和实际结果写入统一审计事件。

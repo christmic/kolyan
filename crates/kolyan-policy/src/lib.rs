@@ -103,6 +103,24 @@ pub struct InvocationClaim {
     pub idempotency: Idempotency,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EffectRecord {
+    pub tool_name: String,
+    pub effect: Effect,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PolicyContext {
+    pub agent_id: Option<String>,
+    pub user_id: Option<String>,
+    pub task_id: Option<String>,
+    pub turn_id: Option<String>,
+    pub workspace: Option<String>,
+    pub remaining_tool_calls: Option<usize>,
+    pub previous_effects: Vec<EffectRecord>,
+}
+
 impl InvocationClaim {
     pub fn from_call(call: &ToolCall) -> Self {
         let path = call
@@ -206,6 +224,29 @@ pub struct ExecutionGrant {
     pub constraints: ExecutionConstraints,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchCallDecision {
+    pub call_id: String,
+    pub claim: InvocationClaim,
+    pub decision: PolicyDecision,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BatchExecutionPlan {
+    pub decisions: Vec<BatchCallDecision>,
+    pub stages: Vec<Vec<String>>,
+}
+
+impl BatchExecutionPlan {
+    pub fn is_empty(&self) -> bool {
+        self.stages.is_empty()
+    }
+
+    pub fn stage_count(&self) -> usize {
+        self.stages.len()
+    }
+}
+
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum PolicyError {
     #[error("policy denied: {reason}")]
@@ -237,6 +278,13 @@ impl PolicyEngine {
     }
 
     pub fn decide(&self, call: &ToolCall) -> PolicyDecision {
+        self.decide_with_context(call, &PolicyContext::default())
+    }
+
+    pub fn decide_with_context(&self, call: &ToolCall, context: &PolicyContext) -> PolicyDecision {
+        if context.remaining_tool_calls == Some(0) {
+            return PolicyDecision::denied("tool-call budget is exhausted");
+        }
         if self.denied_tools.contains(&call.name) {
             return PolicyDecision::denied("tool is denied by runtime policy");
         }
@@ -249,9 +297,14 @@ impl PolicyEngine {
         {
             return PolicyDecision::denied("invocation exceeds the tool capability ceiling");
         }
+        let workspace = context
+            .workspace
+            .as_deref()
+            .map(PathScope::new)
+            .or_else(|| self.workspace.clone());
         if let Some(path) = claim.resource.path.as_deref()
             && (!manifest.allows_path(path)
-                || self.workspace.as_ref().is_some_and(|s| !s.contains(path)))
+                || workspace.as_ref().is_some_and(|s| !s.contains(path)))
         {
             return PolicyDecision::denied("resource is outside the allowed path scope");
         }
@@ -271,6 +324,66 @@ impl PolicyEngine {
                 timeout_ms: Some(30_000),
             },
         }
+    }
+
+    pub fn resolve_batch(&self, context: &PolicyContext, calls: &[ToolCall]) -> BatchExecutionPlan {
+        let decisions = calls
+            .iter()
+            .map(|call| BatchCallDecision {
+                call_id: call.id.clone(),
+                claim: InvocationClaim::from_call(call),
+                decision: self.decide_with_context(call, context),
+            })
+            .collect::<Vec<_>>();
+        let mut stages: Vec<Vec<String>> = Vec::new();
+        for (index, current) in decisions.iter().enumerate() {
+            if !matches!(
+                current.decision.kind,
+                PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
+            ) {
+                continue;
+            }
+            let mut stage_index = 0;
+            for previous in &decisions[..index] {
+                if matches!(
+                    previous.decision.kind,
+                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
+                ) && claims_conflict(&previous.claim, &current.claim)
+                    && let Some(previous_stage) = stages
+                        .iter()
+                        .position(|stage| stage.contains(&previous.call_id))
+                {
+                    stage_index = stage_index.max(previous_stage + 1);
+                }
+            }
+            while stages.len() <= stage_index {
+                stages.push(Vec::new());
+            }
+            stages[stage_index].push(current.call_id.clone());
+        }
+        BatchExecutionPlan { decisions, stages }
+    }
+}
+
+fn claims_conflict(left: &InvocationClaim, right: &InvocationClaim) -> bool {
+    let writes = |claim: &InvocationClaim| {
+        claim.effects.iter().any(|effect| {
+            matches!(
+                effect,
+                Effect::Create | Effect::Update | Effect::Delete | Effect::Execute
+            )
+        })
+    };
+    if !writes(left) && !writes(right) {
+        return false;
+    }
+    match (&left.resource.path, &right.resource.path) {
+        (Some(left), Some(right)) => {
+            left == right
+                || left.starts_with(&format!("{right}/"))
+                || right.starts_with(&format!("{left}/"))
+        }
+        _ => true,
     }
 }
 
@@ -345,5 +458,55 @@ mod tests {
         let decision = engine.decide(&call);
         assert_eq!(decision.kind, PolicyDecisionKind::RequireApproval);
         assert!(decision.into_grant(&call).is_err());
+    }
+
+    #[test]
+    fn batch_policy_parallelizes_independent_writes() {
+        let mut engine = PolicyEngine::default();
+        engine.register(write_manifest());
+        let calls = vec![
+            call("/workspace/src/a.rs"),
+            ToolCall {
+                id: "call-2".into(),
+                ..call("/workspace/src/b.rs")
+            },
+        ];
+        let plan = engine.resolve_batch(&PolicyContext::default(), &calls);
+        assert_eq!(plan.stage_count(), 1);
+        assert_eq!(plan.stages[0], vec!["call-1", "call-2"]);
+    }
+
+    #[test]
+    fn batch_policy_serializes_conflicting_read_after_write() {
+        let mut engine = PolicyEngine::default();
+        engine.register(write_manifest());
+        let mut read = ToolManifest::new("file.read");
+        read.capabilities.insert(Capability::FilesystemRead);
+        read.effects.insert(Effect::Read);
+        engine.register(read);
+        let calls = vec![
+            call("/workspace/src/a.rs"),
+            ToolCall {
+                id: "call-2".into(),
+                name: "file.read".into(),
+                arguments: serde_json::json!({"path":"/workspace/src/a.rs"}),
+            },
+        ];
+        let plan = engine.resolve_batch(&PolicyContext::default(), &calls);
+        assert_eq!(plan.stage_count(), 2);
+        assert_eq!(plan.stages[1], vec!["call-2"]);
+    }
+
+    #[test]
+    fn context_budget_denies_the_batch_without_widening_policy() {
+        let mut engine = PolicyEngine::default();
+        engine.register(write_manifest());
+        let context = PolicyContext {
+            remaining_tool_calls: Some(0),
+            ..PolicyContext::default()
+        };
+        let plan = engine.resolve_batch(&context, &[call("/workspace/src/a.rs")]);
+        assert!(plan.is_empty());
+        assert_eq!(plan.decisions[0].decision.kind, PolicyDecisionKind::Deny);
     }
 }
