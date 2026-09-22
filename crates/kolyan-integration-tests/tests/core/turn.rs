@@ -18,7 +18,7 @@ use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
     StopReason,
 };
-use kolyan_tools::RestrictedShellTool;
+use kolyan_tools::{RestrictedFileTool, RestrictedShellTool};
 use serde_json::{Value, json};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -192,6 +192,48 @@ async fn turn_ten_step_tool_loop_runs_across_all_configured_models() {
     }
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_file_read_write_runs_across_configured_models() {
+    let config = load_config();
+    let root = std::env::temp_dir().join(format!("kolyan-file-turn-{}", std::process::id()));
+    fs::create_dir_all(&root).expect("file-turn root should be created");
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_openai_file_read_write(&provider, entry, "minimax", &root).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_anthropic_file_read_write(&provider, entry, "minimax", &root).await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_openai_file_read_write(&provider, entry, "qwen", &root).await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_anthropic_file_read_write(&provider, entry, "qwen", &root).await;
+        }
+    }
+
+    fs::remove_dir_all(&root).expect("file-turn root should be removed");
+}
+
 fn selected_model(model: &str) -> bool {
     std::env::var("KOLYAN_TURN_MODEL_FILTER")
         .ok()
@@ -263,6 +305,109 @@ fn assert_one_step_final(result: &TurnResult, expectations: &common::Expectation
     assert_eq!(result.steps.len(), 1, "[{label}] expected exactly one Step");
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
     assert_expectations(&result.steps[0].response, expectations, label);
+}
+
+async fn run_openai_file_read_write(
+    provider: &kolyan_provider_openai::OpenAiProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &std::path::Path,
+) {
+    run_file_read_write(
+        TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root)),
+        family,
+        &entry.model,
+        entry.max_output_tokens,
+        root,
+    )
+    .await;
+}
+
+async fn run_anthropic_file_read_write(
+    provider: &kolyan_provider_anthropic::AnthropicProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &std::path::Path,
+) {
+    run_file_read_write(
+        TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root)),
+        family,
+        &entry.model,
+        entry.max_output_tokens,
+        root,
+    )
+    .await;
+}
+
+async fn run_file_read_write<P, T>(
+    executor: TurnExecutor<P, T>,
+    family: &str,
+    model: &str,
+    max_output_tokens: Option<u32>,
+    root: &std::path::Path,
+) where
+    P: kolyan_model::ModelProvider,
+    T: kolyan_core::ToolExecutor,
+{
+    let fixture = load_fixture("turn_file_read_write");
+    let result = executor
+        .execute(TurnRequest {
+            turn_id: format!("turn-file-read-write-{family}-{model}"),
+            model_request: build_request(
+                family,
+                model,
+                &fixture,
+                format!("turn-file-read-write-{family}-{model}"),
+                max_output_tokens,
+            ),
+            config: TurnConfig {
+                max_steps: fixture
+                    .turn
+                    .as_ref()
+                    .and_then(|turn| turn.max_steps)
+                    .unwrap_or(5),
+            },
+        })
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{model}/file_read_write] {error}"));
+
+    let label = format!("{family}/{model}/file_read_write");
+    let tool_calls = result
+        .steps
+        .iter()
+        .flat_map(|step| step.response.content.iter())
+        .filter(|block| matches!(block, ContentBlock::ToolCall { .. }))
+        .count();
+    assert!(
+        tool_calls >= 2,
+        "[{label}] expected write and read ToolCalls"
+    );
+    assert!(
+        result.steps.len() >= 3,
+        "[{label}] expected write, read, and final Steps"
+    );
+    assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
+    assert!(
+        result
+            .steps
+            .iter()
+            .flat_map(|step| step.response.content.iter())
+            .any(|block| matches!(
+                block,
+                ContentBlock::ToolResult { result }
+                    if result.content == "kolyan-v1-file-test" && !result.is_error
+            )),
+        "[{label}] file.read did not return the expected content"
+    );
+    let written = fs::read_to_string(root.join("test-output.txt")).unwrap_or_else(|error| {
+        panic!("[{label}] file.write did not create test-output.txt: {error}")
+    });
+    assert_eq!(
+        written, "kolyan-v1-file-test",
+        "[{label}] file content mismatch"
+    );
+    fs::remove_file(root.join("test-output.txt"))
+        .unwrap_or_else(|error| panic!("[{label}] cleanup failed: {error}"));
 }
 
 async fn run_openai_event_stream(

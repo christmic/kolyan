@@ -1,0 +1,56 @@
+{
+  "request": {
+    "request_id": "live-turn-file-read-write-001",
+    "system": "这是一个真实文件工具测试。必须按顺序完成：先调用一次 file.write，再调用一次 file.read，最后用一句中文确认读取结果。不得跳过工具，不得调用其他工具。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "请严格按顺序执行：1) 使用 file.write 将精确字符串 kolyan-v1-file-test 写入 test-output.txt；2) 使用 file.read 读取 test-output.txt；3) 确认读取内容后结束。每次只调用一个工具。"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "file.write",
+        "description": "写入工作区内的 UTF-8 文件。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" },
+            "content": { "type": "string" }
+          },
+          "required": ["path", "content"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "name": "file.read",
+        "description": "读取工作区内的 UTF-8 文件。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string" }
+          },
+          "required": ["path"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 80960
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "requires": []
+  },
+  "turn": {
+    "min_steps": 3,
+    "min_tool_calls": 2,
+    "max_steps": 5
+  }
+}

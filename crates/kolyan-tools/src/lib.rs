@@ -121,6 +121,112 @@ impl ToolExecutor for RestrictedShellTool {
     }
 }
 
+/// A deliberately small workspace-scoped file tool.
+///
+/// It only reads and writes UTF-8 files below the configured root. It does
+/// not create directories, execute commands, or resolve paths outside root.
+#[derive(Debug, Clone)]
+pub struct RestrictedFileTool {
+    root: PathBuf,
+}
+
+impl RestrictedFileTool {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
+        Self { root: root.into() }
+    }
+
+    pub fn tool_definitions() -> Vec<ToolDefinition> {
+        vec![
+            ToolDefinition {
+                name: "file.read".into(),
+                description: Some("Read a UTF-8 file below the configured workspace root.".into()),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                    "additionalProperties": false
+                }),
+            },
+            ToolDefinition {
+                name: "file.write".into(),
+                description: Some(
+                    "Write UTF-8 content to a file below the configured workspace root.".into(),
+                ),
+                input_schema: serde_json::json!({
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "content": {"type": "string"}
+                    },
+                    "required": ["path", "content"],
+                    "additionalProperties": false
+                }),
+            },
+        ]
+    }
+
+    fn execute_file(&self, call: ToolCall) -> Result<ToolResult, ToolError> {
+        let result = self.run_file(&call.name, &call.arguments);
+        match result {
+            Ok(content) => Ok(ToolResult {
+                call_id: call.id,
+                content,
+                is_error: false,
+            }),
+            Err(content) => Ok(ToolResult {
+                call_id: call.id,
+                content,
+                is_error: true,
+            }),
+        }
+    }
+
+    fn run_file(&self, name: &str, arguments: &Value) -> Result<String, String> {
+        if name != "file.read" && name != "file.write" {
+            return Err(format!("unsupported file tool: {name}"));
+        }
+        let object = arguments
+            .as_object()
+            .ok_or_else(|| "arguments must be an object".to_string())?;
+        let path = object
+            .get("path")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "path must be a string".to_string())?;
+        let path = self.resolve(path)?;
+
+        match name {
+            "file.read" => fs::read_to_string(path).map_err(|error| error.to_string()),
+            "file.write" => {
+                let content = object
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| "content must be a string".to_string())?;
+                fs::write(&path, content).map_err(|error| error.to_string())?;
+                Ok(format!("wrote {} bytes", content.len()))
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn resolve(&self, relative: &str) -> Result<PathBuf, String> {
+        let path = Path::new(relative);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
+        {
+            return Err("path must stay below the configured tool root".into());
+        }
+        Ok(self.root.join(path))
+    }
+}
+
+impl ToolExecutor for RestrictedFileTool {
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+        Box::pin(async move { self.execute_file(call) })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +280,67 @@ mod tests {
             .expect("tool should return a ToolResult error");
 
         assert!(result.is_error);
+    }
+
+    #[test]
+    fn reads_and_writes_workspace_files() {
+        let root = std::env::temp_dir().join(format!("kolyan-file-tool-{}", std::process::id()));
+        fs::create_dir_all(&root).expect("temporary root should be created");
+        let tool = RestrictedFileTool::new(&root);
+
+        let write = tool
+            .execute(ToolCall {
+                id: "write-1".into(),
+                name: "file.write".into(),
+                arguments: serde_json::json!({"path":"note.txt","content":"hello"}),
+            })
+            .now_or_never()
+            .expect("write should complete")
+            .expect("write should return a result");
+        assert_eq!(write.content, "wrote 5 bytes");
+        assert!(!write.is_error);
+
+        let read = tool
+            .execute(ToolCall {
+                id: "read-1".into(),
+                name: "file.read".into(),
+                arguments: serde_json::json!({"path":"note.txt"}),
+            })
+            .now_or_never()
+            .expect("read should complete")
+            .expect("read should return a result");
+        assert_eq!(read.content, "hello");
+        assert!(!read.is_error);
+
+        fs::remove_file(root.join("note.txt")).expect("fixture should be removed");
+        fs::remove_dir(root).expect("temporary root should be removed");
+    }
+
+    #[test]
+    fn file_tool_rejects_escape_and_unknown_calls() {
+        let tool = RestrictedFileTool::new(std::env::temp_dir());
+        for (id, name, arguments) in [
+            (
+                "escape",
+                "file.read",
+                serde_json::json!({"path":"../outside.txt"}),
+            ),
+            (
+                "unknown",
+                "shell.exec",
+                serde_json::json!({"command":"pwd"}),
+            ),
+        ] {
+            let result = tool
+                .execute(ToolCall {
+                    id: id.into(),
+                    name: name.into(),
+                    arguments,
+                })
+                .now_or_never()
+                .expect("file tool should complete")
+                .expect("file tool should return a result");
+            assert!(result.is_error);
+        }
     }
 }
