@@ -318,7 +318,6 @@ async fn run_openai_file_read_write(
         family,
         &entry.model,
         entry.max_output_tokens,
-        root,
     )
     .await;
 }
@@ -334,7 +333,6 @@ async fn run_anthropic_file_read_write(
         family,
         &entry.model,
         entry.max_output_tokens,
-        root,
     )
     .await;
 }
@@ -344,34 +342,38 @@ async fn run_file_read_write<P, T>(
     family: &str,
     model: &str,
     max_output_tokens: Option<u32>,
-    root: &std::path::Path,
 ) where
     P: kolyan_model::ModelProvider,
     T: kolyan_core::ToolExecutor,
 {
     let fixture = load_fixture("turn_file_read_write");
-    let result = executor
-        .execute(TurnRequest {
-            turn_id: format!("turn-file-read-write-{family}-{model}"),
-            model_request: build_request(
-                family,
-                model,
-                &fixture,
-                format!("turn-file-read-write-{family}-{model}"),
-                max_output_tokens,
-            ),
-            config: TurnConfig {
-                max_steps: fixture
-                    .turn
-                    .as_ref()
-                    .and_then(|turn| turn.max_steps)
-                    .unwrap_or(5),
+    let execution = executor
+        .execute_with_events(
+            TurnRequest {
+                turn_id: format!("turn-file-read-write-{family}-{model}"),
+                model_request: build_request(
+                    family,
+                    model,
+                    &fixture,
+                    format!("turn-file-read-write-{family}-{model}"),
+                    max_output_tokens,
+                ),
+                config: TurnConfig {
+                    max_steps: fixture
+                        .turn
+                        .as_ref()
+                        .and_then(|turn| turn.max_steps)
+                        .unwrap_or(5),
+                },
             },
-        })
+            Default::default(),
+        )
         .await
         .unwrap_or_else(|error| panic!("[{family}/{model}/file_read_write] {error}"));
 
     let label = format!("{family}/{model}/file_read_write");
+    assert_turn_event_trace(&execution.events, "turn_file_read_write", &label);
+    let result = &execution.result;
     let tool_calls = result
         .steps
         .iter()
@@ -387,27 +389,6 @@ async fn run_file_read_write<P, T>(
         "[{label}] expected write, read, and final Steps"
     );
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
-    assert!(
-        result
-            .steps
-            .iter()
-            .flat_map(|step| step.response.content.iter())
-            .any(|block| matches!(
-                block,
-                ContentBlock::ToolResult { result }
-                    if result.content == "kolyan-v1-file-test" && !result.is_error
-            )),
-        "[{label}] file.read did not return the expected content"
-    );
-    let written = fs::read_to_string(root.join("test-output.txt")).unwrap_or_else(|error| {
-        panic!("[{label}] file.write did not create test-output.txt: {error}")
-    });
-    assert_eq!(
-        written, "kolyan-v1-file-test",
-        "[{label}] file content mismatch"
-    );
-    fs::remove_file(root.join("test-output.txt"))
-        .unwrap_or_else(|error| panic!("[{label}] cleanup failed: {error}"));
 }
 
 async fn run_openai_event_stream(
@@ -665,6 +646,71 @@ fn trace_record(step_id: &str, event: &ModelEvent) -> Value {
         .expect("turn trace record must be an object")
         .insert("step_id".into(), Value::String(step_id.into()));
     record
+}
+
+fn assert_turn_event_trace(events: &[TurnEvent], fixture_name: &str, label: &str) {
+    let actual = events
+        .iter()
+        .map(turn_event_record)
+        .map(|record| serde_json::to_string(&record).expect("turn event must serialize"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let temp_path = write_temp_trace(label, &actual);
+    let expected_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/expected/turn")
+        .join(format!("{fixture_name}.jsonl"));
+    let expected = fs::read_to_string(&expected_path).unwrap_or_else(|error| {
+        panic!(
+            "[{label}] expected turn trace missing at {}: {error}",
+            expected_path.display()
+        )
+    });
+    assert_trace_contract(label, &actual, &expected, &temp_path);
+    fs::remove_file(&temp_path).expect("successful file turn trace should clean up temp file");
+}
+
+fn turn_event_record(event: &TurnEvent) -> Value {
+    match event {
+        TurnEvent::Started { .. } => json!({"event": "started"}),
+        TurnEvent::StepStarted { .. } => json!({"event": "step_started"}),
+        TurnEvent::StepCompleted { step, .. } => {
+            json!({"event": "step_completed", "outcome": step_outcome_name(step.outcome)})
+        }
+        TurnEvent::ToolCallRequested { call, .. } => {
+            json!({"event": "tool_call_requested", "name": call.name})
+        }
+        TurnEvent::ToolExecutionStarted { name, .. } => {
+            json!({"event": "tool_execution_started", "name": name})
+        }
+        TurnEvent::ToolResult { result, .. } => {
+            json!({"event": "tool_result", "is_error": result.is_error, "content": result.content})
+        }
+        TurnEvent::ToolExecutionFailed { name, .. } => {
+            json!({"event": "tool_execution_failed", "name": name})
+        }
+        TurnEvent::Completed { outcome, .. } => {
+            json!({"event": "completed", "outcome": turn_outcome_name(outcome)})
+        }
+    }
+}
+
+fn step_outcome_name(outcome: kolyan_core::StepOutcome) -> &'static str {
+    match outcome {
+        kolyan_core::StepOutcome::FinalAnswer => "final_answer",
+        kolyan_core::StepOutcome::ToolCalls => "tool_calls",
+        kolyan_core::StepOutcome::Refused => "refused",
+        kolyan_core::StepOutcome::Incomplete => "incomplete",
+    }
+}
+
+fn turn_outcome_name(outcome: &TurnOutcome) -> &'static str {
+    match outcome {
+        TurnOutcome::FinalAnswer { .. } => "final_answer",
+        TurnOutcome::Refused { .. } => "refused",
+        TurnOutcome::Incomplete { .. } => "incomplete",
+        TurnOutcome::MaxSteps => "max_steps",
+    }
 }
 
 fn stop_reason_name(stop_reason: &StopReason) -> &'static str {
