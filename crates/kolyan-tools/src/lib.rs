@@ -2,9 +2,11 @@
 
 use kolyan_core::{ToolError, ToolExecutor, ToolFuture};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
+use kolyan_policy::{PolicyError, PolicyResolver, ToolManifest};
 use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
+use std::sync::Arc;
 
 /// A deliberately small, non-shell command tool for V0 Turn integration.
 ///
@@ -39,6 +41,19 @@ impl RestrictedShellTool {
                 "required": ["command"],
                 "additionalProperties": false
             }),
+        }
+    }
+
+    pub fn tool_manifest() -> ToolManifest {
+        ToolManifest {
+            tool_name: "shell.query".into(),
+            capabilities: [kolyan_policy::Capability::ProcessInspect]
+                .into_iter()
+                .collect(),
+            effects: [kolyan_policy::Effect::Read].into_iter().collect(),
+            path_scopes: Vec::new(),
+            idempotency: kolyan_policy::Idempotency::Idempotent,
+            approval: kolyan_policy::ApprovalMode::Never,
         }
     }
 
@@ -165,6 +180,31 @@ impl RestrictedFileTool {
         ]
     }
 
+    pub fn tool_manifests() -> Vec<ToolManifest> {
+        vec![
+            ToolManifest {
+                tool_name: "file.read".into(),
+                capabilities: [kolyan_policy::Capability::FilesystemRead]
+                    .into_iter()
+                    .collect(),
+                effects: [kolyan_policy::Effect::Read].into_iter().collect(),
+                path_scopes: Vec::new(),
+                idempotency: kolyan_policy::Idempotency::Idempotent,
+                approval: kolyan_policy::ApprovalMode::Never,
+            },
+            ToolManifest {
+                tool_name: "file.write".into(),
+                capabilities: [kolyan_policy::Capability::FilesystemWrite]
+                    .into_iter()
+                    .collect(),
+                effects: [kolyan_policy::Effect::Update].into_iter().collect(),
+                path_scopes: Vec::new(),
+                idempotency: kolyan_policy::Idempotency::NonIdempotent,
+                approval: kolyan_policy::ApprovalMode::Never,
+            },
+        ]
+    }
+
     fn execute_file(&self, call: ToolCall) -> Result<ToolResult, ToolError> {
         let result = self.run_file(&call.name, &call.arguments);
         match result {
@@ -221,6 +261,39 @@ impl RestrictedFileTool {
     }
 }
 
+/// Adds the policy decision and grant check at the tool execution boundary.
+/// The wrapped executor remains unaware of policy and cannot accidentally
+/// bypass the resolver through a normal Turn execution.
+pub struct PolicyEnforcingTool<T, R> {
+    inner: T,
+    resolver: Arc<R>,
+}
+
+impl<T, R> PolicyEnforcingTool<T, R> {
+    pub fn new(inner: T, resolver: Arc<R>) -> Self {
+        Self { inner, resolver }
+    }
+}
+
+impl<T, R> ToolExecutor for PolicyEnforcingTool<T, R>
+where
+    T: ToolExecutor,
+    R: PolicyResolver + 'static,
+{
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+        match self.resolver.decide(&call).into_grant(&call) {
+            Ok(_grant) => self.inner.execute(call),
+            Err(error) => Box::pin(async move { Err(policy_error(error)) }),
+        }
+    }
+}
+
+fn policy_error(error: PolicyError) -> ToolError {
+    ToolError::PolicyDenied {
+        message: error.to_string(),
+    }
+}
+
 impl ToolExecutor for RestrictedFileTool {
     fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
         Box::pin(async move { self.execute_file(call) })
@@ -232,6 +305,7 @@ mod tests {
     use super::*;
     use futures_util::FutureExt;
     use std::fs;
+    use std::sync::Arc;
 
     #[test]
     fn exposes_only_restricted_query_commands() {
@@ -342,5 +416,25 @@ mod tests {
                 .expect("file tool should return a result");
             assert!(result.is_error);
         }
+    }
+
+    #[test]
+    fn policy_wrapper_denies_unregistered_calls_before_execution() {
+        let mut policy = kolyan_policy::PolicyEngine::default();
+        policy.register(RestrictedFileTool::tool_manifests().remove(0));
+        let tool = PolicyEnforcingTool::new(
+            RestrictedFileTool::new(std::env::temp_dir()),
+            Arc::new(policy),
+        );
+        let result = tool
+            .execute(ToolCall {
+                id: "denied".into(),
+                name: "file.write".into(),
+                arguments: serde_json::json!({"path":"a.txt","content":"x"}),
+            })
+            .now_or_never()
+            .expect("policy decision should complete")
+            .expect_err("write must be denied");
+        assert!(matches!(result, ToolError::PolicyDenied { .. }));
     }
 }
