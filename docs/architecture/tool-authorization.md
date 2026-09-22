@@ -12,7 +12,7 @@ ToolExecutor         执行期强制检查与副作用边界
 AuditEvent           实际发生的事实
 ```
 
-其中 `ToolManifest` 不是当前授权，而是 capability ceiling；`ExecutionGrant` 才是当前调用可以携带到执行边界的授权。
+其中 `ToolManifest` 不是当前授权，而是 capability ceiling；`ExecutionGrant` 才是当前调用可以携带到执行边界的授权。Grant 由 `TurnExecutor` 传给 `ToolExecutor::execute_with_grant`，不能只停留在策略结果中。
 
 ## 2. 权限计算
 
@@ -65,7 +65,7 @@ InvocationClaim::from_call
        ↓
 PolicyEngine::decide
        ├─ Deny ───────────────→ ToolError::PolicyDenied
-       ├─ RequireApproval ────→ 等待审批（v2）
+       ├─ RequireApproval ────→ TurnControl 等待批准
        └─ Allow/Constrained
                     ↓
              ExecutionGrant
@@ -90,8 +90,7 @@ PolicyContext + 逐调用 PolicyDecision
 
 ## 6. 后续扩展顺序
 
-1. 将批次计划中的 Grant 与执行器再次绑定，避免执行期参数变化或重放越权。
-2. 增加审批记录与单调用/本 Turn/持久会话三种审批范围。
-3. 将约束真正接入超时、输出大小、网络和沙箱执行器。
-4. 为 Manifest 增加来源、信任级别和签名校验。
-5. 将 Decision、Grant、Approval 和实际结果写入统一审计事件。
+1. 将审批记录持久化，支持单调用/本 Turn/持久会话三种审批范围。
+2. 将约束真正接入超时、输出大小、网络和沙箱执行器。
+3. 为 Manifest 增加来源、信任级别和签名校验。
+4. 将 Decision、Grant、Approval 和实际结果写入统一审计事件。

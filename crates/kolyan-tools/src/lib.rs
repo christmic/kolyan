@@ -2,7 +2,7 @@
 
 use kolyan_core::{ToolError, ToolExecutor, ToolFuture};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
-use kolyan_policy::{PolicyError, PolicyResolver, ToolManifest};
+use kolyan_policy::{ExecutionGrant, PolicyError, PolicyResolver, ToolManifest};
 use serde_json::Value;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -285,6 +285,17 @@ where
             Ok(_grant) => self.inner.execute(call),
             Err(error) => Box::pin(async move { Err(policy_error(error)) }),
         }
+    }
+
+    fn execute_with_grant(&self, call: ToolCall, grant: ExecutionGrant) -> ToolFuture<'_> {
+        if grant.call_id != call.id || grant.tool_name != call.name {
+            return Box::pin(async {
+                Err(ToolError::PolicyDenied {
+                    message: "execution grant does not match the tool call".into(),
+                })
+            });
+        }
+        self.inner.execute(call)
     }
 }
 

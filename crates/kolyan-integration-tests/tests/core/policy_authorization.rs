@@ -32,77 +32,79 @@ async fn policy_allows_scoped_write_and_denies_out_of_scope_write() {
         let key = require_api_key(&config.minimax_openai);
         let provider = build_openai_provider(&config.minimax_openai, &key);
         for entry in &config.minimax_openai.model_matrix {
-            run_cases(&provider, entry, "minimax", &config.minimax_openai, &root).await;
+            run_cases(&provider, entry, "minimax", &root).await;
         }
     }
     if has_api_key_anthropic(&config.minimax_anthropic) {
         let key = require_api_key_anthropic(&config.minimax_anthropic);
         let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
         for entry in &config.minimax_anthropic.model_matrix {
-            run_cases(
-                &provider,
-                entry,
-                "minimax",
-                &config.minimax_anthropic,
-                &root,
-            )
-            .await;
+            run_cases(&provider, entry, "minimax", &root).await;
         }
     }
     if has_api_key(&config.qwen_openai) {
         let key = require_api_key(&config.qwen_openai);
         let provider = build_openai_provider(&config.qwen_openai, &key);
         for entry in &config.qwen_openai.model_matrix {
-            run_cases(&provider, entry, "qwen", &config.qwen_openai, &root).await;
+            run_cases(&provider, entry, "qwen", &root).await;
         }
     }
     if has_api_key_anthropic(&config.qwen_anthropic) {
         let key = require_api_key_anthropic(&config.qwen_anthropic);
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
-            run_cases(&provider, entry, "qwen", &config.qwen_anthropic, &root).await;
+            run_cases(&provider, entry, "qwen", &root).await;
         }
     }
 
     fs::remove_dir_all(root).expect("policy live root should be removed");
 }
 
-async fn run_cases<P, C>(
-    provider: &P,
-    entry: &ModelMatrixEntry,
-    family: &str,
-    _config: &C,
-    root: &Path,
-) where
-    P: ModelProvider + Clone,
+async fn run_cases<P>(provider: &P, entry: &ModelMatrixEntry, family: &str, root: &Path)
+where
+    P: ModelProvider + Clone + 'static,
 {
     run_allowed(provider, entry, family, root).await;
     run_denied(provider, entry, family, root).await;
 }
 
-async fn run_allowed<P: ModelProvider + Clone>(
+async fn run_allowed<P: ModelProvider + Clone + 'static>(
     provider: &P,
     entry: &ModelMatrixEntry,
     family: &str,
     root: &Path,
 ) {
     let fixture = load_fixture("turn_policy_allowed");
-    let execution = authorized_executor(provider.clone(), root)
-        .execute_with_events(
-            TurnRequest {
-                turn_id: format!("policy-allowed-{family}-{}", entry.model),
-                model_request: build_request(
-                    family,
-                    &entry.model,
-                    &fixture,
-                    format!("policy-allowed-{family}-{}", entry.model),
-                    entry.max_output_tokens,
-                ),
-                config: turn_config(&fixture),
-            },
-            Default::default(),
-        )
+    let model = entry.model.clone();
+    let turn_id = format!("policy-allowed-{family}-{model}");
+    let request = build_request(
+        family,
+        &model,
+        &fixture,
+        turn_id.clone(),
+        entry.max_output_tokens,
+    );
+    let config = turn_config(&fixture);
+    let control = kolyan_core::TurnControl::default();
+    let task_control = control.clone();
+    let executor = authorized_executor(provider.clone(), root, ApprovalMode::Always);
+    let task = tokio::spawn(async move {
+        executor
+            .execute_with_events(
+                TurnRequest {
+                    turn_id,
+                    model_request: request,
+                    config,
+                },
+                task_control,
+            )
+            .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    control.approve_tool("file.write");
+    let execution = task
         .await
+        .expect("allowed policy task should join")
         .unwrap_or_else(|error| {
             panic!(
                 "[{family}/{}] allowed policy call failed: {error}",
@@ -130,7 +132,7 @@ async fn run_denied<P: ModelProvider + Clone>(
     root: &Path,
 ) {
     let fixture = load_fixture("turn_policy_denied");
-    let execution = authorized_executor(provider.clone(), root)
+    let execution = authorized_executor(provider.clone(), root, ApprovalMode::Always)
         .with_tool_dispatch_policy(ToolDispatchPolicy {
             mode: ToolDispatchMode::Serial,
             on_error: ToolErrorPolicy::ContinueBatch,
@@ -172,6 +174,7 @@ async fn run_denied<P: ModelProvider + Clone>(
 fn authorized_executor<P>(
     provider: P,
     root: &Path,
+    approval: ApprovalMode,
 ) -> TurnExecutor<P, PolicyEnforcingTool<RestrictedFileTool, PolicyEngine>> {
     let mut policy = PolicyEngine::default();
     policy.register(ToolManifest {
@@ -180,7 +183,7 @@ fn authorized_executor<P>(
         effects: [Effect::Update].into_iter().collect(),
         path_scopes: vec![PathScope::new("safe")],
         idempotency: kolyan_policy::Idempotency::NonIdempotent,
-        approval: ApprovalMode::Never,
+        approval,
     });
     policy.restrict_workspace("safe");
     let policy = Arc::new(policy);
@@ -250,6 +253,9 @@ fn event_record(event: &TurnEvent) -> Value {
         }
         TurnEvent::ToolExecutionStarted { name, .. } => {
             serde_json::json!({"event":"tool_execution_started","name":name})
+        }
+        TurnEvent::ApprovalRequested { name, .. } => {
+            serde_json::json!({"event":"approval_requested","name":name})
         }
         TurnEvent::ToolExecutionFailed { name, .. } => {
             serde_json::json!({"event":"tool_execution_failed","name":name})

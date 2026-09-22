@@ -6,12 +6,12 @@ use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
     ToolResult,
 };
-use kolyan_policy::{PolicyContext, PolicyDecisionKind, PolicyEngine};
+use kolyan_policy::{ExecutionGrant, PolicyContext, PolicyDecisionKind, PolicyEngine};
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 use std::task::{Context, Poll};
@@ -266,6 +266,11 @@ pub enum TurnEvent {
         name: String,
         error: ToolError,
     },
+    ApprovalRequested {
+        turn_id: String,
+        call_id: String,
+        name: String,
+    },
     Completed {
         turn_id: String,
         outcome: TurnOutcome,
@@ -348,6 +353,10 @@ pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolErr
 
 pub trait ToolExecutor: Send + Sync {
     fn execute(&self, call: ToolCall) -> ToolFuture<'_>;
+
+    fn execute_with_grant(&self, call: ToolCall, _grant: ExecutionGrant) -> ToolFuture<'_> {
+        self.execute(call)
+    }
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -367,6 +376,7 @@ pub struct TurnControl {
 #[derive(Default)]
 struct TurnControlState {
     cancelled: AtomicBool,
+    approved_tools: Mutex<HashSet<String>>,
     waker: AtomicWaker,
 }
 
@@ -380,15 +390,64 @@ impl TurnControl {
         self.state.cancelled.load(Ordering::Acquire)
     }
 
+    pub fn approve_tool(&self, name: impl Into<String>) {
+        self.state
+            .approved_tools
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .insert(name.into());
+        self.state.waker.wake();
+    }
+
     fn wait_cancelled(&self) -> CancellationFuture {
         CancellationFuture {
             state: Arc::clone(&self.state),
+        }
+    }
+
+    fn wait_for_tool_approval(&self, name: impl Into<String>) -> ApprovalFuture {
+        ApprovalFuture {
+            state: Arc::clone(&self.state),
+            tool_name: name.into(),
         }
     }
 }
 
 struct CancellationFuture {
     state: Arc<TurnControlState>,
+}
+
+struct ApprovalFuture {
+    state: Arc<TurnControlState>,
+    tool_name: String,
+}
+
+impl Future for ApprovalFuture {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self
+            .state
+            .approved_tools
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .contains(&self.tool_name)
+        {
+            return Poll::Ready(());
+        }
+        self.state.waker.register(cx.waker());
+        if self
+            .state
+            .approved_tools
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .contains(&self.tool_name)
+        {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    }
 }
 
 impl Future for CancellationFuture {
@@ -469,8 +528,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         &self,
         call: ToolCall,
         control: &TurnControl,
+        grant: Option<ExecutionGrant>,
     ) -> Result<ToolResult, ToolError> {
-        let execute = self.tool_executor.execute(call);
+        let execute = match grant {
+            Some(grant) => self.tool_executor.execute_with_grant(call, grant),
+            None => self.tool_executor.execute(call),
+        };
         let execute_with_cancel = async {
             tokio::select! {
                 result = execute => result,
@@ -491,6 +554,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         batch: &ToolCallBatch,
         turn_id: &str,
         control: &TurnControl,
+        events: &mut Vec<TurnEvent>,
     ) -> Vec<ToolDispatchResult> {
         let Some(policy) = &self.policy_engine else {
             return match self.tool_dispatch.mode {
@@ -499,7 +563,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     for call in batch.calls() {
                         results.push(ToolDispatchResult {
                             call_id: call.id.clone(),
-                            result: self.execute_tool(call.clone(), control).await,
+                            result: self.execute_tool(call.clone(), control, None).await,
                         });
                     }
                     results
@@ -509,7 +573,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         .calls()
                         .iter()
                         .cloned()
-                        .map(|call| self.execute_tool(call, control));
+                        .map(|call| self.execute_tool(call, control, None));
                     join_all(futures)
                         .await
                         .into_iter()
@@ -530,25 +594,57 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             },
             batch.calls(),
         );
+        let mut grants = std::collections::HashMap::new();
         let mut results = batch
             .calls()
             .iter()
             .filter_map(|call| {
                 let decision = plan.decisions.iter().find(|item| item.call_id == call.id)?;
-                (!matches!(
-                    decision.decision.kind,
-                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
-                ))
-                .then(|| ToolDispatchResult {
-                    call_id: call.id.clone(),
-                    result: Err(ToolError::PolicyDenied {
-                        message: decision.decision.reason.clone(),
+                match decision.decision.kind {
+                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints => {
+                        let grant = decision
+                            .decision
+                            .clone()
+                            .into_grant(call)
+                            .expect("allow decision must produce a grant");
+                        grants.insert(call.id.clone(), grant);
+                        None
+                    }
+                    PolicyDecisionKind::RequireApproval => None,
+                    PolicyDecisionKind::Deny => Some(ToolDispatchResult {
+                        call_id: call.id.clone(),
+                        result: Err(ToolError::PolicyDenied {
+                            message: decision.decision.reason.clone(),
+                        }),
                     }),
-                })
+                }
             })
             .collect::<Vec<_>>();
 
-        for stage in plan.stages {
+        let mut stages = plan.stages;
+        for decision in &plan.decisions {
+            if decision.decision.kind != PolicyDecisionKind::RequireApproval {
+                continue;
+            }
+            let call = batch
+                .call(&decision.call_id)
+                .expect("policy call must be in batch");
+            events.push(TurnEvent::ApprovalRequested {
+                turn_id: turn_id.to_string(),
+                call_id: call.id.clone(),
+                name: call.name.clone(),
+            });
+            control.wait_for_tool_approval(&call.name).await;
+            let grant = decision
+                .decision
+                .clone()
+                .into_approved_grant(call)
+                .expect("approved call must produce a grant");
+            grants.insert(call.id.clone(), grant);
+            stages.push(vec![call.id.clone()]);
+        }
+
+        for stage in stages {
             let calls = stage
                 .iter()
                 .filter_map(|call_id| batch.call(call_id).cloned())
@@ -559,20 +655,25 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     for call in calls {
                         stage_results.push(ToolDispatchResult {
                             call_id: call.id.clone(),
-                            result: self.execute_tool(call, control).await,
+                            result: self
+                                .execute_tool(call.clone(), control, grants.remove(&call.id))
+                                .await,
                         });
                     }
                     stage_results
                 }
                 ToolDispatchMode::Parallel => {
-                    join_all(calls.into_iter().map(|call| async move {
-                        let call_id = call.id.clone();
-                        ToolDispatchResult {
-                            call_id,
-                            result: self.execute_tool(call, control).await,
+                    let futures = calls.into_iter().map(|call| {
+                        let grant = grants.get(&call.id).cloned();
+                        async move {
+                            let call_id = call.id.clone();
+                            ToolDispatchResult {
+                                call_id,
+                                result: self.execute_tool(call, control, grant).await,
+                            }
                         }
-                    }))
-                    .await
+                    });
+                    join_all(futures).await
                 }
             };
             results.extend(stage_results);
@@ -711,7 +812,9 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             name: call.name.clone(),
                         });
                     }
-                    let results = self.execute_batch(&batch, &turn_id, &control).await;
+                    let results = self
+                        .execute_batch(&batch, &turn_id, &control, &mut events)
+                        .await;
                     batch.validate_results(&results)?;
                     let mut tool_results = Vec::with_capacity(results.len());
                     for dispatch in results {
@@ -1202,6 +1305,63 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[tokio::test]
+    async fn approval_pauses_turn_until_control_approves_the_grant() {
+        let call = ToolCall {
+            id: "call-approval".into(),
+            name: "shell.query".into(),
+            arguments: serde_json::json!({"command": "count_lines"}),
+        };
+        let provider = ScriptedProvider {
+            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tool_call: call,
+        };
+        let mut policy = PolicyEngine::default();
+        policy.register(kolyan_policy::ToolManifest {
+            tool_name: "shell.query".into(),
+            capabilities: [kolyan_policy::Capability::ProcessInspect]
+                .into_iter()
+                .collect(),
+            effects: [kolyan_policy::Effect::Read].into_iter().collect(),
+            path_scopes: Vec::new(),
+            idempotency: kolyan_policy::Idempotency::Idempotent,
+            approval: kolyan_policy::ApprovalMode::Always,
+        });
+        let control = TurnControl::default();
+        let task_control = control.clone();
+        let executor =
+            TurnExecutor::with_tools(provider, MockTool).with_policy_engine(Arc::new(policy));
+        let task = tokio::spawn(async move {
+            executor
+                .execute_with_events(
+                    TurnRequest {
+                        turn_id: "turn-approval".into(),
+                        model_request: request(),
+                        config: TurnConfig { max_steps: 2 },
+                    },
+                    task_control,
+                )
+                .await
+        });
+
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        assert!(!task.is_finished(), "turn should wait for approval");
+        control.approve_tool("shell.query");
+        let execution = task
+            .await
+            .expect("approval task should join")
+            .expect("approved turn should complete");
+        assert!(execution.events.iter().any(|event| matches!(
+            event,
+            TurnEvent::ApprovalRequested { name, .. } if name == "shell.query"
+        )));
+        assert!(matches!(
+            execution.result.outcome,
+            TurnOutcome::FinalAnswer { .. }
+        ));
     }
 
     struct CountingTool {

@@ -214,6 +214,18 @@ impl PolicyDecision {
             }),
         }
     }
+
+    pub fn into_approved_grant(self, call: &ToolCall) -> Result<ExecutionGrant, PolicyError> {
+        if self.kind != PolicyDecisionKind::RequireApproval {
+            return self.into_grant(call);
+        }
+        Ok(ExecutionGrant {
+            call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            policy_version: self.policy_version,
+            constraints: self.constraints,
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

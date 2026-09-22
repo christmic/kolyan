@@ -1141,6 +1141,9 @@ fn turn_event_record(event: &TurnEvent) -> Value {
         TurnEvent::ToolExecutionStarted { name, .. } => {
             json!({"event": "tool_execution_started", "name": name})
         }
+        TurnEvent::ApprovalRequested { name, .. } => {
+            json!({"event": "approval_requested", "name": name})
+        }
         TurnEvent::ToolResult { result, .. } => {
             json!({"event": "tool_result", "is_error": result.is_error, "content": result.content})
         }
