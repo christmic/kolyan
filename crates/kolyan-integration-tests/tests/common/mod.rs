@@ -472,6 +472,8 @@ pub fn load_fixture(name: &str) -> Fixture {
         "turn_multi_batch_file_writes" => {
             include_str!("../fixtures/turn_multi_batch_file_writes.json")
         }
+        "turn_policy_allowed" => include_str!("../fixtures/turn_policy_allowed.json"),
+        "turn_policy_denied" => include_str!("../fixtures/turn_policy_denied.json"),
         other => panic!("unknown fixture name: {other}"),
     };
     serde_json::from_str(raw).expect("fixture JSON must deserialize into Fixture")

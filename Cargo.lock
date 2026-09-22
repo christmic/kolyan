@@ -465,6 +465,7 @@ dependencies = [
  "futures-util",
  "kolyan-core",
  "kolyan-model",
+ "kolyan-policy",
  "kolyan-protocol-anthropic",
  "kolyan-protocol-openai",
  "kolyan-provider-anthropic",

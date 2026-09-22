@@ -26,6 +26,10 @@ path = "tests/core/turn.rs"
 name = "turn_contract"
 path = "tests/core/turn_contract.rs"
 
+[[test]]
+name = "policy_authorization"
+path = "tests/core/policy_authorization.rs"
+
 [lints]
 workspace = true
 
@@ -48,6 +52,7 @@ kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
+kolyan-policy = { path = "../kolyan-policy" }
 kolyan-tools = { path = "../kolyan-tools" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }

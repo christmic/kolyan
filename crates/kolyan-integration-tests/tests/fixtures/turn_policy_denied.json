@@ -1,0 +1,12 @@
+{
+  "request": {
+    "request_id": "live-turn-policy-denied-001",
+    "system": "这是权限拒绝真实测试。必须调用一次 file.write，把内容 kolyan-policy-denied 写入 blocked/denied.txt。工具可能返回权限错误；收到结果后用一句中文结束。不得调用其他工具。",
+    "messages": [{"role":"user","content":[{"type":"text","text":"请使用 file.write 写入 blocked/denied.txt，内容必须是 kolyan-policy-denied；收到工具结果后结束。"}]}],
+    "tools": [{"name":"file.write","description":"写入工作区内的 UTF-8 文件。","input_schema":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}}],
+    "tool_choice": "auto",
+    "max_output_tokens": 80960
+  },
+  "expectations": {"stop_reason":"end_turn","text":{"min_chars":1},"requires":[]},
+  "turn": {"min_steps":2,"min_tool_calls":1,"max_steps":4}
+}

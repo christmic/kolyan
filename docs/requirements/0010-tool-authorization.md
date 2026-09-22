@@ -26,6 +26,7 @@
 - 已支持文件路径前缀范围、运行时 workspace 范围和工具 deny-list。
 - 已支持 `PolicyEnforcingTool`，可直接包裹现有 ToolExecutor。
 - 已支持输出大小、超时约束的决策字段；实际预算执行由后续执行器版本接管。
+- 已增加真实模型权限矩阵：模型实际生成 scoped allow/deny ToolCall，使用 OpenAI/Anthropic 双协议和配置模型矩阵验证副作用及 JSONL 轨迹契约。
 
 ## 非目标
 

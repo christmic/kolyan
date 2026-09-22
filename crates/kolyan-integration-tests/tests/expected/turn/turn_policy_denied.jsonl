@@ -1,0 +1,10 @@
+{"event":"started"}
+{"event":"step_started"}
+{"event":"step_completed","outcome":"tool_calls"}
+{"event":"tool_call_requested","name":"file.write"}
+{"event":"tool_execution_started","name":"file.write"}
+{"event":"tool_execution_failed","name":"file.write"}
+{"event":"tool_result","is_error":true}
+{"event":"step_started"}
+{"event":"step_completed","outcome":"final_answer"}
+{"event":"completed","outcome":"final_answer"}
