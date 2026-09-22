@@ -53,7 +53,7 @@ let plan = engine.resolve_batch(&context, &tool_calls);
 
 - `kolyan-policy`：Manifest、Claim、PolicyEngine、Decision 和 Grant。
 - `kolyan-tools`：内置工具的 Manifest，以及 `PolicyEnforcingTool` 执行边界。
-- `kolyan-core`：新增 `ToolError::PolicyDenied`，Turn 将其作为工具失败处理。
+- `kolyan-core`：新增 `ToolError::PolicyDenied`；`TurnExecutor::with_policy_engine` 按 `BatchExecutionPlan` 执行批次阶段。
 - `kolyan-trace`：未来记录 Decision、Grant 和 AuditEvent；当前不改变已有 Turn 轨迹格式。
 
 ## 5. 调用流程
@@ -78,7 +78,7 @@ PolicyEngine::decide
 ```text
 ToolCallBatch
       ↓
-逐调用 PolicyDecision
+PolicyContext + 逐调用 PolicyDecision
       ↓
 提取 ResourceClaim / Effect
       ↓
@@ -90,7 +90,7 @@ ToolCallBatch
 
 ## 6. 后续扩展顺序
 
-1. 将 `BatchExecutionPlan` 接入 `kolyan-core::ToolCallBatch` 和 TurnExecutor。
+1. 将批次计划中的 Grant 与执行器再次绑定，避免执行期参数变化或重放越权。
 2. 增加审批记录与单调用/本 Turn/持久会话三种审批范围。
 3. 将约束真正接入超时、输出大小、网络和沙箱执行器。
 4. 为 Manifest 增加来源、信任级别和签名校验。

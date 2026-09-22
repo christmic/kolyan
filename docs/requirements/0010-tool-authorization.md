@@ -2,7 +2,7 @@
 
 ## 状态
 
-已实现 v1 内核；批次级上下文和冲突规划进入 v1.1；审批持久化、签名 Manifest 留到后续版本。
+已实现 v1 内核与 v1.1 批次规划接入；审批持久化、签名 Manifest 留到后续版本。
 
 ## 背景
 
@@ -27,7 +27,7 @@
 - 已支持 `PolicyEnforcingTool`，可直接包裹现有 ToolExecutor。
 - 已支持输出大小、超时约束的决策字段；实际预算执行由后续执行器版本接管。
 - 已增加真实模型权限矩阵：模型实际生成 scoped allow/deny ToolCall，使用 OpenAI/Anthropic 双协议和配置模型矩阵验证副作用及 JSONL 轨迹契约。
-- v1.1 正在实现 `PolicyContext`、批次资源冲突分析和 `BatchExecutionPlan`；策略只允许对授权调用生成执行阶段，不允许越权调用进入计划。
+- v1.1 已实现 `PolicyContext`、批次资源冲突分析和 `BatchExecutionPlan`，并由 `TurnExecutor::with_policy_engine` 接入实际执行；策略只允许对授权调用生成执行阶段，不允许越权调用进入计划。
 
 ## 非目标
 
@@ -50,3 +50,4 @@
 - Tool-call 预算耗尽时，批次调用全部得到 Deny。
 - 批次中被拒绝或需审批的调用不进入执行阶段。
 - 真实模型矩阵验证允许副作用、拒绝副作用和完整 Turn 轨迹。
+- 未配置策略引擎时保持现有 Turn 串行/并行行为，保证兼容性。

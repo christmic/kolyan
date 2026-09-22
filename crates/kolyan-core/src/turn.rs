@@ -6,6 +6,7 @@ use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
     ToolResult,
 };
+use kolyan_policy::{PolicyContext, PolicyDecisionKind, PolicyEngine};
 use std::collections::HashSet;
 use std::future::Future;
 use std::pin::Pin;
@@ -411,6 +412,7 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     tool_executor: T,
     tool_dispatch: ToolDispatchPolicy,
     tool_timeout: Option<Duration>,
+    policy_engine: Option<Arc<PolicyEngine>>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -420,6 +422,7 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             tool_executor: NoopToolExecutor,
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
+            policy_engine: None,
         }
     }
 }
@@ -431,6 +434,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_executor,
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
+            policy_engine: None,
         }
     }
 
@@ -440,6 +444,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_executor,
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
+            policy_engine: None,
         }
     }
 
@@ -450,6 +455,11 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 
     pub fn with_tool_timeout(mut self, timeout: Duration) -> Self {
         self.tool_timeout = Some(timeout);
+        self
+    }
+
+    pub fn with_policy_engine(mut self, policy_engine: Arc<PolicyEngine>) -> Self {
+        self.policy_engine = Some(policy_engine);
         self
     }
 }
@@ -474,6 +484,107 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         } else {
             execute_with_cancel.await
         }
+    }
+
+    async fn execute_batch(
+        &self,
+        batch: &ToolCallBatch,
+        turn_id: &str,
+        control: &TurnControl,
+    ) -> Vec<ToolDispatchResult> {
+        let Some(policy) = &self.policy_engine else {
+            return match self.tool_dispatch.mode {
+                ToolDispatchMode::Serial => {
+                    let mut results = Vec::with_capacity(batch.len());
+                    for call in batch.calls() {
+                        results.push(ToolDispatchResult {
+                            call_id: call.id.clone(),
+                            result: self.execute_tool(call.clone(), control).await,
+                        });
+                    }
+                    results
+                }
+                ToolDispatchMode::Parallel => {
+                    let futures = batch
+                        .calls()
+                        .iter()
+                        .cloned()
+                        .map(|call| self.execute_tool(call, control));
+                    join_all(futures)
+                        .await
+                        .into_iter()
+                        .zip(batch.calls())
+                        .map(|(result, call)| ToolDispatchResult {
+                            call_id: call.id.clone(),
+                            result,
+                        })
+                        .collect()
+                }
+            };
+        };
+
+        let plan = policy.resolve_batch(
+            &PolicyContext {
+                turn_id: Some(turn_id.to_string()),
+                ..PolicyContext::default()
+            },
+            batch.calls(),
+        );
+        let mut results = batch
+            .calls()
+            .iter()
+            .filter_map(|call| {
+                let decision = plan.decisions.iter().find(|item| item.call_id == call.id)?;
+                (!matches!(
+                    decision.decision.kind,
+                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
+                ))
+                .then(|| ToolDispatchResult {
+                    call_id: call.id.clone(),
+                    result: Err(ToolError::PolicyDenied {
+                        message: decision.decision.reason.clone(),
+                    }),
+                })
+            })
+            .collect::<Vec<_>>();
+
+        for stage in plan.stages {
+            let calls = stage
+                .iter()
+                .filter_map(|call_id| batch.call(call_id).cloned())
+                .collect::<Vec<_>>();
+            let stage_results = match self.tool_dispatch.mode {
+                ToolDispatchMode::Serial => {
+                    let mut stage_results = Vec::with_capacity(calls.len());
+                    for call in calls {
+                        stage_results.push(ToolDispatchResult {
+                            call_id: call.id.clone(),
+                            result: self.execute_tool(call, control).await,
+                        });
+                    }
+                    stage_results
+                }
+                ToolDispatchMode::Parallel => {
+                    join_all(calls.into_iter().map(|call| async move {
+                        let call_id = call.id.clone();
+                        ToolDispatchResult {
+                            call_id,
+                            result: self.execute_tool(call, control).await,
+                        }
+                    }))
+                    .await
+                }
+            };
+            results.extend(stage_results);
+        }
+        results.sort_by_key(|result| {
+            batch
+                .calls()
+                .iter()
+                .position(|call| call.id == result.call_id)
+                .unwrap_or(usize::MAX)
+        });
+        results
     }
 
     pub async fn execute(&self, request: TurnRequest) -> Result<TurnResult, TurnError> {
@@ -600,34 +711,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             name: call.name.clone(),
                         });
                     }
-                    let results = match self.tool_dispatch.mode {
-                        ToolDispatchMode::Serial => {
-                            let mut results = Vec::with_capacity(batch.len());
-                            for call in batch.calls() {
-                                results.push(ToolDispatchResult {
-                                    call_id: call.id.clone(),
-                                    result: self.execute_tool(call.clone(), &control).await,
-                                });
-                            }
-                            results
-                        }
-                        ToolDispatchMode::Parallel => {
-                            let futures = batch
-                                .calls()
-                                .iter()
-                                .cloned()
-                                .map(|call| self.execute_tool(call, &control));
-                            join_all(futures)
-                                .await
-                                .into_iter()
-                                .zip(batch.calls())
-                                .map(|(result, call)| ToolDispatchResult {
-                                    call_id: call.id.clone(),
-                                    result,
-                                })
-                                .collect()
-                        }
-                    };
+                    let results = self.execute_batch(&batch, &turn_id, &control).await;
                     batch.validate_results(&results)?;
                     let mut tool_results = Vec::with_capacity(results.len());
                     for dispatch in results {
@@ -1069,6 +1153,73 @@ mod tests {
             event,
             TurnEvent::ToolResult { result, .. } if result.call_id == "call-failed" && result.is_error
         )));
+    }
+
+    #[tokio::test]
+    async fn policy_plan_blocks_denied_calls_before_tool_execution() {
+        let call = ToolCall {
+            id: "call-policy-denied".into(),
+            name: "shell.query".into(),
+            arguments: serde_json::json!({"command": "count_lines"}),
+        };
+        let provider = ScriptedProvider {
+            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tool_call: call,
+        };
+        let executed = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut policy = PolicyEngine::default();
+        policy.deny_tool("shell.query");
+        let executor = TurnExecutor::with_tools(
+            provider,
+            CountingTool {
+                executed: executed.clone(),
+            },
+        )
+        .with_policy_engine(Arc::new(policy))
+        .with_tool_dispatch_policy(ToolDispatchPolicy {
+            mode: ToolDispatchMode::Serial,
+            on_error: ToolErrorPolicy::ContinueBatch,
+        });
+        let execution = executor
+            .execute_with_events(
+                TurnRequest {
+                    turn_id: "turn-policy-denied".into(),
+                    model_request: request(),
+                    config: TurnConfig { max_steps: 2 },
+                },
+                TurnControl::default(),
+            )
+            .await
+            .expect("denied policy result should be returned to the model");
+
+        assert_eq!(execution.result.steps.len(), 2);
+        assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
+        assert!(execution.events.iter().any(|event| matches!(
+            event,
+            TurnEvent::ToolExecutionFailed {
+                error: ToolError::PolicyDenied { .. },
+                ..
+            }
+        )));
+    }
+
+    struct CountingTool {
+        executed: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl ToolExecutor for CountingTool {
+        fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+            self.executed
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Box::pin(async move {
+                Ok(ToolResult {
+                    call_id: call.id,
+                    content: "unexpected execution".into(),
+                    is_error: false,
+                })
+            })
+        }
     }
 
     #[tokio::test]

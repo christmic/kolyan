@@ -11,6 +11,7 @@ workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
 kolyan-model = { path = "../kolyan-model" }
+kolyan-policy = { path = "../kolyan-policy" }
 thiserror.workspace = true
 tokio.workspace = true
 
