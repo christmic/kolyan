@@ -100,6 +100,13 @@ KOLYAN_TURN_MODEL_FILTER=MiniMax-M3 \
   turn_ten_step_tool_loop_runs_across_all_configured_models -- --ignored --nocapture
 ```
 
+The multi-step case records the provider event stream as a temporary JSONL
+trace. It compares that trace with
+`tests/expected/turn/ten_step.jsonl` as an order-preserving contract: tool
+names and terminal stop reasons are checked, while generated text, reasoning,
+provider metadata, tool-call ids, and arguments remain visible in the actual
+temporary trace without being compared as exact strings.
+
 If either env var is unset, matrix rows for that provider are reported as
 `[SKIP ...]` with the required variable name. Once a row has a key and starts
 running, Provider or aggregation errors fail the row; live execution never

@@ -12,9 +12,62 @@ use common::{
     build_anthropic_provider, build_openai_provider, build_request, has_api_key,
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
+use futures_util::StreamExt;
 use kolyan_core::{TurnConfig, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
-use kolyan_model::ContentBlock;
+use kolyan_model::{
+    ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
+    StopReason,
+};
 use kolyan_tools::RestrictedShellTool;
+use serde_json::{Value, json};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Clone)]
+struct RecordingProvider<P> {
+    inner: P,
+    records: Arc<Mutex<Vec<Value>>>,
+}
+
+impl<P> RecordingProvider<P> {
+    fn new(inner: P) -> (Self, Arc<Mutex<Vec<Value>>>) {
+        let records = Arc::new(Mutex::new(Vec::new()));
+        (
+            Self {
+                inner,
+                records: Arc::clone(&records),
+            },
+            records,
+        )
+    }
+}
+
+impl<P: ModelProvider> ModelProvider for RecordingProvider<P> {
+    fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+        let step_id = request.request_id;
+        let records = Arc::clone(&self.records);
+        let future = self.inner.stream(ModelRequest {
+            request_id: step_id.clone(),
+            ..request
+        });
+        Box::pin(async move {
+            let stream = future.await?;
+            let stream = stream.map(move |event| {
+                if let Ok(event) = &event {
+                    let record = trace_record(&step_id, event);
+                    records
+                        .lock()
+                        .expect("turn trace lock must not be poisoned")
+                        .push(record);
+                }
+                event
+            });
+            Ok(Box::pin(stream) as ModelEventStream)
+        })
+    }
+}
 
 #[tokio::test]
 #[ignore = "real-network test: requires configured provider API keys"]
@@ -181,7 +234,8 @@ async fn run_openai_multi_step(
     root: &std::path::Path,
 ) {
     let fixture = load_fixture("turn_ten_step");
-    let result = TurnExecutor::with_tools(provider.clone(), RestrictedShellTool::new(root))
+    let (provider, records) = RecordingProvider::new(provider.clone());
+    let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
         .execute(TurnRequest {
             turn_id: format!("turn-ten-step-{family}-{}", entry.model),
             model_request: build_request(
@@ -204,8 +258,12 @@ async fn run_openai_multi_step(
             panic!("[{family}/openai_compat/{}/ten_step] {error}", entry.model)
         });
     assert_multi_step_result(
-        result,
+        &result,
         fixture.turn.as_ref(),
+        &format!("{family}/openai_compat/{}/ten_step", entry.model),
+    );
+    assert_turn_trace(
+        &records,
         &format!("{family}/openai_compat/{}/ten_step", entry.model),
     );
 }
@@ -217,7 +275,8 @@ async fn run_anthropic_multi_step(
     root: &std::path::Path,
 ) {
     let fixture = load_fixture("turn_ten_step");
-    let result = TurnExecutor::with_tools(provider.clone(), RestrictedShellTool::new(root))
+    let (provider, records) = RecordingProvider::new(provider.clone());
+    let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
         .execute(TurnRequest {
             turn_id: format!("turn-ten-step-{family}-{}", entry.model),
             model_request: build_request(
@@ -243,14 +302,18 @@ async fn run_anthropic_multi_step(
             )
         });
     assert_multi_step_result(
-        result,
+        &result,
         fixture.turn.as_ref(),
+        &format!("{family}/anthropic_compat/{}/ten_step", entry.model),
+    );
+    assert_turn_trace(
+        &records,
         &format!("{family}/anthropic_compat/{}/ten_step", entry.model),
     );
 }
 
 fn assert_multi_step_result(
-    result: TurnResult,
+    result: &TurnResult,
     expectations: Option<&common::TurnExpectations>,
     label: &str,
 ) {
@@ -281,4 +344,134 @@ fn assert_multi_step_result(
             .all(|step| step.outcome == kolyan_core::StepOutcome::ToolCalls)
     );
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
+}
+
+fn trace_record(step_id: &str, event: &ModelEvent) -> Value {
+    let mut record = match event {
+        ModelEvent::Started => json!({"event": "started"}),
+        ModelEvent::TextDelta(text) => json!({"event": "text_delta", "text": text}),
+        ModelEvent::ReasoningDelta(text) => {
+            json!({"event": "reasoning_delta", "text": text})
+        }
+        ModelEvent::ToolCallStarted { id, name } => {
+            json!({"event": "tool_call_started", "id": id, "name": name})
+        }
+        ModelEvent::ToolCallArgumentsDelta { id, delta } => {
+            json!({"event": "tool_call_arguments_delta", "id": id, "delta": delta})
+        }
+        ModelEvent::ToolCallCompleted(call) => json!({
+            "event": "tool_call_completed",
+            "id": call.id,
+            "name": call.name,
+            "arguments": call.arguments,
+        }),
+        ModelEvent::Usage(usage) => json!({"event": "usage", "usage": usage}),
+        ModelEvent::Provider(metadata) => json!({"event": "provider", "metadata": metadata}),
+        ModelEvent::Completed(response) => json!({
+            "event": "completed",
+            "stop_reason": stop_reason_name(&response.stop_reason),
+            "response": response,
+        }),
+    };
+    record
+        .as_object_mut()
+        .expect("turn trace record must be an object")
+        .insert("step_id".into(), Value::String(step_id.into()));
+    record
+}
+
+fn stop_reason_name(stop_reason: &StopReason) -> &'static str {
+    match stop_reason {
+        StopReason::EndTurn => "end_turn",
+        StopReason::ToolUse => "tool_use",
+        StopReason::MaxOutputTokens => "max_output_tokens",
+        StopReason::Refusal => "refusal",
+        StopReason::Other(_) => "other",
+    }
+}
+
+fn assert_turn_trace(records: &Arc<Mutex<Vec<Value>>>, label: &str) {
+    let records = records
+        .lock()
+        .expect("turn trace lock must not be poisoned")
+        .clone();
+    let actual = records
+        .iter()
+        .map(|record| serde_json::to_string(record).expect("turn trace record must serialize"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        + "\n";
+    let temp_path = write_temp_trace(label, &actual);
+    let expected_path =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/expected/turn/ten_step.jsonl");
+    let expected = fs::read_to_string(&expected_path).unwrap_or_else(|error| {
+        panic!(
+            "[{label}] expected turn trace missing at {}: {error}",
+            expected_path.display()
+        )
+    });
+    assert_trace_contract(label, &actual, &expected, &temp_path);
+    fs::remove_file(&temp_path)
+        .expect("successful turn trace comparison should clean up temp file");
+}
+
+fn write_temp_trace(label: &str, actual: &str) -> PathBuf {
+    let unique = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock must be after unix epoch")
+        .as_nanos();
+    let safe_label = label.replace('/', "-");
+    let path = std::env::temp_dir().join(format!(
+        "kolyan-turn-trace-{safe_label}-{}-{unique}.jsonl",
+        std::process::id()
+    ));
+    fs::write(&path, actual).expect("turn trace must write to temp file");
+    path
+}
+
+fn assert_trace_contract(label: &str, actual: &str, expected: &str, temp_path: &Path) {
+    let actual_records = parse_trace_records(actual, label);
+    let expected_records = parse_trace_records(expected, label);
+    let mut actual_index = 0;
+    for expected_record in expected_records {
+        let optional = expected_record
+            .get("optional")
+            .and_then(Value::as_bool)
+            .unwrap_or(false);
+        let mut contract = expected_record;
+        contract
+            .as_object_mut()
+            .expect("turn trace contract must be an object")
+            .remove("optional");
+        let found = actual_records[actual_index..]
+            .iter()
+            .position(|record| record_contains(record, &contract));
+        match (optional, found) {
+            (true, None) => continue,
+            (_, Some(offset)) => actual_index += offset + 1,
+            (false, None) => panic!(
+                "[{label}] turn trace contract mismatch; expected {contract}, actual output is at {}",
+                temp_path.display()
+            ),
+        }
+    }
+}
+
+fn parse_trace_records(text: &str, label: &str) -> Vec<Value> {
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            serde_json::from_str(line)
+                .unwrap_or_else(|error| panic!("[{label}] invalid turn JSONL record: {error}"))
+        })
+        .collect()
+}
+
+fn record_contains(actual: &Value, expected: &Value) -> bool {
+    let (Some(actual), Some(expected)) = (actual.as_object(), expected.as_object()) else {
+        return actual == expected;
+    };
+    expected
+        .iter()
+        .all(|(key, value)| actual.get(key) == Some(value))
 }
