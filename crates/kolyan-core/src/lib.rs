@@ -3,6 +3,7 @@
 mod step;
 
 pub use step::{
-    StepError, StepEvent, StepEventStream, StepExecutor, StepRequest, StepResult,
-    aggregate_step_stream,
+    NoopStepValidator, StepControl, StepError, StepEvent, StepEventStream, StepExecution,
+    StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult, StepValidationError,
+    StepValidator, aggregate_step_stream,
 };

@@ -13,7 +13,7 @@ use common::{
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
 use futures_util::StreamExt;
-use kolyan_core::{StepEvent, StepExecutor, StepRequest, StepResult};
+use kolyan_core::{StepEvent, StepExecutionOptions, StepExecutor, StepRequest, StepResult};
 use kolyan_model::{ModelResponse, StopReason};
 use serde_json::{Value, json};
 use std::fs;
@@ -233,6 +233,7 @@ async fn run_openai_step(
                 format!("step-openai-{fixture_name}"),
                 None,
             ),
+            options: StepExecutionOptions::default(),
         })
         .await
         .unwrap_or_else(|error| panic!("[{label}] step failed: {error}"));
@@ -258,6 +259,7 @@ async fn run_anthropic_step(
                 format!("step-anthropic-{fixture_name}"),
                 None,
             ),
+            options: StepExecutionOptions::default(),
         })
         .await
         .unwrap_or_else(|error| panic!("[{label}] step failed: {error}"));
@@ -282,6 +284,7 @@ async fn run_openai_stream_snapshot(
             "step-stream-openai-tool-call".into(),
             None,
         ),
+        options: StepExecutionOptions::default(),
     };
     let (snapshot, result) =
         collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
@@ -306,6 +309,7 @@ async fn run_anthropic_stream_snapshot(
             "step-stream-anthropic-tool-call".into(),
             None,
         ),
+        options: StepExecutionOptions::default(),
     };
     let (snapshot, result) =
         collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
@@ -332,6 +336,7 @@ async fn run_openai_stream_contract(
             format!("step-stream-{}-{}", family, entry.model),
             entry.max_output_tokens,
         ),
+        options: StepExecutionOptions::default(),
     };
     let (snapshot, result) =
         collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
@@ -358,6 +363,7 @@ async fn run_anthropic_stream_contract(
             format!("step-stream-{}-{}", family, entry.model),
             entry.max_output_tokens,
         ),
+        options: StepExecutionOptions::default(),
     };
     let (snapshot, result) =
         collect_stream_snapshot(&executor, request, &fixture.expectations, label).await;
@@ -505,6 +511,8 @@ fn stable_stream_record(event: &StepEvent) -> Option<Value> {
                 "structured_output": result.response.structured_output
             })
         }
+        StepEvent::Cancelled { .. } => json!({"event": "cancelled"}),
+        StepEvent::TimedOut { .. } => json!({"event": "timed_out"}),
     };
     Some(record)
 }
