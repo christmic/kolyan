@@ -139,6 +139,8 @@ complete(messages)
 
 ## Turn 主循环
 
+Turn 的正式需求契约见 [Turn 执行模型](../requirements/0004-turn-execution.md)。以下伪代码描述目标循环，V0 已使用受限的 `shell.query` 工具验证一次真实的多 Step 闭环。
+
 ```rust
 async fn run_turn(
     mut turn: Turn,

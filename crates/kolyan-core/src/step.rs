@@ -317,13 +317,13 @@ impl Stream for ControlledStepStream {
         self.control.register(cx.waker());
 
         if !self.started {
-            if self.control.is_cancelled() || self.options.deadline.is_some_and(is_expired) {
-                self.started = true;
-                return Poll::Ready(Some(Ok(StepEvent::Started {
-                    step_id: self.step_id.clone(),
-                })));
-            }
-        } else if self.control.is_cancelled() {
+            self.started = true;
+            return Poll::Ready(Some(Ok(StepEvent::Started {
+                step_id: self.step_id.clone(),
+            })));
+        }
+
+        if self.control.is_cancelled() {
             self.terminal = true;
             return Poll::Ready(Some(Ok(StepEvent::Cancelled {
                 step_id: self.step_id.clone(),
@@ -337,13 +337,10 @@ impl Stream for ControlledStepStream {
 
         match self.inner.as_mut().poll_next(cx) {
             Poll::Ready(Some(Ok(event))) => {
-                if !self.started && !matches!(event, ModelEvent::Started) {
-                    self.terminal = true;
-                    return Poll::Ready(Some(Err(StepError::Protocol {
-                        message: "step stream did not start with Started".into(),
-                    })));
+                if matches!(event, ModelEvent::Started) {
+                    cx.waker().wake_by_ref();
+                    return Poll::Pending;
                 }
-                self.started = true;
                 let is_terminal = matches!(event, ModelEvent::Completed(_));
                 if self.completed {
                     self.terminal = true;

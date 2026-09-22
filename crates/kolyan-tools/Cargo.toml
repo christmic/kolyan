@@ -8,4 +8,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+futures-util.workspace = true
+kolyan-core = { path = "../kolyan-core" }
+kolyan-model = { path = "../kolyan-model" }
 kolyan-types = { path = "../kolyan-types" }
+serde_json.workspace = true

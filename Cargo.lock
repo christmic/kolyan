@@ -566,7 +566,11 @@ dependencies = [
 name = "kolyan-tools"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "kolyan-core",
+ "kolyan-model",
  "kolyan-types",
+ "serde_json",
 ]
 
 [[package]]
