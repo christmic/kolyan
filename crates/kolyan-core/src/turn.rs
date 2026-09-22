@@ -339,6 +339,8 @@ pub enum ToolError {
     Cancelled,
     #[error("tool execution timed out")]
     TimedOut,
+    #[error("tool execution denied by policy: {message}")]
+    PolicyDenied { message: String },
 }
 
 pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + 'a>>;

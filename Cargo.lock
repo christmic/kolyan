@@ -492,7 +492,11 @@ dependencies = [
 name = "kolyan-policy"
 version = "0.1.0"
 dependencies = [
+ "kolyan-model",
  "kolyan-types",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
@@ -570,6 +574,7 @@ dependencies = [
  "futures-util",
  "kolyan-core",
  "kolyan-model",
+ "kolyan-policy",
  "kolyan-types",
  "serde_json",
 ]
