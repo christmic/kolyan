@@ -2,7 +2,7 @@
 
 ## 状态
 
-已实现 v1 内核、v1.1 批次规划、Grant 绑定和最小审批暂停/恢复；审批持久化、签名 Manifest 留到后续版本。
+已实现 v1 内核、v1.1 批次规划、Grant 绑定和持久化审批暂停/恢复；签名 Manifest 留到后续版本。
 
 ## 背景
 
@@ -29,10 +29,13 @@
 - 已增加真实模型权限矩阵：模型实际生成 scoped allow/deny ToolCall，使用 OpenAI/Anthropic 双协议和配置模型矩阵验证副作用及 JSONL 轨迹契约。
 - v1.1 已实现 `PolicyContext`、批次资源冲突分析和 `BatchExecutionPlan`，并由 `TurnExecutor::with_policy_engine` 接入实际执行；策略只允许对授权调用生成执行阶段，不允许越权调用进入计划。
 - `ExecutionGrant` 已由 Turn 传入 `ToolExecutor::execute_with_grant`；`RequireApproval` 会在工具阶段暂停，`TurnControl::approve_tool` 后生成批准 Grant 并继续。
+- `TurnControl::is_waiting_for_approval` 可供 UI 和测试确认 Turn 已进入等待状态，批准前不得完成或产生工具副作用。
+- `TurnExecutor::start_resumable` / `resume_approval` 是跨进程审批的权威路径：返回可序列化 continuation，审批等待期间不保留执行任务。
+- `kolyan-storage::FileApprovalStore` 以临时文件加原子 rename 保存 checkpoint；恢复前会校验 approval id、调用参数指纹和策略版本。
 
 ## 非目标
 
-- v1 不实现人工审批 UI、审批持久化和租户策略文件。
+- v1 不实现人工审批 UI 和租户策略文件；审批 checkpoint 已提供存储边界。
 - v1 不把外部 MCP 注解直接当成授权；外部注解需要经过信任层转换。
 - v1 不在模型提示词中注入真实授权信息来替代执行期校验。
 
@@ -53,3 +56,4 @@
 - 真实模型矩阵验证允许副作用、拒绝副作用和完整 Turn 轨迹。
 - 未配置策略引擎时保持现有 Turn 串行/并行行为，保证兼容性。
 - `ApprovalMode::Always` 的真实模型调用会暂停，批准后才产生工具副作用。
+- 真实 durable 测试必须在丢弃原执行器后从 Store 恢复，且模型首步不重复调用、工具副作用只执行一次。

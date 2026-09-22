@@ -65,13 +65,17 @@ InvocationClaim::from_call
        ↓
 PolicyEngine::decide
        ├─ Deny ───────────────→ ToolError::PolicyDenied
-       ├─ RequireApproval ────→ TurnControl 等待批准
+       ├─ RequireApproval ────→ Durable checkpoint → Store → resume_approval
        └─ Allow/Constrained
                     ↓
              ExecutionGrant
                     ↓
               ToolExecutor
 ```
+
+TurnControl 仅保留为进程内兼容路径。跨长时间等待的审批必须由 start_resumable 返回
+ApprovalRequest，由应用写入 ApprovalStore，用户批准后加载并调用 resume_approval。
+恢复会重新计算策略并签发 fresh Grant，不会重新请求已经产生待审批调用的模型步骤。
 
 批次流程：
 
@@ -90,7 +94,7 @@ PolicyContext + 逐调用 PolicyDecision
 
 ## 6. 后续扩展顺序
 
-1. 将审批记录持久化，支持单调用/本 Turn/持久会话三种审批范围。
+1. 将文件 Store 替换为数据库 Store，支持单调用/本 Turn/持久会话三种审批范围。
 2. 将约束真正接入超时、输出大小、网络和沙箱执行器。
 3. 为 Manifest 增加来源、信任级别和签名校验。
 4. 将 Decision、Grant、Approval 和实际结果写入统一审计事件。

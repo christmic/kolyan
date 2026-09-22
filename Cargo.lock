@@ -454,6 +454,7 @@ dependencies = [
  "futures-util",
  "kolyan-model",
  "kolyan-policy",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",
@@ -471,6 +472,7 @@ dependencies = [
  "kolyan-protocol-openai",
  "kolyan-provider-anthropic",
  "kolyan-provider-openai",
+ "kolyan-storage",
  "kolyan-tools",
  "serde",
  "serde_json",
@@ -566,7 +568,11 @@ version = "0.1.0"
 name = "kolyan-storage"
 version = "0.1.0"
 dependencies = [
+ "kolyan-core",
+ "kolyan-model",
  "kolyan-types",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
