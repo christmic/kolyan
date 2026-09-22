@@ -13,7 +13,7 @@ use common::{
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
 use futures_util::StreamExt;
-use kolyan_core::{TurnConfig, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
+use kolyan_core::{TurnConfig, TurnEvent, TurnExecutor, TurnOutcome, TurnRequest, TurnResult};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
     StopReason,
@@ -103,6 +103,44 @@ async fn turn_one_step_completes_across_configured_models() {
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
             run_anthropic_one_step(&provider, &config.qwen_anthropic, entry, "qwen").await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_event_stream_completes_across_configured_models() {
+    let config = load_config();
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_openai_event_stream(&provider, entry, "minimax").await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_anthropic_event_stream(&provider, entry, "minimax").await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_openai_event_stream(&provider, entry, "qwen").await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_anthropic_event_stream(&provider, entry, "qwen").await;
         }
     }
 }
@@ -225,6 +263,110 @@ fn assert_one_step_final(result: &TurnResult, expectations: &common::Expectation
     assert_eq!(result.steps.len(), 1, "[{label}] expected exactly one Step");
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
     assert_expectations(&result.steps[0].response, expectations, label);
+}
+
+async fn run_openai_event_stream(
+    provider: &kolyan_provider_openai::OpenAiProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+) {
+    let fixture = load_fixture("text");
+    let executor = TurnExecutor::new(provider.clone());
+    let request = TurnRequest {
+        turn_id: format!("turn-event-stream-{family}-{}", entry.model),
+        model_request: build_request(
+            family,
+            &entry.model,
+            &fixture,
+            format!("turn-event-stream-{family}-{}", entry.model),
+            entry.max_output_tokens,
+        ),
+        config: TurnConfig { max_steps: 1 },
+    };
+    let events = collect_event_stream(
+        &executor,
+        request,
+        &format!("{family}/openai_compat/{}", entry.model),
+    )
+    .await;
+    assert_event_stream_final(&events, &format!("{family}/openai_compat/{}", entry.model));
+}
+
+async fn run_anthropic_event_stream(
+    provider: &kolyan_provider_anthropic::AnthropicProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+) {
+    let fixture = load_fixture("text");
+    let executor = TurnExecutor::new(provider.clone());
+    let request = TurnRequest {
+        turn_id: format!("turn-event-stream-{family}-{}", entry.model),
+        model_request: build_request(
+            family,
+            &entry.model,
+            &fixture,
+            format!("turn-event-stream-{family}-{}", entry.model),
+            entry.max_output_tokens,
+        ),
+        config: TurnConfig { max_steps: 1 },
+    };
+    let events = collect_event_stream(
+        &executor,
+        request,
+        &format!("{family}/anthropic_compat/{}", entry.model),
+    )
+    .await;
+    assert_event_stream_final(
+        &events,
+        &format!("{family}/anthropic_compat/{}", entry.model),
+    );
+}
+
+async fn collect_event_stream<P, T>(
+    executor: &TurnExecutor<P, T>,
+    request: TurnRequest,
+    label: &str,
+) -> Vec<TurnEvent>
+where
+    P: kolyan_model::ModelProvider,
+    T: kolyan_core::ToolExecutor,
+{
+    let mut stream = executor
+        .execute_event_stream(request, Default::default())
+        .await
+        .unwrap_or_else(|error| panic!("[{label}] turn event stream failed: {error}"));
+    let mut events = Vec::new();
+    while let Some(event) = stream.next().await {
+        events.push(event.unwrap_or_else(|error| panic!("[{label}] turn event failed: {error}")));
+    }
+    events
+}
+
+fn assert_event_stream_final(events: &[TurnEvent], label: &str) {
+    assert!(
+        matches!(events.first(), Some(TurnEvent::Started { .. })),
+        "[{label}] missing Started"
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, TurnEvent::StepStarted { .. }))
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| matches!(event, TurnEvent::StepCompleted { .. }))
+    );
+    assert!(
+        matches!(
+            events.last(),
+            Some(TurnEvent::Completed {
+                outcome: TurnOutcome::FinalAnswer { .. },
+                ..
+            })
+        ),
+        "[{label}] event stream did not end with FinalAnswer"
+    );
 }
 
 async fn run_openai_multi_step(

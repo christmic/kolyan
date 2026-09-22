@@ -91,6 +91,14 @@ multi-step `shell.query` ToolCall → ToolResult loop across both protocols):
 cargo test -p kolyan-integration-tests --test core_turn -- --ignored --nocapture
 ```
 
+The dedicated Turn event-stream matrix is separate from the existing tests and
+consumes `TurnEventStream` for every configured model/protocol combination:
+
+```bash
+cargo test -p kolyan-integration-tests --test core_turn \
+  turn_event_stream_completes_across_configured_models -- --ignored --nocapture
+```
+
 To run the long multi-step case for selected models only, set a comma-separated
 model filter, for example:
 
