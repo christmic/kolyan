@@ -215,10 +215,7 @@ async fn run_openai_one_step(
             format!("turn-one-step-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig {
-            max_steps: 1,
-            tool_dispatch: Default::default(),
-        },
+        config: TurnConfig { max_steps: 1 },
     };
     let result = TurnExecutor::new(provider.clone())
         .execute(request)
@@ -248,10 +245,7 @@ async fn run_anthropic_one_step(
             format!("turn-one-step-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig {
-            max_steps: 1,
-            tool_dispatch: Default::default(),
-        },
+        config: TurnConfig { max_steps: 1 },
     };
     let result = TurnExecutor::new(provider.clone())
         .execute(request)
@@ -287,10 +281,7 @@ async fn run_openai_event_stream(
             format!("turn-event-stream-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig {
-            max_steps: 1,
-            tool_dispatch: Default::default(),
-        },
+        config: TurnConfig { max_steps: 1 },
     };
     let events = collect_event_stream(
         &executor,
@@ -317,10 +308,7 @@ async fn run_anthropic_event_stream(
             format!("turn-event-stream-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig {
-            max_steps: 1,
-            tool_dispatch: Default::default(),
-        },
+        config: TurnConfig { max_steps: 1 },
     };
     let events = collect_event_stream(
         &executor,
@@ -405,7 +393,6 @@ async fn run_openai_multi_step(
                     .as_ref()
                     .and_then(|turn| turn.max_steps)
                     .unwrap_or(12),
-                tool_dispatch: Default::default(),
             },
         })
         .await
@@ -447,7 +434,6 @@ async fn run_anthropic_multi_step(
                     .as_ref()
                     .and_then(|turn| turn.max_steps)
                     .unwrap_or(12),
-                tool_dispatch: Default::default(),
             },
         })
         .await

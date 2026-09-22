@@ -23,42 +23,11 @@ pub struct TurnRequest {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TurnConfig {
     pub max_steps: usize,
-    pub tool_dispatch: ToolDispatchPolicy,
 }
 
 impl Default for TurnConfig {
     fn default() -> Self {
-        Self {
-            max_steps: 1,
-            tool_dispatch: ToolDispatchPolicy::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolDispatchMode {
-    Serial,
-    Parallel,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ToolErrorPolicy {
-    FailTurn,
-    ContinueBatch,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ToolDispatchPolicy {
-    pub mode: ToolDispatchMode,
-    pub on_error: ToolErrorPolicy,
-}
-
-impl Default for ToolDispatchPolicy {
-    fn default() -> Self {
-        Self {
-            mode: ToolDispatchMode::Serial,
-            on_error: ToolErrorPolicy::FailTurn,
-        }
+        Self { max_steps: 1 }
     }
 }
 
@@ -99,20 +68,9 @@ pub enum TurnEvent {
         turn_id: String,
         call: ToolCall,
     },
-    ToolExecutionStarted {
-        turn_id: String,
-        call_id: String,
-        name: String,
-    },
     ToolResult {
         turn_id: String,
         result: ToolResult,
-    },
-    ToolExecutionFailed {
-        turn_id: String,
-        call_id: String,
-        name: String,
-        error: ToolError,
     },
     Completed {
         turn_id: String,
@@ -150,8 +108,6 @@ pub enum TurnError {
     Step(#[from] StepError),
     #[error("turn tool execution failed: {0}")]
     Tool(#[from] ToolError),
-    #[error("tool dispatch mode is not supported: {mode:?}")]
-    UnsupportedToolDispatch { mode: ToolDispatchMode },
     #[error("turn was cancelled")]
     Cancelled,
     #[error("turn timed out")]
@@ -331,11 +287,6 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::ToolCalls => {
-                    if request.config.tool_dispatch.mode == ToolDispatchMode::Parallel {
-                        return Err(TurnError::UnsupportedToolDispatch {
-                            mode: ToolDispatchMode::Parallel,
-                        });
-                    }
                     model_request.messages.push(Message {
                         role: MessageRole::Assistant,
                         content: step.response.content.clone(),
@@ -345,51 +296,15 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             turn_id: turn_id.clone(),
                             call: call.clone(),
                         });
-                        events.push(TurnEvent::ToolExecutionStarted {
+                        let result = self.tool_executor.execute(call).await?;
+                        events.push(TurnEvent::ToolResult {
                             turn_id: turn_id.clone(),
-                            call_id: call.id.clone(),
-                            name: call.name.clone(),
+                            result: result.clone(),
                         });
-                        match self.tool_executor.execute(call.clone()).await {
-                            Ok(result) => {
-                                events.push(TurnEvent::ToolResult {
-                                    turn_id: turn_id.clone(),
-                                    result: result.clone(),
-                                });
-                                model_request.messages.push(Message {
-                                    role: MessageRole::User,
-                                    content: vec![ContentBlock::ToolResult { result }],
-                                });
-                            }
-                            Err(error) => {
-                                events.push(TurnEvent::ToolExecutionFailed {
-                                    turn_id: turn_id.clone(),
-                                    call_id: call.id.clone(),
-                                    name: call.name.clone(),
-                                    error: error.clone(),
-                                });
-                                match request.config.tool_dispatch.on_error {
-                                    ToolErrorPolicy::FailTurn => {
-                                        return Err(TurnError::Tool(error));
-                                    }
-                                    ToolErrorPolicy::ContinueBatch => {
-                                        let result = ToolResult {
-                                            call_id: call.id,
-                                            content: error.to_string(),
-                                            is_error: true,
-                                        };
-                                        events.push(TurnEvent::ToolResult {
-                                            turn_id: turn_id.clone(),
-                                            result: result.clone(),
-                                        });
-                                        model_request.messages.push(Message {
-                                            role: MessageRole::User,
-                                            content: vec![ContentBlock::ToolResult { result }],
-                                        });
-                                    }
-                                }
-                            }
-                        }
+                        model_request.messages.push(Message {
+                            role: MessageRole::User,
+                            content: vec![ContentBlock::ToolResult { result }],
+                        });
                     }
                     model_request.tool_choice = ToolChoice::Auto;
                 }
@@ -677,10 +592,7 @@ mod tests {
             .execute(TurnRequest {
                 turn_id: "turn-multi-step".into(),
                 model_request: request(),
-                config: TurnConfig {
-                    max_steps: 2,
-                    tool_dispatch: ToolDispatchPolicy::default(),
-                },
+                config: TurnConfig { max_steps: 2 },
             })
             .await
             .expect("turn should consume the tool result");
@@ -716,100 +628,5 @@ mod tests {
             .expect_err("cancelled turn should not start");
 
         assert!(matches!(error, TurnError::Cancelled));
-    }
-
-    struct FailingTool;
-
-    impl ToolExecutor for FailingTool {
-        fn execute(&self, _call: ToolCall) -> ToolFuture<'_> {
-            Box::pin(async {
-                Err(ToolError::Failed {
-                    message: "synthetic tool failure".into(),
-                })
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn continue_batch_converts_tool_failure_to_error_result() {
-        let call = ToolCall {
-            id: "call-failed".into(),
-            name: "shell.query".into(),
-            arguments: serde_json::json!({"command": "count_lines"}),
-        };
-        let provider = ScriptedProvider {
-            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
-            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
-            tool_call: call,
-        };
-        let executor = TurnExecutor::with_tools(provider, FailingTool);
-        let execution = executor
-            .execute_with_events(
-                TurnRequest {
-                    turn_id: "turn-continue-batch".into(),
-                    model_request: request(),
-                    config: TurnConfig {
-                        max_steps: 2,
-                        tool_dispatch: ToolDispatchPolicy {
-                            mode: ToolDispatchMode::Serial,
-                            on_error: ToolErrorPolicy::ContinueBatch,
-                        },
-                    },
-                },
-                TurnControl::default(),
-            )
-            .await
-            .expect("continue-batch should let the model observe the tool error");
-
-        assert_eq!(execution.result.steps.len(), 2);
-        assert!(matches!(
-            execution.result.outcome,
-            TurnOutcome::FinalAnswer { .. }
-        ));
-        assert!(execution.events.iter().any(|event| matches!(
-            event,
-            TurnEvent::ToolExecutionFailed { call_id, .. } if call_id == "call-failed"
-        )));
-        assert!(execution.events.iter().any(|event| matches!(
-            event,
-            TurnEvent::ToolResult { result, .. } if result.call_id == "call-failed" && result.is_error
-        )));
-    }
-
-    #[tokio::test]
-    async fn parallel_dispatch_is_rejected_until_parallel_execution_is_enabled() {
-        let call = ToolCall {
-            id: "call-parallel".into(),
-            name: "shell.query".into(),
-            arguments: serde_json::json!({"command": "count_lines"}),
-        };
-        let executor = TurnExecutor::with_tools(
-            MockProvider {
-                stop_reason: StopReason::ToolUse,
-                content: vec![ContentBlock::ToolCall { call }],
-            },
-            MockTool,
-        );
-        let error = executor
-            .execute(TurnRequest {
-                turn_id: "turn-parallel".into(),
-                model_request: request(),
-                config: TurnConfig {
-                    max_steps: 1,
-                    tool_dispatch: ToolDispatchPolicy {
-                        mode: ToolDispatchMode::Parallel,
-                        on_error: ToolErrorPolicy::FailTurn,
-                    },
-                },
-            })
-            .await
-            .expect_err("parallel mode must not silently run serially");
-
-        assert!(matches!(
-            error,
-            TurnError::UnsupportedToolDispatch {
-                mode: ToolDispatchMode::Parallel
-            }
-        ));
     }
 }
