@@ -30,6 +30,10 @@ path = "tests/core/turn_contract.rs"
 name = "policy_authorization"
 path = "tests/core/policy_authorization.rs"
 
+[[test]]
+name = "durable_approval"
+path = "tests/core/durable_approval.rs"
+
 [lints]
 workspace = true
 
@@ -49,6 +53,7 @@ serde_json.workspace = true
 # the model crate is the neutral contract; the protocol crates carry the
 # OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
 kolyan-core = { path = "../kolyan-core" }
+kolyan-storage = { path = "../kolyan-storage" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }

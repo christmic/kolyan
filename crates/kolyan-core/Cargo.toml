@@ -12,9 +12,10 @@ futures-core.workspace = true
 futures-util.workspace = true
 kolyan-model = { path = "../kolyan-model" }
 kolyan-policy = { path = "../kolyan-policy" }
+serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
-serde_json.workspace = true
 tokio = { version = "1", features = ["macros", "rt"] }

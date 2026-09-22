@@ -23,7 +23,7 @@
       },
       "strict": true
     },
-    "max_output_tokens": 256
+    "max_output_tokens": 8192
   },
   "expectations": {
     "stop_reason": "end_turn",

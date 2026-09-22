@@ -5,6 +5,7 @@ use kolyan_model::{
     ModelEvent, ModelProvider, ModelRequest, ModelResponse, ProviderError, ProviderMetadata,
     TokenUsage, ToolCall,
 };
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::sync::{
     Arc,
@@ -21,14 +22,14 @@ pub struct StepRequest {
     pub options: StepExecutionOptions,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StepResult {
     pub step_id: String,
     pub response: ModelResponse,
     pub outcome: StepOutcome,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StepOutcome {
     FinalAnswer,
     ToolCalls,

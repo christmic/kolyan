@@ -18,6 +18,43 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use thiserror::Error;
 
+/// Durable checkpoint for a turn paused at an approval boundary.
+///
+/// This contains the exact pending call and the model context that led to it,
+/// so resuming does not call the model again for the completed step.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TurnContinuation {
+    pub continuation_id: String,
+    pub approval_id: String,
+    pub turn_id: String,
+    pub model_request: ModelRequest,
+    pub assistant_content: Vec<ContentBlock>,
+    pub pending_calls: Vec<ToolCall>,
+    pub steps: Vec<StepResult>,
+    pub max_steps: usize,
+    pub next_step_index: usize,
+    pub call_id: String,
+    pub tool_name: String,
+    pub args_fingerprint: String,
+    pub policy_version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ApprovalRequest {
+    pub approval_id: String,
+    pub turn_id: String,
+    pub call_id: String,
+    pub tool_name: String,
+    pub reason: String,
+    pub continuation: TurnContinuation,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ResumableTurn {
+    Completed(Box<TurnExecution>),
+    AwaitingApproval(Box<ApprovalRequest>),
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TurnRequest {
     pub turn_id: String,
@@ -377,6 +414,7 @@ pub struct TurnControl {
 struct TurnControlState {
     cancelled: AtomicBool,
     approved_tools: Mutex<HashSet<String>>,
+    waiting_for_approval: Mutex<HashSet<String>>,
     waker: AtomicWaker,
 }
 
@@ -391,12 +429,26 @@ impl TurnControl {
     }
 
     pub fn approve_tool(&self, name: impl Into<String>) {
+        let name = name.into();
         self.state
             .approved_tools
             .lock()
             .expect("approval lock must not be poisoned")
-            .insert(name.into());
+            .insert(name.clone());
+        self.state
+            .waiting_for_approval
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .remove(&name);
         self.state.waker.wake();
+    }
+
+    pub fn is_waiting_for_approval(&self, name: &str) -> bool {
+        self.state
+            .waiting_for_approval
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .contains(name)
     }
 
     fn wait_cancelled(&self) -> CancellationFuture {
@@ -435,6 +487,11 @@ impl Future for ApprovalFuture {
         {
             return Poll::Ready(());
         }
+        self.state
+            .waiting_for_approval
+            .lock()
+            .expect("approval lock must not be poisoned")
+            .insert(self.tool_name.clone());
         self.state.waker.register(cx.waker());
         if self
             .state
@@ -524,6 +581,290 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 }
 
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
+    /// Starts an execution that can cross a process boundary at approval.
+    ///
+    /// Unlike execute_with_events, this method never waits on TurnControl.
+    /// It returns a serializable checkpoint when policy requires approval.
+    pub async fn start_resumable(&self, request: TurnRequest) -> Result<ResumableTurn, TurnError> {
+        validate_request(&request)?;
+        let turn_id = request.turn_id.clone();
+        let mut model_request = request.model_request.clone();
+        let step_id = format!("{}-step-0", request.turn_id);
+        model_request.request_id = step_id.clone();
+        let step = self
+            .step_executor
+            .execute(StepRequest {
+                step_id: step_id.clone(),
+                model_request: model_request.clone(),
+                options: StepExecutionOptions::default(),
+            })
+            .await
+            .map_err(map_step_error)?;
+        let mut events = vec![
+            TurnEvent::Started {
+                turn_id: turn_id.clone(),
+            },
+            TurnEvent::StepStarted {
+                turn_id: turn_id.clone(),
+                step_id,
+            },
+            TurnEvent::StepCompleted {
+                turn_id: turn_id.clone(),
+                step: step.clone(),
+            },
+        ];
+        match step.outcome {
+            StepOutcome::FinalAnswer | StepOutcome::Refused | StepOutcome::Incomplete => {
+                let (outcome, end_reason) = outcome_from_step(&step);
+                events.push(TurnEvent::Completed {
+                    turn_id: turn_id.clone(),
+                    outcome: outcome.clone(),
+                });
+                return Ok(ResumableTurn::Completed(Box::new(TurnExecution {
+                    result: TurnResult {
+                        turn_id,
+                        outcome,
+                        end_reason,
+                        steps: vec![step],
+                    },
+                    events,
+                })));
+            }
+            StepOutcome::ToolCalls => {}
+        }
+
+        let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
+        let Some(policy) = &self.policy_engine else {
+            return Err(TurnError::InvalidRequest {
+                message: "resumable approval requires a policy engine".into(),
+            });
+        };
+        let plan = policy.resolve_batch(
+            &PolicyContext {
+                turn_id: Some(request.turn_id.clone()),
+                ..PolicyContext::default()
+            },
+            batch.calls(),
+        );
+        let Some(decision) = plan
+            .decisions
+            .iter()
+            .find(|item| item.decision.kind == PolicyDecisionKind::RequireApproval)
+        else {
+            return Err(TurnError::InvalidRequest {
+                message: "resumable start requires an approval boundary".into(),
+            });
+        };
+        let call = batch
+            .call(&decision.call_id)
+            .expect("planned call exists")
+            .clone();
+        let pending_calls = batch.into_calls();
+        events.push(TurnEvent::ToolCallRequested {
+            turn_id: request.turn_id.clone(),
+            call: call.clone(),
+        });
+        events.push(TurnEvent::ApprovalRequested {
+            turn_id: request.turn_id.clone(),
+            call_id: call.id.clone(),
+            name: call.name.clone(),
+        });
+        Ok(ResumableTurn::AwaitingApproval(Box::new(
+            make_approval_request(
+                &request,
+                model_request,
+                vec![step],
+                pending_calls,
+                &call,
+                decision.decision.reason.clone(),
+                decision.decision.policy_version.clone(),
+            ),
+        )))
+    }
+
+    /// Resumes a persisted approval without relying on the original task or
+    /// process. The approval id is supplied separately to prevent accidental
+    /// acceptance of a checkpoint for another user decision.
+    pub async fn resume_approval(
+        &self,
+        approval: ApprovalRequest,
+        approved_approval_id: &str,
+    ) -> Result<ResumableTurn, TurnError> {
+        if approval.approval_id != approved_approval_id
+            || approval.continuation.approval_id != approval.approval_id
+        {
+            return Err(TurnError::InvalidRequest {
+                message: "approval id does not match checkpoint".into(),
+            });
+        }
+        let continuation = approval.continuation;
+        let Some(call) = continuation
+            .pending_calls
+            .iter()
+            .find(|call| call.id == continuation.call_id)
+            .cloned()
+        else {
+            return Err(TurnError::InvalidRequest {
+                message: "checkpoint is missing its pending call".into(),
+            });
+        };
+        if call.name != continuation.tool_name
+            || serde_json::to_string(&call.arguments).map_err(|error| {
+                TurnError::InvalidRequest {
+                    message: format!("cannot fingerprint tool arguments: {error}"),
+                }
+            })? != continuation.args_fingerprint
+        {
+            return Err(TurnError::InvalidRequest {
+                message: "checkpoint tool call was modified".into(),
+            });
+        }
+        let Some(policy) = &self.policy_engine else {
+            return Err(TurnError::InvalidRequest {
+                message: "resumable approval requires a policy engine".into(),
+            });
+        };
+        let plan = policy.resolve_batch(
+            &PolicyContext {
+                turn_id: Some(continuation.turn_id.clone()),
+                ..PolicyContext::default()
+            },
+            &continuation.pending_calls,
+        );
+        let Some(decision) = plan
+            .decisions
+            .iter()
+            .find(|item| item.call_id == continuation.call_id)
+        else {
+            return Err(TurnError::InvalidRequest {
+                message: "checkpoint call is absent from the current policy plan".into(),
+            });
+        };
+        if decision.decision.kind != PolicyDecisionKind::RequireApproval
+            || decision.decision.policy_version != continuation.policy_version
+        {
+            return Err(TurnError::InvalidRequest {
+                message: "approval is stale under the current policy".into(),
+            });
+        }
+        let grant = decision
+            .decision
+            .clone()
+            .into_approved_grant(&call)
+            .map_err(|error| TurnError::InvalidRequest {
+                message: error.to_string(),
+            })?;
+        let control = TurnControl::default();
+        let tool_result = self
+            .execute_tool(call.clone(), &control, Some(grant))
+            .await?;
+        let mut events = vec![
+            TurnEvent::Started {
+                turn_id: continuation.turn_id.clone(),
+            },
+            TurnEvent::ToolExecutionStarted {
+                turn_id: continuation.turn_id.clone(),
+                call_id: call.id.clone(),
+                name: call.name.clone(),
+            },
+            TurnEvent::ToolResult {
+                turn_id: continuation.turn_id.clone(),
+                result: tool_result.clone(),
+            },
+        ];
+        let mut model_request = continuation.model_request;
+        append_tool_context(
+            &mut model_request.messages,
+            &continuation.assistant_content,
+            vec![tool_result],
+        );
+        model_request.tool_choice = ToolChoice::Auto;
+        let step_id = format!(
+            "{}-step-{}",
+            continuation.turn_id, continuation.next_step_index
+        );
+        model_request.request_id = step_id.clone();
+        let step = self
+            .step_executor
+            .execute(StepRequest {
+                step_id: step_id.clone(),
+                model_request: model_request.clone(),
+                options: StepExecutionOptions::default(),
+            })
+            .await
+            .map_err(map_step_error)?;
+        events.push(TurnEvent::StepStarted {
+            turn_id: continuation.turn_id.clone(),
+            step_id,
+        });
+        events.push(TurnEvent::StepCompleted {
+            turn_id: continuation.turn_id.clone(),
+            step: step.clone(),
+        });
+        if step.outcome != StepOutcome::ToolCalls {
+            let (outcome, end_reason) = outcome_from_step(&step);
+            events.push(TurnEvent::Completed {
+                turn_id: continuation.turn_id.clone(),
+                outcome: outcome.clone(),
+            });
+            return Ok(ResumableTurn::Completed(Box::new(TurnExecution {
+                result: TurnResult {
+                    turn_id: continuation.turn_id,
+                    outcome,
+                    end_reason,
+                    steps: continuation
+                        .steps
+                        .into_iter()
+                        .chain(std::iter::once(step))
+                        .collect(),
+                },
+                events,
+            })));
+        }
+        let next_batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
+        let next_plan = policy.resolve_batch(
+            &PolicyContext {
+                turn_id: Some(continuation.turn_id.clone()),
+                ..PolicyContext::default()
+            },
+            next_batch.calls(),
+        );
+        let Some(next_decision) = next_plan
+            .decisions
+            .iter()
+            .find(|item| item.decision.kind == PolicyDecisionKind::RequireApproval)
+        else {
+            return Err(TurnError::InvalidRequest {
+                message: "resumable v1 requires the next step to end or request approval".into(),
+            });
+        };
+        let next_call = next_batch
+            .call(&next_decision.call_id)
+            .expect("planned call exists")
+            .clone();
+        let next_pending_calls = next_batch.into_calls();
+        let mut steps = continuation.steps;
+        steps.push(step);
+        let next_request = TurnRequest {
+            turn_id: continuation.turn_id.clone(),
+            model_request: model_request.clone(),
+            config: TurnConfig {
+                max_steps: continuation.max_steps,
+            },
+        };
+        Ok(ResumableTurn::AwaitingApproval(Box::new(
+            make_approval_request(
+                &next_request,
+                model_request,
+                steps,
+                next_pending_calls,
+                &next_call,
+                next_decision.decision.reason.clone(),
+                next_decision.decision.policy_version.clone(),
+            ),
+        )))
+    }
+
     async fn execute_tool(
         &self,
         call: ToolCall,
@@ -893,6 +1234,72 @@ fn validate_request(request: &TurnRequest) -> Result<(), TurnError> {
         });
     }
     Ok(())
+}
+
+fn outcome_from_step(step: &StepResult) -> (TurnOutcome, TurnEndReason) {
+    match step.outcome {
+        StepOutcome::FinalAnswer => (
+            TurnOutcome::FinalAnswer {
+                response: step.response.clone(),
+            },
+            TurnEndReason::FinalAnswer,
+        ),
+        StepOutcome::Refused => (
+            TurnOutcome::Refused {
+                response: step.response.clone(),
+            },
+            TurnEndReason::Refused,
+        ),
+        StepOutcome::Incomplete => (
+            TurnOutcome::Incomplete {
+                response: step.response.clone(),
+            },
+            TurnEndReason::Incomplete,
+        ),
+        StepOutcome::ToolCalls => (TurnOutcome::MaxSteps, TurnEndReason::MaxSteps),
+    }
+}
+
+fn make_approval_request(
+    request: &TurnRequest,
+    model_request: ModelRequest,
+    steps: Vec<StepResult>,
+    pending_calls: Vec<ToolCall>,
+    call: &ToolCall,
+    reason: String,
+    policy_version: String,
+) -> ApprovalRequest {
+    let args_fingerprint =
+        serde_json::to_string(&call.arguments).expect("JSON tool arguments must be serializable");
+    let approval_id = format!("{}-{}", request.turn_id, call.id);
+    ApprovalRequest {
+        approval_id: approval_id.clone(),
+        turn_id: request.turn_id.clone(),
+        call_id: call.id.clone(),
+        tool_name: call.name.clone(),
+        reason,
+        continuation: TurnContinuation {
+            continuation_id: format!("continuation-{}", approval_id),
+            approval_id,
+            turn_id: request.turn_id.clone(),
+            model_request,
+            assistant_content: steps
+                .last()
+                .map(|step| step.response.content.clone())
+                .unwrap_or_default(),
+            pending_calls,
+            steps,
+            max_steps: request.config.max_steps,
+            next_step_index: request
+                .config
+                .max_steps
+                .saturating_sub(request.config.max_steps.saturating_sub(1)),
+            call_id: call.id.clone(),
+            tool_name: call.name.clone(),
+            args_fingerprint,
+            policy_version,
+        },
+    }
 }
 
 fn map_step_error(error: StepError) -> TurnError {
@@ -1362,6 +1769,117 @@ mod tests {
             execution.result.outcome,
             TurnOutcome::FinalAnswer { .. }
         ));
+    }
+
+    #[tokio::test]
+    async fn durable_approval_resumes_without_replaying_the_first_model_step() {
+        let call = ToolCall {
+            id: "call-durable".into(),
+            name: "shell.query".into(),
+            arguments: serde_json::json!({"command": "count_lines"}),
+        };
+        let provider = ScriptedProvider {
+            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tool_call: call,
+        };
+        let model_calls = provider.calls.clone();
+        let mut policy = PolicyEngine::default();
+        policy.register(kolyan_policy::ToolManifest {
+            tool_name: "shell.query".into(),
+            capabilities: [kolyan_policy::Capability::ProcessInspect]
+                .into_iter()
+                .collect(),
+            effects: [kolyan_policy::Effect::Read].into_iter().collect(),
+            path_scopes: Vec::new(),
+            idempotency: kolyan_policy::Idempotency::Idempotent,
+            approval: kolyan_policy::ApprovalMode::Always,
+        });
+        let executed = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let executor = TurnExecutor::with_tools(
+            provider,
+            CountingTool {
+                executed: executed.clone(),
+            },
+        )
+        .with_policy_engine(Arc::new(policy));
+        let awaiting = executor
+            .start_resumable(TurnRequest {
+                turn_id: "turn-durable".into(),
+                model_request: request(),
+                config: TurnConfig { max_steps: 2 },
+            })
+            .await
+            .expect("start should return a durable boundary");
+        let approval = match awaiting {
+            ResumableTurn::AwaitingApproval(value) => *value,
+            ResumableTurn::Completed(_) => panic!("expected approval"),
+        };
+        assert_eq!(model_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let persisted = serde_json::to_vec(&approval).expect("checkpoint serializes");
+        let restored: ApprovalRequest =
+            serde_json::from_slice(&persisted).expect("checkpoint restores");
+        let completed = executor
+            .resume_approval(restored, &approval.approval_id)
+            .await
+            .expect("resume should complete");
+        let execution = match completed {
+            ResumableTurn::Completed(value) => *value,
+            ResumableTurn::AwaitingApproval(_) => panic!("expected final answer"),
+        };
+        assert_eq!(model_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert!(matches!(
+            execution.result.outcome,
+            TurnOutcome::FinalAnswer { .. }
+        ));
+        assert_eq!(execution.result.steps.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn durable_approval_rejects_a_tampered_checkpoint() {
+        let call = ToolCall {
+            id: "call-tampered".into(),
+            name: "shell.query".into(),
+            arguments: serde_json::json!({"command": "count_lines"}),
+        };
+        let provider = ScriptedProvider {
+            calls: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            tool_call: call,
+        };
+        let mut policy = PolicyEngine::default();
+        policy.register(kolyan_policy::ToolManifest {
+            tool_name: "shell.query".into(),
+            capabilities: [kolyan_policy::Capability::ProcessInspect]
+                .into_iter()
+                .collect(),
+            effects: [kolyan_policy::Effect::Read].into_iter().collect(),
+            path_scopes: Vec::new(),
+            idempotency: kolyan_policy::Idempotency::Idempotent,
+            approval: kolyan_policy::ApprovalMode::Always,
+        });
+        let executor =
+            TurnExecutor::with_tools(provider, MockTool).with_policy_engine(Arc::new(policy));
+        let awaiting = executor
+            .start_resumable(TurnRequest {
+                turn_id: "turn-tampered".into(),
+                model_request: request(),
+                config: TurnConfig { max_steps: 2 },
+            })
+            .await
+            .expect("start should return a durable boundary");
+        let mut approval = match awaiting {
+            ResumableTurn::AwaitingApproval(value) => *value,
+            ResumableTurn::Completed(_) => panic!("expected approval"),
+        };
+        approval.continuation.pending_calls[0].arguments =
+            serde_json::json!({"command": "delete_everything"});
+        let error = executor
+            .resume_approval(approval, "turn-tampered-call-tampered")
+            .await
+            .expect_err("tampered checkpoint must fail closed");
+        assert!(matches!(error, TurnError::InvalidRequest { .. }));
     }
 
     struct CountingTool {

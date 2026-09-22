@@ -100,7 +100,22 @@ async fn run_allowed<P: ModelProvider + Clone + 'static>(
             )
             .await
     });
-    tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    let mut waiting = false;
+    for _ in 0..300 {
+        if control.is_waiting_for_approval("file.write") {
+            waiting = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        waiting,
+        "real Turn should expose an approval wait before approval"
+    );
+    assert!(
+        !task.is_finished(),
+        "real Turn must not finish before approval"
+    );
     control.approve_tool("file.write");
     let execution = task
         .await
