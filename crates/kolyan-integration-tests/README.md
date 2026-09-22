@@ -241,8 +241,9 @@ the `text` fixture, including `Completed`/`Usage`/`TextDelta` details.
 The Step integration test also captures the normalized Step event stream for
 the multi-event `tool_call` fixture. It writes the actual JSONL stream to a
 temporary file and compares it with the checked-in protocol-specific snapshot
-under `tests/expected/step/`. Dynamic response IDs, text fragments, provider
-metadata, and argument values are intentionally normalized out of the snapshot.
+under `tests/expected/step/`. The temporary actual JSONL keeps text,
+reasoning, tool-argument, usage, and structured-output payloads for debugging;
+comparison ignores dynamic payload values and checks event semantics/order.
 
 Run it with:
 
@@ -262,7 +263,7 @@ cargo test -p kolyan-integration-tests --test core_step \
 
 The matrix contract requires the Tool Call lifecycle and terminal event in
 order. Optional `Started`, `ReasoningDelta`, `Usage`, and provider metadata
-events remain visible in the temporary actual JSONL snapshot but are not
+events remain visible in the temporary actual JSONL snapshot; they are not
 required because models expose those events differently.
 
 ## What happens if a `KOLYAN_*_API_KEY` env var is unset

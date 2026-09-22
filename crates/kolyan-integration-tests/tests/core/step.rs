@@ -384,10 +384,8 @@ async fn collect_stream_snapshot<P: kolyan_model::ModelProvider>(
             assert_expectations(&result.response, expectations, label);
             final_result = Some(result.clone());
         }
-        if let Some(record) = stable_stream_record(&event)
-            && records.last() != Some(&record)
-        {
-            records.push(record);
+        if let Some(record) = stable_stream_record(&event) {
+            append_snapshot_record(&mut records, record);
         }
     }
 
@@ -400,6 +398,60 @@ async fn collect_stream_snapshot<P: kolyan_model::ModelProvider>(
         .join("\n")
         + "\n";
     (snapshot, result)
+}
+
+fn append_snapshot_record(records: &mut Vec<Value>, record: Value) {
+    let Some(kind) = record.get("event").and_then(Value::as_str) else {
+        records.push(record);
+        return;
+    };
+    let Some(previous) = records.last_mut() else {
+        records.push(record);
+        return;
+    };
+    if previous.get("event").and_then(Value::as_str) != Some(kind) {
+        records.push(record);
+        return;
+    }
+    let Some(previous_object) = previous.as_object_mut() else {
+        records.push(record);
+        return;
+    };
+    let Some(mut record_object) = record.as_object().cloned() else {
+        records.push(record);
+        return;
+    };
+    match kind {
+        "text_delta" | "reasoning_delta" => {
+            let previous_text = previous_object
+                .get("text")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let next_text = record_object
+                .remove("text")
+                .and_then(|value| value.as_str().map(String::from))
+                .unwrap_or_default();
+            previous_object.insert(
+                "text".into(),
+                Value::String(format!("{previous_text}{next_text}")),
+            );
+        }
+        "tool_call_arguments_delta" => {
+            let previous_delta = previous_object
+                .get("delta")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let next_delta = record_object
+                .remove("delta")
+                .and_then(|value| value.as_str().map(String::from))
+                .unwrap_or_default();
+            previous_object.insert(
+                "delta".into(),
+                Value::String(format!("{previous_delta}{next_delta}")),
+            );
+        }
+        _ => records.push(record),
+    }
 }
 
 fn canonicalize_tool_call_order(records: &mut Vec<Value>) {
@@ -426,24 +478,31 @@ fn is_tool_call_completed(record: &Value) -> bool {
 fn stable_stream_record(event: &StepEvent) -> Option<Value> {
     let record = match event {
         StepEvent::Started { .. } => json!({"event": "started"}),
-        StepEvent::TextDelta { .. } => json!({"event": "text_delta"}),
-        StepEvent::ReasoningDelta { .. } => json!({"event": "reasoning_delta"}),
+        StepEvent::TextDelta { text, .. } => json!({"event": "text_delta", "text": text}),
+        StepEvent::ReasoningDelta { text, .. } => {
+            json!({"event": "reasoning_delta", "text": text})
+        }
         StepEvent::ToolCallStarted { name, .. } => {
             json!({"event": "tool_call_started", "name": name})
         }
-        StepEvent::ToolCallArgumentsDelta { .. } => {
-            json!({"event": "tool_call_arguments_delta"})
+        StepEvent::ToolCallArgumentsDelta { delta, .. } => {
+            json!({"event": "tool_call_arguments_delta", "delta": delta})
         }
         StepEvent::ToolCallCompleted { call, .. } => {
-            json!({"event": "tool_call_completed", "name": call.name})
+            json!({
+                "event": "tool_call_completed",
+                "name": call.name,
+                "arguments": call.arguments
+            })
         }
-        StepEvent::Usage { .. } => json!({"event": "usage"}),
+        StepEvent::Usage { usage, .. } => json!({"event": "usage", "usage": usage}),
         StepEvent::Provider { .. } => return None,
         StepEvent::Completed(result) => {
             json!({
                 "event": "completed",
                 "stop_reason": stop_reason_name(&result.response),
-                "structured_output": result.response.structured_output.is_some()
+                "structured_output_present": result.response.structured_output.is_some(),
+                "structured_output": result.response.structured_output
             })
         }
     };
@@ -461,28 +520,7 @@ fn stop_reason_name(response: &ModelResponse) -> &'static str {
 }
 
 fn assert_snapshot_file(label: &str, actual: &str, expected_path: &Path) {
-    let unique = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock must be after unix epoch")
-        .as_nanos();
-    let temp_path = std::env::temp_dir().join(format!(
-        "kolyan-step-stream-{}-{unique}.jsonl",
-        std::process::id()
-    ));
-    fs::write(&temp_path, actual).expect("stream snapshot must write to temp file");
-    let expected = fs::read_to_string(expected_path).unwrap_or_else(|error| {
-        panic!(
-            "[{label}] expected stream snapshot missing at {}: {error}",
-            expected_path.display()
-        )
-    });
-    assert_eq!(
-        actual,
-        expected,
-        "[{label}] stream snapshot mismatch; actual output is at {}",
-        temp_path.display()
-    );
-    fs::remove_file(temp_path).expect("successful stream snapshot should clean up temp file");
+    assert_snapshot_contract_file(label, actual, expected_path);
 }
 
 fn assert_snapshot_contract_file(label: &str, actual: &str, expected_path: &Path) {
