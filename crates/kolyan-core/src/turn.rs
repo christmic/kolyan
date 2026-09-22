@@ -1,4 +1,6 @@
 use crate::{StepError, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult};
+use futures_core::Stream;
+use futures_util::stream;
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
     ToolResult,
@@ -44,6 +46,44 @@ pub struct TurnResult {
     pub turn_id: String,
     pub outcome: TurnOutcome,
     pub steps: Vec<StepResult>,
+}
+
+/// Turn-level observation events. Fine-grained model deltas remain owned by
+/// the StepEvent stream; TurnEvent describes the lifecycle and orchestration
+/// around those Steps.
+#[derive(Debug, Clone, PartialEq)]
+pub enum TurnEvent {
+    Started {
+        turn_id: String,
+    },
+    StepStarted {
+        turn_id: String,
+        step_id: String,
+    },
+    StepCompleted {
+        turn_id: String,
+        step: StepResult,
+    },
+    ToolCallRequested {
+        turn_id: String,
+        call: ToolCall,
+    },
+    ToolResult {
+        turn_id: String,
+        result: ToolResult,
+    },
+    Completed {
+        turn_id: String,
+        outcome: TurnOutcome,
+    },
+}
+
+pub type TurnEventStream = Pin<Box<dyn Stream<Item = Result<TurnEvent, TurnError>> + Send>>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct TurnExecution {
+    pub result: TurnResult,
+    pub events: Vec<TurnEvent>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -146,8 +186,10 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
     pub async fn execute(&self, request: TurnRequest) -> Result<TurnResult, TurnError> {
-        self.execute_with_control(request, TurnControl::default())
-            .await
+        Ok(self
+            .execute_with_events(request, TurnControl::default())
+            .await?
+            .result)
     }
 
     pub async fn execute_with_control(
@@ -155,13 +197,25 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         request: TurnRequest,
         control: TurnControl,
     ) -> Result<TurnResult, TurnError> {
+        Ok(self.execute_with_events(request, control).await?.result)
+    }
+
+    pub async fn execute_with_events(
+        &self,
+        request: TurnRequest,
+        control: TurnControl,
+    ) -> Result<TurnExecution, TurnError> {
         validate_request(&request)?;
         if control.is_cancelled() {
             return Err(TurnError::Cancelled);
         }
 
+        let turn_id = request.turn_id.clone();
         let mut model_request = request.model_request;
         let mut steps = Vec::new();
+        let mut events = vec![TurnEvent::Started {
+            turn_id: turn_id.clone(),
+        }];
 
         for step_index in 0..request.config.max_steps {
             if control.is_cancelled() {
@@ -169,6 +223,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             }
 
             let step_id = format!("{}-step-{step_index}", request.turn_id);
+            events.push(TurnEvent::StepStarted {
+                turn_id: turn_id.clone(),
+                step_id: step_id.clone(),
+            });
             model_request.request_id = step_id.clone();
             let step = self
                 .step_executor
@@ -180,34 +238,53 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 .await
                 .map_err(map_step_error)?;
             steps.push(step.clone());
+            events.push(TurnEvent::StepCompleted {
+                turn_id: turn_id.clone(),
+                step: step.clone(),
+            });
 
             match step.outcome {
                 StepOutcome::FinalAnswer => {
-                    return Ok(TurnResult {
+                    let result = TurnResult {
                         turn_id: request.turn_id,
                         outcome: TurnOutcome::FinalAnswer {
                             response: step.response,
                         },
                         steps,
+                    };
+                    events.push(TurnEvent::Completed {
+                        turn_id: turn_id.clone(),
+                        outcome: result.outcome.clone(),
                     });
+                    return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::Refused => {
-                    return Ok(TurnResult {
+                    let result = TurnResult {
                         turn_id: request.turn_id,
                         outcome: TurnOutcome::Refused {
                             response: step.response,
                         },
                         steps,
+                    };
+                    events.push(TurnEvent::Completed {
+                        turn_id: turn_id.clone(),
+                        outcome: result.outcome.clone(),
                     });
+                    return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::Incomplete => {
-                    return Ok(TurnResult {
+                    let result = TurnResult {
                         turn_id: request.turn_id,
                         outcome: TurnOutcome::Incomplete {
                             response: step.response,
                         },
                         steps,
+                    };
+                    events.push(TurnEvent::Completed {
+                        turn_id: turn_id.clone(),
+                        outcome: result.outcome.clone(),
                     });
+                    return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::ToolCalls => {
                     model_request.messages.push(Message {
@@ -215,7 +292,15 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         content: step.response.content.clone(),
                     });
                     for call in tool_calls(&step.response.content) {
+                        events.push(TurnEvent::ToolCallRequested {
+                            turn_id: turn_id.clone(),
+                            call: call.clone(),
+                        });
                         let result = self.tool_executor.execute(call).await?;
+                        events.push(TurnEvent::ToolResult {
+                            turn_id: turn_id.clone(),
+                            result: result.clone(),
+                        });
                         model_request.messages.push(Message {
                             role: MessageRole::User,
                             content: vec![ContentBlock::ToolResult { result }],
@@ -227,6 +312,16 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         }
 
         Err(TurnError::MaxSteps)
+    }
+
+    pub async fn execute_event_stream(
+        &self,
+        request: TurnRequest,
+        control: TurnControl,
+    ) -> Result<TurnEventStream, TurnError> {
+        let execution = self.execute_with_events(request, control).await?;
+        let events = execution.events.into_iter().map(Ok);
+        Ok(Box::pin(stream::iter(events)))
     }
 }
 
@@ -265,7 +360,7 @@ fn tool_calls(content: &[ContentBlock]) -> Vec<ToolCall> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures_util::stream;
+    use futures_util::{StreamExt, stream};
     use kolyan_model::{
         ContentBlock, ModelEvent, ModelEventStream, ModelRef, ProviderFuture, StopReason,
         TokenUsage, ToolChoice,
@@ -333,6 +428,58 @@ mod tests {
         assert_eq!(result.turn_id, "turn-1");
         assert_eq!(result.steps.len(), 1);
         assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
+    }
+
+    #[tokio::test]
+    async fn emits_turn_lifecycle_events_for_a_final_answer() {
+        let executor = TurnExecutor::new(MockProvider {
+            stop_reason: StopReason::EndTurn,
+            content: vec![ContentBlock::Text {
+                text: "answer".into(),
+            }],
+        });
+        let execution = executor
+            .execute_with_events(
+                TurnRequest {
+                    turn_id: "turn-events".into(),
+                    model_request: request(),
+                    config: TurnConfig::default(),
+                },
+                TurnControl::default(),
+            )
+            .await
+            .expect("turn events should complete");
+
+        assert!(matches!(execution.events[0], TurnEvent::Started { .. }));
+        assert!(matches!(execution.events[1], TurnEvent::StepStarted { .. }));
+        assert!(matches!(
+            execution.events[2],
+            TurnEvent::StepCompleted { .. }
+        ));
+        assert!(matches!(
+            execution.events[3],
+            TurnEvent::Completed {
+                outcome: TurnOutcome::FinalAnswer { .. },
+                ..
+            }
+        ));
+
+        let mut stream = executor
+            .execute_event_stream(
+                TurnRequest {
+                    turn_id: "turn-event-stream".into(),
+                    model_request: request(),
+                    config: TurnConfig::default(),
+                },
+                TurnControl::default(),
+            )
+            .await
+            .expect("turn event stream should open");
+        let mut count = 0;
+        while stream.next().await.is_some() {
+            count += 1;
+        }
+        assert_eq!(count, 4);
     }
 
     #[tokio::test]

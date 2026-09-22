@@ -10,5 +10,6 @@ pub use step::{
 };
 pub use turn::{
     NoopToolExecutor, ToolError, ToolExecutor, ToolFuture, TurnConfig, TurnControl, TurnError,
-    TurnExecutor, TurnOutcome, TurnRequest, TurnResult, TurnState,
+    TurnEvent, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest, TurnResult,
+    TurnState,
 };
