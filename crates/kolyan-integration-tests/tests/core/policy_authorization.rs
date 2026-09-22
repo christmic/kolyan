@@ -183,10 +183,12 @@ fn authorized_executor<P>(
         approval: ApprovalMode::Never,
     });
     policy.restrict_workspace("safe");
+    let policy = Arc::new(policy);
     TurnExecutor::with_tools(
         provider,
-        PolicyEnforcingTool::new(RestrictedFileTool::new(root), Arc::new(policy)),
+        PolicyEnforcingTool::new(RestrictedFileTool::new(root), Arc::clone(&policy)),
     )
+    .with_policy_engine(policy)
 }
 
 fn turn_config(fixture: &common::Fixture) -> TurnConfig {
