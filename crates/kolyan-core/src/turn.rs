@@ -1,6 +1,7 @@
 use crate::{StepError, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult};
 use kolyan_model::{
-    ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolResult,
+    ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
+    ToolResult,
 };
 use std::future::Future;
 use std::pin::Pin;
@@ -220,6 +221,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             content: vec![ContentBlock::ToolResult { result }],
                         });
                     }
+                    model_request.tool_choice = ToolChoice::Auto;
                 }
             }
         }

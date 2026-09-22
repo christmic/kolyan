@@ -247,7 +247,12 @@ fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
         ContentBlock::Document { source, title } => json!({"role":"user","content":[{"type":"input_file","file_data":image_data(source),"filename":title}]}),
         ContentBlock::ToolCall { call } => json!({"type":"function_call","call_id":call.id,"name":call.name,"arguments":call.arguments.to_string()}),
         ContentBlock::ToolResult { result } => json!({"type":"function_call_output","call_id":result.call_id,"output":result.content}),
-        ContentBlock::Reasoning { text, .. } => json!({"type":"reasoning","summary":[{"type":"summary_text","text":text}]}),
+        ContentBlock::Reasoning {
+            opaque: Some(raw), ..
+        } => raw.clone(),
+        ContentBlock::Reasoning { text, .. } => {
+            json!({"type":"reasoning","summary":[{"type":"summary_text","text":text}]})
+        }
     }).collect()
 }
 
@@ -395,7 +400,16 @@ fn map_event(
                 raw: Some(Value::Object(event.fields.into_iter().collect())),
             }))
         }
-        "response.failed" => Err(provider_error("OpenAI response failed")),
+        "response.failed" => Err(provider_error(format!(
+            "OpenAI response failed: {}",
+            event
+                .fields
+                .get("response")
+                .and_then(|response| response.get("error"))
+                .or_else(|| event.fields.get("error"))
+                .map(Value::to_string)
+                .unwrap_or_else(|| "unknown server error".into())
+        ))),
         _ => Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
             provider: "openai".into(),
             raw: Some(Value::Object(event.fields.into_iter().collect())),

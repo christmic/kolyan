@@ -18,6 +18,10 @@ path = "tests/provider/anthropic_compat.rs"
 name = "core_step"
 path = "tests/core/step.rs"
 
+[[test]]
+name = "core_turn"
+path = "tests/core/turn.rs"
+
 [lints]
 workspace = true
 
@@ -40,6 +44,7 @@ kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
+kolyan-tools = { path = "../kolyan-tools" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
 

@@ -1,0 +1,47 @@
+{
+  "request": {
+    "request_id": "live-turn-ten-step-001",
+    "system": "这是一个真实的多步骤工具测试。用户给出了十项查询任务。每次回复最多调用一次 shell.query，并且必须按照任务顺序逐项完成；工具返回结果后继续下一项。完成全部十项后，才用一句中文总结并结束，不能提前回答，也不能一次调用多个工具。",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "请严格按顺序完成以下十项任务，每项都必须调用一次 shell.query，完成第十项后再总结：1) 统计 tests 目录条目数；2) 统计 tests/core 目录条目数；3) 统计 tests/provider 目录条目数；4) 统计 tests/fixtures 目录条目数；5) 统计 tests/core/step.rs 行数；6) 统计 tests/core/turn.rs 行数；7) 统计 tests/provider/openai_compat.rs 行数；8) 统计 tests/provider/anthropic_compat.rs 行数；9) 统计 README.md 行数；10) 统计 Cargo.toml 行数。每次只调用一个工具。"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "shell.query",
+        "description": "执行受限的文件查询，只支持 pwd、list、count_lines、count_entries。",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string",
+              "enum": ["pwd", "list", "count_lines", "count_entries"]
+            },
+            "path": { "type": "string" }
+          },
+          "required": ["command", "path"],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 80960
+  },
+  "expectations": {
+    "stop_reason": "end_turn",
+    "text": { "min_chars": 1 },
+    "requires": []
+  },
+  "turn": {
+    "min_steps": 11,
+    "min_tool_calls": 10,
+    "max_steps": 12
+  }
+}

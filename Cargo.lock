@@ -469,6 +469,7 @@ dependencies = [
  "kolyan-protocol-openai",
  "kolyan-provider-anthropic",
  "kolyan-provider-openai",
+ "kolyan-tools",
  "serde",
  "serde_json",
  "tokio",

@@ -313,6 +313,15 @@ pub fn build_anthropic_provider(cfg: &AnthropicProviderConfig, api_key: &str) ->
 pub struct Fixture {
     pub request: FixtureRequest,
     pub expectations: Expectations,
+    #[serde(default)]
+    pub turn: Option<TurnExpectations>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+pub struct TurnExpectations {
+    pub min_steps: Option<usize>,
+    pub min_tool_calls: Option<usize>,
+    pub max_steps: Option<usize>,
 }
 
 /// Input half of a fixture — what to send to the provider.
@@ -457,6 +466,7 @@ pub fn load_fixture(name: &str) -> Fixture {
         "tool_call" => include_str!("../fixtures/tool_call.json"),
         "structured_output" => include_str!("../fixtures/structured_output.json"),
         "prompt_cache" => include_str!("../fixtures/prompt_cache.json"),
+        "turn_ten_step" => include_str!("../fixtures/turn_ten_step.json"),
         other => panic!("unknown fixture name: {other}"),
     };
     serde_json::from_str(raw).expect("fixture JSON must deserialize into Fixture")

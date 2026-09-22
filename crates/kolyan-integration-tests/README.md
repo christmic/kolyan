@@ -84,6 +84,22 @@ cargo test -p kolyan-integration-tests openai_dump_first_text -- --ignored --noc
 cargo test -p kolyan-integration-tests --test core_step -- --ignored --nocapture
 ```
 
+Turn integration tests (one-step across every configured model, plus a
+multi-step `shell.query` ToolCall → ToolResult loop across both protocols):
+
+```bash
+cargo test -p kolyan-integration-tests --test core_turn -- --ignored --nocapture
+```
+
+To run the long multi-step case for selected models only, set a comma-separated
+model filter, for example:
+
+```bash
+KOLYAN_TURN_MODEL_FILTER=MiniMax-M3 \
+  cargo test -p kolyan-integration-tests --test core_turn \
+  turn_ten_step_tool_loop_runs_across_all_configured_models -- --ignored --nocapture
+```
+
 If either env var is unset, matrix rows for that provider are reported as
 `[SKIP ...]` with the required variable name. Once a row has a key and starts
 running, Provider or aggregation errors fail the row; live execution never
