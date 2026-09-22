@@ -46,7 +46,9 @@ V1.3 第一阶段实现：
 
 后续阶段再实现：
 
-- `TurnEndReason` 和完整终止状态机；
 - ToolCall 依赖关系和混合调度；
 - Turn 级取消、超时和预算；
 - 上下文一致性校验和检查点恢复。
+
+`TurnEndReason` 和状态迁移校验已在 V1.3 第二阶段完成，详见
+`0007-turn-terminal-semantics.md`。

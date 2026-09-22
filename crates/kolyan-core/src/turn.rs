@@ -115,16 +115,67 @@ impl TryFrom<Vec<ToolCall>> for ToolCallBatch {
 pub enum TurnState {
     Pending,
     Running,
+    WaitingModel,
+    WaitingTool,
+    ExecutingTools,
     Completed,
     Failed,
     Cancelled,
+    TimedOut,
     MaxSteps,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TurnEndReason {
+    FinalAnswer,
+    Refused,
+    Incomplete,
+    MaxSteps,
+    Failed,
+    Cancelled,
+    TimedOut,
+}
+
+impl TurnState {
+    pub fn transition(self, next: Self) -> Result<Self, TurnError> {
+        let allowed = matches!(
+            (self, next),
+            (Self::Pending, Self::Running)
+                | (Self::Running, Self::WaitingModel)
+                | (Self::WaitingModel, Self::WaitingTool)
+                | (Self::WaitingTool, Self::ExecutingTools)
+                | (Self::ExecutingTools, Self::Running)
+                | (Self::WaitingModel, Self::Completed)
+                | (Self::WaitingModel, Self::Failed)
+                | (Self::WaitingModel, Self::Cancelled)
+                | (Self::WaitingModel, Self::TimedOut)
+                | (Self::Running, Self::Failed)
+                | (Self::Running, Self::Cancelled)
+                | (Self::Running, Self::TimedOut)
+                | (Self::Running, Self::MaxSteps)
+                | (Self::WaitingTool, Self::Failed)
+                | (Self::WaitingTool, Self::Cancelled)
+                | (Self::WaitingTool, Self::TimedOut)
+                | (Self::ExecutingTools, Self::Failed)
+                | (Self::ExecutingTools, Self::Cancelled)
+                | (Self::ExecutingTools, Self::TimedOut)
+        );
+        if allowed {
+            Ok(next)
+        } else {
+            Err(TurnError::InvalidStateTransition {
+                from: self,
+                to: next,
+            })
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct TurnResult {
     pub turn_id: String,
     pub outcome: TurnOutcome,
+    pub end_reason: TurnEndReason,
     pub steps: Vec<StepResult>,
 }
 
@@ -205,6 +256,22 @@ pub enum TurnError {
     TimedOut,
     #[error("turn reached its maximum step count")]
     MaxSteps,
+    #[error("invalid turn state transition: {from:?} -> {to:?}")]
+    InvalidStateTransition { from: TurnState, to: TurnState },
+}
+
+impl TurnError {
+    pub fn end_reason(&self) -> TurnEndReason {
+        match self {
+            Self::Cancelled => TurnEndReason::Cancelled,
+            Self::TimedOut => TurnEndReason::TimedOut,
+            Self::MaxSteps => TurnEndReason::MaxSteps,
+            Self::InvalidRequest { .. }
+            | Self::Step(_)
+            | Self::Tool(_)
+            | Self::InvalidStateTransition { .. } => TurnEndReason::Failed,
+        }
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -318,12 +385,14 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         let mut events = vec![TurnEvent::Started {
             turn_id: turn_id.clone(),
         }];
+        let mut state = TurnState::Pending.transition(TurnState::Running)?;
 
         for step_index in 0..request.config.max_steps {
             if control.is_cancelled() {
                 return Err(TurnError::Cancelled);
             }
 
+            state = state.transition(TurnState::WaitingModel)?;
             let step_id = format!("{}-step-{step_index}", request.turn_id);
             events.push(TurnEvent::StepStarted {
                 turn_id: turn_id.clone(),
@@ -352,8 +421,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         outcome: TurnOutcome::FinalAnswer {
                             response: step.response,
                         },
+                        end_reason: TurnEndReason::FinalAnswer,
                         steps,
                     };
+                    let _ = state.transition(TurnState::Completed)?;
                     events.push(TurnEvent::Completed {
                         turn_id: turn_id.clone(),
                         outcome: result.outcome.clone(),
@@ -366,8 +437,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         outcome: TurnOutcome::Refused {
                             response: step.response,
                         },
+                        end_reason: TurnEndReason::Refused,
                         steps,
                     };
+                    let _ = state.transition(TurnState::Completed)?;
                     events.push(TurnEvent::Completed {
                         turn_id: turn_id.clone(),
                         outcome: result.outcome.clone(),
@@ -380,8 +453,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         outcome: TurnOutcome::Incomplete {
                             response: step.response,
                         },
+                        end_reason: TurnEndReason::Incomplete,
                         steps,
                     };
+                    let _ = state.transition(TurnState::Completed)?;
                     events.push(TurnEvent::Completed {
                         turn_id: turn_id.clone(),
                         outcome: result.outcome.clone(),
@@ -389,12 +464,14 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     return Ok(TurnExecution { result, events });
                 }
                 StepOutcome::ToolCalls => {
+                    state = state.transition(TurnState::WaitingTool)?;
                     model_request.messages.push(Message {
                         role: MessageRole::Assistant,
                         content: step.response.content.clone(),
                     });
                     let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
                     let calls = batch.into_calls();
+                    state = state.transition(TurnState::ExecutingTools)?;
                     for call in &calls {
                         events.push(TurnEvent::ToolCallRequested {
                             turn_id: turn_id.clone(),
@@ -449,6 +526,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                 });
                                 match self.tool_dispatch.on_error {
                                     ToolErrorPolicy::FailTurn => {
+                                        let _ = state.transition(TurnState::Failed)?;
                                         return Err(TurnError::Tool(error));
                                     }
                                     ToolErrorPolicy::ContinueBatch => {
@@ -470,11 +548,13 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             }
                         }
                     }
+                    state = state.transition(TurnState::Running)?;
                     model_request.tool_choice = ToolChoice::Auto;
                 }
             }
         }
 
+        let _ = state.transition(TurnState::MaxSteps)?;
         Err(TurnError::MaxSteps)
     }
 
@@ -922,5 +1002,49 @@ mod tests {
             error,
             ToolError::InvalidBatch { message } if message == "duplicate tool call id: duplicate"
         ));
+    }
+
+    #[test]
+    fn turn_state_accepts_tool_loop_transitions() {
+        let state = TurnState::Pending
+            .transition(TurnState::Running)
+            .and_then(|state| state.transition(TurnState::WaitingModel))
+            .and_then(|state| state.transition(TurnState::WaitingTool))
+            .and_then(|state| state.transition(TurnState::ExecutingTools))
+            .and_then(|state| state.transition(TurnState::Running))
+            .and_then(|state| state.transition(TurnState::WaitingModel))
+            .and_then(|state| state.transition(TurnState::Completed))
+            .expect("valid turn tool loop should transition");
+
+        assert_eq!(state, TurnState::Completed);
+    }
+
+    #[test]
+    fn turn_state_rejects_skipping_model_and_tool_phases() {
+        let error = TurnState::Running
+            .transition(TurnState::ExecutingTools)
+            .expect_err("running must not skip waiting phases");
+
+        assert!(matches!(
+            error,
+            TurnError::InvalidStateTransition {
+                from: TurnState::Running,
+                to: TurnState::ExecutingTools
+            }
+        ));
+    }
+
+    #[test]
+    fn turn_errors_expose_terminal_reason() {
+        assert_eq!(TurnError::Cancelled.end_reason(), TurnEndReason::Cancelled);
+        assert_eq!(TurnError::TimedOut.end_reason(), TurnEndReason::TimedOut);
+        assert_eq!(TurnError::MaxSteps.end_reason(), TurnEndReason::MaxSteps);
+        assert_eq!(
+            TurnError::Tool(ToolError::Failed {
+                message: "failed".into(),
+            })
+            .end_reason(),
+            TurnEndReason::Failed
+        );
     }
 }

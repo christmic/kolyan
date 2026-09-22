@@ -14,8 +14,8 @@ use common::{
 };
 use futures_util::StreamExt;
 use kolyan_core::{
-    ToolDispatchMode, ToolDispatchPolicy, ToolErrorPolicy, TurnConfig, TurnEvent, TurnExecutor,
-    TurnOutcome, TurnRequest, TurnResult,
+    ToolDispatchMode, ToolDispatchPolicy, ToolErrorPolicy, TurnConfig, TurnEndReason, TurnEvent,
+    TurnExecutor, TurnOutcome, TurnRequest, TurnResult,
 };
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ProviderFuture,
@@ -106,6 +106,44 @@ async fn turn_one_step_completes_across_configured_models() {
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
             run_anthropic_one_step(&provider, &config.qwen_anthropic, entry, "qwen").await;
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn turn_final_end_reason_is_stable_across_configured_models() {
+    let config = load_config();
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_openai_end_reason(&provider, entry, "minimax").await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_anthropic_end_reason(&provider, entry, "minimax").await;
+        }
+    }
+
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_openai_end_reason(&provider, entry, "qwen").await;
+        }
+    }
+
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_anthropic_end_reason(&provider, entry, "qwen").await;
         }
     }
 }
@@ -354,6 +392,52 @@ fn assert_one_step_final(result: &TurnResult, expectations: &common::Expectation
     assert_eq!(result.steps.len(), 1, "[{label}] expected exactly one Step");
     assert!(matches!(result.outcome, TurnOutcome::FinalAnswer { .. }));
     assert_expectations(&result.steps[0].response, expectations, label);
+}
+
+async fn run_openai_end_reason(
+    provider: &kolyan_provider_openai::OpenAiProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+) {
+    let fixture = load_fixture("text");
+    let result = TurnExecutor::new(provider.clone())
+        .execute(TurnRequest {
+            turn_id: format!("turn-end-reason-{family}-{}", entry.model),
+            model_request: build_request(
+                family,
+                &entry.model,
+                &fixture,
+                format!("turn-end-reason-{family}-{}", entry.model),
+                entry.max_output_tokens,
+            ),
+            config: TurnConfig { max_steps: 1 },
+        })
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/openai_compat/{}] {error}", entry.model));
+    assert_eq!(result.end_reason, TurnEndReason::FinalAnswer);
+}
+
+async fn run_anthropic_end_reason(
+    provider: &kolyan_provider_anthropic::AnthropicProvider,
+    entry: &ModelMatrixEntry,
+    family: &str,
+) {
+    let fixture = load_fixture("text");
+    let result = TurnExecutor::new(provider.clone())
+        .execute(TurnRequest {
+            turn_id: format!("turn-end-reason-{family}-{}", entry.model),
+            model_request: build_request(
+                family,
+                &entry.model,
+                &fixture,
+                format!("turn-end-reason-{family}-{}", entry.model),
+                entry.max_output_tokens,
+            ),
+            config: TurnConfig { max_steps: 1 },
+        })
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/anthropic_compat/{}] {error}", entry.model));
+    assert_eq!(result.end_reason, TurnEndReason::FinalAnswer);
 }
 
 async fn run_openai_file_read_write(
