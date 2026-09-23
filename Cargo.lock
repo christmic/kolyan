@@ -516,6 +516,7 @@ dependencies = [
  "kolyan-provider-anthropic",
  "kolyan-provider-openai",
  "kolyan-runtime",
+ "kolyan-server",
  "kolyan-storage",
  "kolyan-tools",
  "kolyan-trace",
@@ -626,6 +627,12 @@ dependencies = [
 [[package]]
 name = "kolyan-server"
 version = "0.1.0"
+dependencies = [
+ "kolyan-ledger",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "kolyan-storage"

@@ -1,6 +1,7 @@
 # 0019 SQLite Ledger and Execution Lease
 
-Status: implemented as the Runtime v1 persistence slice.
+Status: SQLite Ledger implemented; lease storage is an optional future Server
+coordination capability and is not part of the Runtime execution path.
 
 ## Goal
 
@@ -31,7 +32,8 @@ Lease revision 是 fencing token。旧 owner 即使仍在运行，也不能用�
 ## 边界
 
 - Ledger 是权威事实；Lease 是当前执行所有权，不替代 Ledger。
-- Runtime Driver 后续通过 lease owner 包装 boundary admission；Core 不知道 lease。
+- Server/ExecutionCoordinator 未来可以通过 lease owner 协调多个 Runtime；Core
+  和当前 Runtime 不知道 lease。
 - Lease 不保证外部副作用 exactly-once；EffectReceipt 和 Uncertain reconciliation
   仍是另一条边界。
 
@@ -42,6 +44,6 @@ Lease revision 是 fencing token。旧 owner 即使仍在运行，也不能用�
 - 过期 lease 可被新 owner 接管；旧 owner 的 renew/release 被拒绝；
 - 测试不依赖模型供应商或 Agent 实现。
 
-实现结果：`SqliteLedger` 已提供事务 append、唯一 idempotency claim、事件 replay
-和 execution lease/fencing；真实集成测试覆盖关闭重开、过期接管和旧 owner 拒绝。
-Driver 尚未强制要求 lease，下一切片将把 lease revision 接入每次 boundary admission。
+实现结果：`SqliteLedger` 已提供事务 append、唯一 idempotency claim 和事件
+replay；真实集成测试覆盖关闭重开。Lease/fencing 的存储接口仍保留为未来
+Server 协调能力，但当前 `DurableTurnDriver` 不申请、不续租，也不依赖 lease。
