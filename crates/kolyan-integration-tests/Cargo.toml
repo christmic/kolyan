@@ -62,6 +62,10 @@ path = "tests/session.rs"
 name = "session_execution"
 path = "tests/session_execution.rs"
 
+[[test]]
+name = "session_execution_live"
+path = "tests/session_execution_live.rs"
+
 [lints]
 workspace = true
 
