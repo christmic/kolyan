@@ -628,10 +628,16 @@ dependencies = [
 name = "kolyan-server"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "kolyan-core",
  "kolyan-ledger",
+ "kolyan-model",
+ "kolyan-runtime",
+ "kolyan-trace",
  "serde",
  "serde_json",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

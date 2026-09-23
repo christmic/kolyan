@@ -41,3 +41,4 @@ Session
 - [Durable Turn Driver](docs/requirements/0018-durable-turn-driver.md)
 - [SQLite Ledger 与 Execution Lease](docs/requirements/0019-sqlite-ledger-and-execution-lease.md)
 - [Server 与 Execution Coordinator 边界](docs/requirements/0020-server-coordinator-boundary.md)
+- [Server Execution Service](docs/requirements/0021-server-execution-service.md)

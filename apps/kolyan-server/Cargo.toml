@@ -8,7 +8,15 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+kolyan-core = { path = "../../crates/kolyan-core" }
 kolyan-ledger = { path = "../../crates/kolyan-ledger" }
+kolyan-model = { path = "../../crates/kolyan-model" }
+kolyan-runtime = { path = "../../crates/kolyan-runtime" }
+kolyan-trace = { path = "../../crates/kolyan-trace" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+tokio = { version = "1", features = ["macros", "rt", "time"] }
+
+[dev-dependencies]
+futures-util.workspace = true

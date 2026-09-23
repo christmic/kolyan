@@ -1,4 +1,8 @@
+use kolyan_core::{ToolExecutor, TurnExecutor, TurnRequest};
 use kolyan_ledger::{LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
+use kolyan_model::ModelProvider;
+use kolyan_runtime::{DurableTurnDriver, DurableTurnResult, RuntimeError};
+use kolyan_trace::TraceSink;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashSet;
@@ -56,6 +60,14 @@ pub enum CoordinatorError {
     },
 }
 
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("coordinator failed: {0}")]
+    Coordinator(#[from] CoordinatorError),
+    #[error("runtime failed: {0}")]
+    Runtime(#[from] RuntimeError),
+}
+
 /// Single-process execution orchestration owned by Server.
 ///
 /// It deliberately has no lease API. The active set prevents duplicate local
@@ -71,6 +83,102 @@ pub struct ExecutionCoordinator<L> {
 #[derive(Clone)]
 pub struct ExecutionServer<L> {
     coordinator: ExecutionCoordinator<L>,
+}
+
+/// Server-owned adapter that performs the complete admission → Runtime →
+/// release lifecycle. Transport handlers should call this service instead of
+/// assembling a Coordinator and DurableTurnDriver themselves.
+#[derive(Clone)]
+pub struct ExecutionService<L, S> {
+    server: ExecutionServer<L>,
+    trace: S,
+}
+
+impl<L, S> ExecutionService<L, S>
+where
+    L: LedgerStore + Clone + 'static,
+    S: TraceSink + Clone,
+{
+    pub fn new(ledger: L, trace: S) -> Self {
+        Self {
+            server: ExecutionServer::new(ledger),
+            trace,
+        }
+    }
+
+    pub fn server(&self) -> &ExecutionServer<L> {
+        &self.server
+    }
+
+    pub async fn start<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        request: TurnRequest,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let execution = ExecutionRef {
+            session_id: session_id.clone(),
+            turn_id: request.turn_id.clone(),
+            execution_id: execution_id.clone(),
+        };
+        self.server.start(execution)?;
+        let driver = DurableTurnDriver::new(
+            self.server.coordinator().ledger().clone(),
+            self.trace.clone(),
+        );
+        let result = driver
+            .start(executor, request, session_id, execution_id.clone())
+            .await;
+        self.server.release(&execution_id);
+        Ok(result?)
+    }
+
+    pub async fn resume<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        approval_id: &str,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let driver = DurableTurnDriver::new(
+            self.server.coordinator().ledger().clone(),
+            self.trace.clone(),
+        );
+        let approval = driver.load_approval(&execution_id, approval_id)?;
+        let execution = ExecutionRef {
+            session_id: session_id.clone(),
+            turn_id: approval.turn_id.clone(),
+            execution_id: execution_id.clone(),
+        };
+        self.server.resume(execution)?;
+        let result = driver
+            .resume(executor, session_id, execution_id.clone(), approval_id)
+            .await;
+        self.server.release(&execution_id);
+        Ok(result?)
+    }
+
+    pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
+        self.server.cancel(execution)?;
+        Ok(())
+    }
+
+    pub fn state(&self, execution_id: &str) -> Result<ExecutionState, ServerError> {
+        Ok(self.server.state(execution_id)?)
+    }
 }
 
 impl<L> ExecutionServer<L>
@@ -309,7 +417,58 @@ fn is_terminal(state: ExecutionState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures_util::stream;
     use kolyan_ledger::InMemoryLedger;
+    use kolyan_model::{
+        ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRef, ModelRequest,
+        ModelResponse, ProviderFuture, StopReason, TokenUsage, ToolChoice,
+    };
+    use kolyan_trace::VecTraceSink;
+
+    #[derive(Clone)]
+    struct FinalProvider;
+
+    impl ModelProvider for FinalProvider {
+        fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+            let response = ModelResponse {
+                id: request.request_id.clone(),
+                model: request.model,
+                content: vec![ContentBlock::Text {
+                    text: "service complete".into(),
+                }],
+                structured_output: None,
+                stop_reason: StopReason::EndTurn,
+                usage: TokenUsage::default(),
+                metadata: Value::Null,
+            };
+            Box::pin(async move {
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(ModelEvent::Started),
+                    Ok(ModelEvent::Completed(response)),
+                ])) as ModelEventStream)
+            })
+        }
+    }
+
+    fn request(turn_id: &str) -> TurnRequest {
+        TurnRequest {
+            turn_id: turn_id.into(),
+            model_request: ModelRequest {
+                request_id: format!("{turn_id}-request"),
+                model: ModelRef::new("fixture", "server-service"),
+                system: Vec::new(),
+                messages: Vec::new(),
+                tools: Vec::new(),
+                tool_choice: ToolChoice::Auto,
+                output_format: None,
+                prompt_cache: None,
+                reasoning: None,
+                max_output_tokens: None,
+                extensions: Value::Null,
+            },
+            config: Default::default(),
+        }
+    }
 
     fn execution(id: &str) -> ExecutionRef {
         ExecutionRef {
@@ -356,5 +515,40 @@ mod tests {
             restarted.recover(execution).unwrap().kind,
             AdmissionKind::Recover
         ));
+    }
+
+    #[tokio::test]
+    async fn execution_service_owns_runtime_admission_and_release() {
+        let ledger = InMemoryLedger::default();
+        let service = ExecutionService::new(ledger.clone(), VecTraceSink::default());
+        let result = service
+            .start(
+                TurnExecutor::new(FinalProvider),
+                request("service-turn"),
+                "service-session",
+                "service-execution",
+            )
+            .await
+            .unwrap();
+        assert!(matches!(result, DurableTurnResult::Completed(_, _)));
+        assert_eq!(
+            service.state("service-execution").unwrap(),
+            ExecutionState::Completed
+        );
+        assert!(matches!(
+            service.server().start(ExecutionRef {
+                session_id: "service-session".into(),
+                turn_id: "service-turn".into(),
+                execution_id: "service-execution".into(),
+            }),
+            Err(CoordinatorError::Terminal { .. })
+        ));
+        let events = ledger.events_after(0).unwrap();
+        assert!(events.len() >= 7);
+        assert!(
+            events
+                .iter()
+                .any(|event| event.kind == LedgerEventKind::TurnCompleted)
+        );
     }
 }

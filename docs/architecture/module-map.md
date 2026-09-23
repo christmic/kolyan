@@ -7,7 +7,7 @@
 | `kolyan-types` | 消息、Tool、事件和结果类型 | 执行流程、存储 |
 | `kolyan-core` | Step、最小 Agent Loop | Turn、Session、供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
-| `apps/kolyan-server` | Server 门面和单进程 ExecutionCoordinator | Turn/Step 逻辑、模型、租约实现 |
+| `apps/kolyan-server` | Server 门面、ExecutionCoordinator 和 ExecutionService | Turn/Step 逻辑、模型、租约实现 |
 | `kolyan-model` | LLM trait 和模型适配器 | Turn 状态机 |
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
