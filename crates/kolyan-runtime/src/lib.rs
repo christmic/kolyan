@@ -5,6 +5,14 @@ use kolyan_trace::{TraceKind, TraceRecord, TraceSink};
 use serde_json::{Value, json};
 use thiserror::Error;
 
+mod execution;
+
+pub use execution::{
+    AdmissionDecision, AdmissionPort, EffectDisposition, EffectExecutor, EffectGrant,
+    EffectOutcome, EffectReceipt, EffectRequest, ExecutionKey, ExecutionRuntime, ExecutionStatus,
+    ReceiptStatus, RuntimeExecutionError,
+};
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TrajectoryRecord {
     pub sequence: u64,
