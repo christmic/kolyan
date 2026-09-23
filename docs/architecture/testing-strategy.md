@@ -9,7 +9,7 @@
 
 跨模块集成测试
   → crates/kolyan-integration-tests/tests/
-  → Provider 兼容性、Step、Turn、Runtime、Server；Session 后续加入
+  → Provider 兼容性、Step、Turn、Runtime、Server、Session
 
 真实网络回归测试
   → 集成测试中的 #[ignore] 用例
@@ -71,6 +71,9 @@ Server / Coordinator
 - `server/runtime_approval.rs`：Server Coordinator → Runtime → 多轮 Turn → 审批暂停 → Server 重建 → 恢复 → 工具副作用 → Completed 的完整确定性场景。
 - `server/runtime_approval_live.rs`：真实 Provider 矩阵覆盖 Server→Runtime→多 Step→审批暂停→Server 重建→恢复→真实文件写入。
 - `session.rs`：两个独立 Turn 写入同一 Session，关闭并重开后验证顺序和上下文恢复。
+- `session_execution.rs`：通过真实文件 SessionStore、FileLedger 和临时轨迹，验证
+  两个独立 Turn 跨重启共享上下文，以及审批挂起后 Session 状态持久为 Suspended、
+  Server 重建后恢复为 Completed；不需要模型 API Key。
 - `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
@@ -102,6 +105,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 实际执行 `kolyan-server` JSONL RPC：
 execution.start → execution.status → execution.cancel
 结果：依次返回 Start、Running、cancelled。
+
+```text
+cargo test -p kolyan-integration-tests --test session_execution -- --nocapture
+结果：2 passed；覆盖跨重启上下文、Session 状态提交、审批暂停和恢复。
+```
 ```
 
 2026-09-23 的 Runtime v0 验证：
