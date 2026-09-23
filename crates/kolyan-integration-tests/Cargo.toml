@@ -42,6 +42,18 @@ path = "tests/core/turn_resume.rs"
 name = "runtime_boundary"
 path = "tests/runtime/boundary.rs"
 
+[[test]]
+name = "server_coordinator"
+path = "tests/server/coordinator.rs"
+
+[[test]]
+name = "server_runtime_approval"
+path = "tests/server/runtime_approval.rs"
+
+[[test]]
+name = "server_runtime_approval_live"
+path = "tests/server/runtime_approval_live.rs"
+
 [lints]
 workspace = true
 
@@ -69,6 +81,7 @@ kolyan-policy = { path = "../kolyan-policy" }
 kolyan-tools = { path = "../kolyan-tools" }
 kolyan-ledger = { path = "../kolyan-ledger" }
 kolyan-runtime = { path = "../kolyan-runtime" }
+kolyan-server = { path = "../../apps/kolyan-server" }
 kolyan-trace = { path = "../kolyan-trace" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }

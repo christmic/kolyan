@@ -9,7 +9,7 @@
 
 跨模块集成测试
   → crates/kolyan-integration-tests/tests/
-  → Provider 兼容性、Step、Turn；Session 后续加入
+  → Provider 兼容性、Step、Turn、Runtime、Server；Session 后续加入
 
 真实网络回归测试
   → 集成测试中的 #[ignore] 用例
@@ -39,6 +39,26 @@ kolyan-integration-tests/
 - 已设置 API Key 的 live test 遇到 Provider 或聚合错误必须失败，不能静默跳过；
 - 缺少某个 Provider 的 API Key 时，只跳过该 Provider 的矩阵行。
 
+## 逐层向外的真实场景原则
+
+测试建设必须从核心逐层向外推进，而不是只验证孤立模块：
+
+```text
+Core / Step / Turn
+        ↓
+Runtime / Ledger / Trace
+        ↓
+Server / Coordinator
+        ↓
+完整 Agent 场景
+```
+
+每增加一层，都必须同时保留下层契约测试，并新增跨层真实用例。真实用例
+应越来越接近完整 Agent 行为，覆盖正常、审批暂停与恢复、取消、失败、
+多 Step、多工具和持久化重建等场景。测试输入和模型/工具行为使用 fixture
+数据驱动，轨迹由测试代码写入临时文件并与预期轨迹契约比较；生产 Runtime
+不得承担测试文件输出职责。
+
 ## 当前真实测试
 
 - `provider/openai_compat.rs`：OpenAI-compatible 请求、流、Tool、Structured Output、Prompt Cache；
@@ -48,7 +68,22 @@ kolyan-integration-tests/
 - `core/turn_resume.rs`：18 个数据驱动恢复/取消/预算/错误场景，加取消竞态、已完成工具事件保留和拒绝批次无开始事件测试；真实矩阵覆盖多审批与普通工具交替，以及审批挂起后外部取消。
 - `runtime/boundary.rs`：使用真实文件 Ledger，关闭并重开 Runtime，验证收据重放不重复执行，以及持久取消阻止新的准入。
 - `DurableTurnDriver` 真实集成覆盖实际 Core `TurnExecutor`、真实文件 Ledger、Step/Terminal 边界持久化和重开后的 Ledger replay。
+- `server/runtime_approval.rs`：Server Coordinator → Runtime → 多轮 Turn → 审批暂停 → Server 重建 → 恢复 → 工具副作用 → Completed 的完整确定性场景。
+- `server/runtime_approval_live.rs`：真实 Provider 矩阵覆盖 Server→Runtime→多 Step→审批暂停→Server 重建→恢复→真实文件写入。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
+
+## 0020 Server 验证记录
+
+2026-09-23，在项目根目录重新加载项目 shell 环境后执行：
+
+```text
+zsh -lc 'source /Users/christmix/.zshrc; cargo test -p kolyan-integration-tests \
+  --test server_runtime_approval_live -- --ignored --nocapture'
+结果：1 passed，0 failed，耗时 87.62s。
+配置中的 21 个模型/协议矩阵项全部执行；MiniMax 与 Qwen 两个项目内 API
+Key 环境变量均存在。每个矩阵项均验证 Server/Coordinator 启动、Runtime
+审批暂停、实例释放、Server 重建、Runtime 恢复、真实文件副作用和轨迹契约。
+```
 
 2026-09-23 的 Runtime v0 验证：
 

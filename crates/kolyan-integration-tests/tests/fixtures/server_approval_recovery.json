@@ -1,0 +1,8 @@
+{
+  "session_id": "server-session-approval",
+  "turn_id": "server-turn-approval",
+  "execution_id": "server-execution-approval",
+  "tool_call_id": "server-approval-call",
+  "path": "safe/server-approval.txt",
+  "content": "server-approval-completed"
+}
