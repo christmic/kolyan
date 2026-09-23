@@ -1,10 +1,11 @@
 use kolyan_core::{ToolExecutor, TurnExecutor, TurnRequest};
 use kolyan_ledger::{LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
-use kolyan_model::ModelProvider;
+use kolyan_model::{Message, ModelProvider};
 use kolyan_runtime::{DurableTurnDriver, DurableTurnResult, RuntimeError};
+use kolyan_storage::{SessionRecord, SessionStore, SessionTurn, StorageError};
 use kolyan_trace::TraceSink;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -17,7 +18,7 @@ pub struct ExecutionRef {
     pub execution_id: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ExecutionState {
     New,
     Running,
@@ -27,7 +28,7 @@ pub enum ExecutionState {
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AdmissionKind {
     Start,
     Resume,
@@ -38,6 +39,31 @@ pub enum AdmissionKind {
 pub struct ExecutionAdmission {
     pub execution: ExecutionRef,
     pub kind: AdmissionKind,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RpcRequest {
+    pub jsonrpc: String,
+    pub id: Value,
+    pub method: String,
+    #[serde(default)]
+    pub params: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RpcResponse {
+    pub jsonrpc: String,
+    pub id: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<RpcError>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RpcError {
+    pub code: i32,
+    pub message: String,
 }
 
 #[derive(Debug, Error)]
@@ -66,6 +92,8 @@ pub enum ServerError {
     Coordinator(#[from] CoordinatorError),
     #[error("runtime failed: {0}")]
     Runtime(#[from] RuntimeError),
+    #[error("session failed: {0}")]
+    Session(#[from] StorageError),
 }
 
 /// Single-process execution orchestration owned by Server.
@@ -92,6 +120,38 @@ pub struct ExecutionServer<L> {
 pub struct ExecutionService<L, S> {
     server: ExecutionServer<L>,
     trace: S,
+}
+
+/// Server facade for the persistent multi-Turn Session boundary.
+#[derive(Clone)]
+pub struct SessionService<S> {
+    store: S,
+}
+
+impl<S> SessionService<S>
+where
+    S: SessionStore + Clone,
+{
+    pub fn new(store: S) -> Self {
+        Self { store }
+    }
+
+    pub fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
+        self.store.create(session_id)
+    }
+
+    pub fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
+        self.store.load(session_id)
+    }
+
+    pub fn append_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        self.store.append_turn(session_id, turn, messages)
+    }
 }
 
 impl<L, S> ExecutionService<L, S>
@@ -217,6 +277,87 @@ where
 
     pub fn release(&self, execution_id: &str) {
         self.coordinator.release(execution_id);
+    }
+
+    pub fn handle_json_rpc(&self, input: &str) -> String {
+        let response = match serde_json::from_str::<RpcRequest>(input) {
+            Ok(request) => self.handle_rpc(request),
+            Err(error) => RpcResponse {
+                jsonrpc: "2.0".into(),
+                id: Value::Null,
+                result: None,
+                error: Some(RpcError {
+                    code: -32700,
+                    message: format!("parse error: {error}"),
+                }),
+            },
+        };
+        serde_json::to_string(&response).expect("RPC response must serialize")
+    }
+
+    pub fn handle_rpc(&self, request: RpcRequest) -> RpcResponse {
+        if request.jsonrpc != "2.0" {
+            return rpc_error(request.id, -32600, "jsonrpc must be 2.0");
+        }
+        let id = request.id.clone();
+        let result = match request.method.as_str() {
+            "execution.status" => self
+                .rpc_execution_ref(&request.params)
+                .and_then(|execution| {
+                    self.state(&execution.execution_id)
+                        .map(|state| json!({"state": state}))
+                }),
+            "execution.start" => self
+                .rpc_execution_ref(&request.params)
+                .and_then(|execution| {
+                    self.start(execution)
+                        .map(|admission| json!({"admission": admission.kind}))
+                }),
+            "execution.resume" => self
+                .rpc_execution_ref(&request.params)
+                .and_then(|execution| {
+                    self.resume(execution)
+                        .map(|admission| json!({"admission": admission.kind}))
+                }),
+            "execution.cancel" => self
+                .rpc_execution_ref(&request.params)
+                .and_then(|execution| {
+                    self.cancel(&execution)
+                        .map(|()| json!({"state": "cancelled"}))
+                }),
+            _ => Err(CoordinatorError::NotRecoverable {
+                execution_id: request.method,
+                state: ExecutionState::New,
+            }),
+        };
+        match result {
+            Ok(result) => RpcResponse {
+                jsonrpc: "2.0".into(),
+                id,
+                result: Some(result),
+                error: None,
+            },
+            Err(error) => rpc_error(id, -32000, error.to_string()),
+        }
+    }
+
+    fn rpc_execution_ref(&self, params: &Value) -> Result<ExecutionRef, CoordinatorError> {
+        serde_json::from_value(params.clone()).map_err(|error| CoordinatorError::NotRecoverable {
+            execution_id: format!("invalid params: {error}"),
+            state: ExecutionState::New,
+        })
+    }
+}
+
+fn rpc_error(id: Value, code: i32, message: impl Into<String>) -> RpcResponse {
+    RpcResponse {
+        jsonrpc: "2.0".into(),
+        id,
+        result: None,
+        error: Some(RpcError {
+            code,
+            message: message.into(),
+        }),
     }
 }
 
@@ -550,5 +691,47 @@ mod tests {
                 .iter()
                 .any(|event| event.kind == LedgerEventKind::TurnCompleted)
         );
+    }
+
+    #[test]
+    fn json_rpc_control_plane_routes_start_status_and_cancel() {
+        let server = ExecutionServer::new(InMemoryLedger::default());
+        let params = json!({
+            "session_id": "rpc-session",
+            "turn_id": "rpc-turn",
+            "execution_id": "rpc-execution"
+        });
+        let start = server.handle_json_rpc(
+            &json!({
+                "jsonrpc":"2.0", "id":1, "method":"execution.start", "params":params
+            })
+            .to_string(),
+        );
+        let start: RpcResponse = serde_json::from_str(&start).unwrap();
+        assert_eq!(start.error, None);
+        assert_eq!(start.result.unwrap()["admission"], "Start");
+
+        let status = server.handle_json_rpc(
+            &json!({
+                "jsonrpc":"2.0", "id":2, "method":"execution.status", "params":params
+            })
+            .to_string(),
+        );
+        let status: RpcResponse = serde_json::from_str(&status).unwrap();
+        assert_eq!(status.result.unwrap()["state"], "Running");
+
+        let cancel = server.handle_json_rpc(
+            &json!({
+                "jsonrpc":"2.0", "id":3, "method":"execution.cancel", "params":params
+            })
+            .to_string(),
+        );
+        let cancel: RpcResponse = serde_json::from_str(&cancel).unwrap();
+        assert_eq!(cancel.result.unwrap()["state"], "cancelled");
+        assert_eq!(
+            server.state("rpc-execution").unwrap(),
+            ExecutionState::Cancelled
+        );
+        assert!(server.handle_json_rpc("not-json").contains("-32700"));
     }
 }
