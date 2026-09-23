@@ -119,3 +119,22 @@ fn reused_model_call_ids_have_distinct_step_scoped_approvals() {
     state.steps.pop();
     assert_ne!(checkpoint(&state).approval_id, later.approval_id);
 }
+
+#[tokio::test]
+async fn inline_approval_is_consumed_once() {
+    use futures_util::FutureExt;
+    let control = TurnControl::default();
+    control.approve_tool("file.write");
+    assert!(
+        control
+            .wait_for_tool_approval("file.write")
+            .now_or_never()
+            .is_some()
+    );
+    assert!(
+        control
+            .wait_for_tool_approval("file.write")
+            .now_or_never()
+            .is_none()
+    );
+}

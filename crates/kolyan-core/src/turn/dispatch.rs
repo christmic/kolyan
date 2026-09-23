@@ -76,7 +76,16 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                 grants.get(&call.id).cloned(),
                                 events,
                             )
-                            .await?;
+                            .await;
+                        let dispatch = match dispatch {
+                            Ok(dispatch) => dispatch,
+                            Err(error) => {
+                                for result in &stage_results {
+                                    emit_dispatch_result(state, result, events);
+                                }
+                                return Err(error);
+                            }
+                        };
                         if state.dispatch.on_error == ToolErrorPolicy::FailTurn
                             && let Err(error) = &dispatch.result
                         {
@@ -99,8 +108,20 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             events,
                         )
                     });
+                    let mut admission_error = None;
                     for result in join_all(futures).await {
-                        stage_results.push(result?);
+                        match result {
+                            Ok(result) => stage_results.push(result),
+                            Err(error) => {
+                                admission_error.get_or_insert(error);
+                            }
+                        }
+                    }
+                    if let Some(error) = admission_error {
+                        for result in &stage_results {
+                            emit_dispatch_result(state, result, events);
+                        }
+                        return Err(error);
                     }
                     if state.dispatch.on_error == ToolErrorPolicy::FailTurn
                         && let Some(error) = stage_results
@@ -227,16 +248,15 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             }
             _ => {}
         }
-        if control.is_cancelled() {
-            return Err(TurnError::Cancelled);
-        }
-        if state.deadline.is_some_and(|limit| limit <= Instant::now()) {
-            return Err(TurnError::TimedOut);
-        }
-        Ok(ToolDispatchResult {
+        let dispatch = ToolDispatchResult {
             call_id: call.id.clone(),
             result,
-        })
+        };
+        if let Err(error) = state.check(control) {
+            emit_dispatch_result(state, &dispatch, events);
+            return Err(error);
+        }
+        Ok(dispatch)
     }
 }
 
