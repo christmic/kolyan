@@ -59,6 +59,44 @@ async fn durable_approval_survives_executor_restart_for_every_configured_model()
     fs::remove_dir_all(root).expect("durable live root should be removed");
 }
 
+#[tokio::test]
+#[ignore = "real-network test: requires configured provider API keys"]
+async fn durable_approval_rejects_and_expires_without_tool_side_effects() {
+    let config = load_config();
+    let root = std::env::temp_dir().join(format!("kolyan-durable-terminal-{}", std::process::id()));
+    fs::create_dir_all(root.join("safe")).expect("terminal test root should be created");
+
+    if has_api_key(&config.minimax_openai) {
+        let key = require_api_key(&config.minimax_openai);
+        let provider = build_openai_provider(&config.minimax_openai, &key);
+        for entry in &config.minimax_openai.model_matrix {
+            run_terminal_cases(&provider, entry, "minimax", &root).await;
+        }
+    }
+    if has_api_key_anthropic(&config.minimax_anthropic) {
+        let key = require_api_key_anthropic(&config.minimax_anthropic);
+        let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
+        for entry in &config.minimax_anthropic.model_matrix {
+            run_terminal_cases(&provider, entry, "minimax", &root).await;
+        }
+    }
+    if has_api_key(&config.qwen_openai) {
+        let key = require_api_key(&config.qwen_openai);
+        let provider = build_openai_provider(&config.qwen_openai, &key);
+        for entry in &config.qwen_openai.model_matrix {
+            run_terminal_cases(&provider, entry, "qwen", &root).await;
+        }
+    }
+    if has_api_key_anthropic(&config.qwen_anthropic) {
+        let key = require_api_key_anthropic(&config.qwen_anthropic);
+        let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
+        for entry in &config.qwen_anthropic.model_matrix {
+            run_terminal_cases(&provider, entry, "qwen", &root).await;
+        }
+    }
+    fs::remove_dir_all(root).expect("terminal test root should be removed");
+}
+
 async fn run_case<P>(
     provider: &P,
     entry: &ModelMatrixEntry,
@@ -110,7 +148,7 @@ async fn run_case<P>(
     ];
     drop(approval);
 
-    let restored = store.load(&approval_id).unwrap_or_else(|error| {
+    let restored = store.claim(&approval_id).unwrap_or_else(|error| {
         panic!(
             "[{family}/{}] checkpoint should reload: {error}",
             entry.model
@@ -148,6 +186,66 @@ async fn run_case<P>(
     store
         .delete(&approval_id)
         .expect("checkpoint should be deleted after completion");
+}
+
+async fn run_terminal_cases<P>(provider: &P, entry: &ModelMatrixEntry, family: &str, root: &Path)
+where
+    P: ModelProvider + Clone + 'static,
+{
+    let fixture = load_fixture("turn_policy_allowed");
+    let make_request = |suffix: &str| TurnRequest {
+        turn_id: format!("terminal-{family}-{}-{suffix}", entry.model),
+        model_request: build_request(
+            family,
+            &entry.model,
+            &fixture,
+            format!("terminal-{family}-{}-{suffix}", entry.model),
+            entry.max_output_tokens,
+        ),
+        config: TurnConfig {
+            max_steps: fixture.turn.as_ref().and_then(|v| v.max_steps).unwrap_or(4),
+        },
+    };
+
+    let first = authorized_executor(provider.clone(), root)
+        .start_resumable(make_request("reject"))
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{}] reject start failed: {error}", entry.model));
+    let rejected = match first {
+        ResumableTurn::AwaitingApproval(value) => {
+            let value = *value;
+            authorized_executor(provider.clone(), root)
+                .reject_approval(value.clone(), &value.approval_id, "user rejected")
+                .expect("reject should be terminal")
+        }
+        ResumableTurn::Completed(_) => {
+            panic!("[{family}/{}] expected rejection approval", entry.model)
+        }
+    };
+    assert!(matches!(
+        rejected.result.outcome,
+        TurnOutcome::Rejected { .. }
+    ));
+    assert!(!root.join("safe/allowed.txt").exists());
+
+    let second = authorized_executor(provider.clone(), root)
+        .start_resumable(make_request("expire"))
+        .await
+        .unwrap_or_else(|error| panic!("[{family}/{}] expire start failed: {error}", entry.model));
+    let mut expired = match second {
+        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Completed(_) => {
+            panic!("[{family}/{}] expected expiration approval", entry.model)
+        }
+    };
+    let approval_id = expired.approval_id.clone();
+    expired.expires_at_ms = Some(0);
+    let error = authorized_executor(provider.clone(), root)
+        .resume_approval(expired, &approval_id)
+        .await
+        .expect_err("expired approval must fail closed");
+    assert!(error.to_string().contains("expired"));
+    assert!(!root.join("safe/allowed.txt").exists());
 }
 
 fn authorized_executor<P>(

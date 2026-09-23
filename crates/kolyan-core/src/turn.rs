@@ -46,7 +46,21 @@ pub struct ApprovalRequest {
     pub call_id: String,
     pub tool_name: String,
     pub reason: String,
+    #[serde(default)]
+    pub state: ApprovalState,
+    #[serde(default)]
+    pub expires_at_ms: Option<u64>,
     pub continuation: TurnContinuation,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalState {
+    #[default]
+    Pending,
+    Approved,
+    Rejected,
+    Expired,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,6 +237,8 @@ pub enum TurnEndReason {
     Failed,
     Cancelled,
     TimedOut,
+    ApprovalRejected,
+    ApprovalExpired,
 }
 
 impl TurnState {
@@ -332,6 +348,12 @@ pub enum TurnOutcome {
     },
     Incomplete {
         response: kolyan_model::ModelResponse,
+    },
+    Rejected {
+        reason: String,
+    },
+    Expired {
+        reason: String,
     },
     MaxSteps,
 }
@@ -697,6 +719,19 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 message: "approval id does not match checkpoint".into(),
             });
         }
+        if approval.state != ApprovalState::Pending {
+            return Err(TurnError::InvalidRequest {
+                message: "approval checkpoint is already resolved".into(),
+            });
+        }
+        if approval
+            .expires_at_ms
+            .is_some_and(|deadline| deadline <= now_ms())
+        {
+            return Err(TurnError::InvalidRequest {
+                message: "approval checkpoint has expired".into(),
+            });
+        }
         let continuation = approval.continuation;
         let Some(call) = continuation
             .pending_calls
@@ -863,6 +898,37 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 next_decision.decision.policy_version.clone(),
             ),
         )))
+    }
+
+    pub fn reject_approval(
+        &self,
+        approval: ApprovalRequest,
+        approval_id: &str,
+        reason: impl Into<String>,
+    ) -> Result<TurnExecution, TurnError> {
+        validate_approval_transition(&approval, approval_id)?;
+        terminal_approval_execution(
+            approval,
+            TurnOutcome::Rejected {
+                reason: reason.into(),
+            },
+            TurnEndReason::ApprovalRejected,
+        )
+    }
+
+    pub fn expire_approval(
+        &self,
+        approval: ApprovalRequest,
+        approval_id: &str,
+    ) -> Result<TurnExecution, TurnError> {
+        validate_approval_transition(&approval, approval_id)?;
+        terminal_approval_execution(
+            approval,
+            TurnOutcome::Expired {
+                reason: "approval expired".into(),
+            },
+            TurnEndReason::ApprovalExpired,
+        )
     }
 
     async fn execute_tool(
@@ -1236,6 +1302,58 @@ fn validate_request(request: &TurnRequest) -> Result<(), TurnError> {
     Ok(())
 }
 
+fn validate_approval_transition(
+    approval: &ApprovalRequest,
+    approval_id: &str,
+) -> Result<(), TurnError> {
+    if approval.approval_id != approval_id
+        || approval.continuation.approval_id != approval.approval_id
+    {
+        return Err(TurnError::InvalidRequest {
+            message: "approval id does not match checkpoint".into(),
+        });
+    }
+    if approval.state != ApprovalState::Pending {
+        return Err(TurnError::InvalidRequest {
+            message: "approval checkpoint is already resolved".into(),
+        });
+    }
+    Ok(())
+}
+
+fn terminal_approval_execution(
+    approval: ApprovalRequest,
+    outcome: TurnOutcome,
+    end_reason: TurnEndReason,
+) -> Result<TurnExecution, TurnError> {
+    let turn_id = approval.turn_id;
+    let events = vec![
+        TurnEvent::Started {
+            turn_id: turn_id.clone(),
+        },
+        TurnEvent::Completed {
+            turn_id: turn_id.clone(),
+            outcome: outcome.clone(),
+        },
+    ];
+    Ok(TurnExecution {
+        result: TurnResult {
+            turn_id,
+            outcome,
+            end_reason,
+            steps: approval.continuation.steps,
+        },
+        events,
+    })
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 fn outcome_from_step(step: &StepResult) -> (TurnOutcome, TurnEndReason) {
     match step.outcome {
         StepOutcome::FinalAnswer => (
@@ -1278,6 +1396,8 @@ fn make_approval_request(
         call_id: call.id.clone(),
         tool_name: call.name.clone(),
         reason,
+        state: ApprovalState::Pending,
+        expires_at_ms: None,
         continuation: TurnContinuation {
             continuation_id: format!("continuation-{}", approval_id),
             approval_id,

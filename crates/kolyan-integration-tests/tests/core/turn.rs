@@ -1170,6 +1170,8 @@ fn turn_outcome_name(outcome: &TurnOutcome) -> &'static str {
         TurnOutcome::FinalAnswer { .. } => "final_answer",
         TurnOutcome::Refused { .. } => "refused",
         TurnOutcome::Incomplete { .. } => "incomplete",
+        TurnOutcome::Rejected { .. } => "rejected",
+        TurnOutcome::Expired { .. } => "expired",
         TurnOutcome::MaxSteps => "max_steps",
     }
 }

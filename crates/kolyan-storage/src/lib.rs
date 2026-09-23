@@ -18,6 +18,7 @@ pub enum StorageError {
 pub trait ApprovalStore: Send + Sync {
     fn save(&self, request: &ApprovalRequest) -> Result<(), StorageError>;
     fn load(&self, approval_id: &str) -> Result<ApprovalRequest, StorageError>;
+    fn claim(&self, approval_id: &str) -> Result<ApprovalRequest, StorageError>;
     fn delete(&self, approval_id: &str) -> Result<(), StorageError>;
 }
 
@@ -44,6 +45,10 @@ impl FileApprovalStore {
         }
         Ok(self.root.join(format!("{}.json", approval_id)))
     }
+
+    fn claimed_path(&self, approval_id: &str) -> Result<PathBuf, StorageError> {
+        Ok(self.path(approval_id)?.with_extension("claimed.json"))
+    }
 }
 
 impl ApprovalStore for FileApprovalStore {
@@ -68,15 +73,34 @@ impl ApprovalStore for FileApprovalStore {
         Ok(serde_json::from_slice(&payload)?)
     }
 
-    fn delete(&self, approval_id: &str) -> Result<(), StorageError> {
-        let path = self.path(approval_id)?;
-        fs::remove_file(&path).map_err(|error| {
+    fn claim(&self, approval_id: &str) -> Result<ApprovalRequest, StorageError> {
+        let pending = self.path(approval_id)?;
+        let claimed = self.claimed_path(approval_id)?;
+        fs::rename(&pending, &claimed).map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 StorageError::NotFound(approval_id.to_owned())
             } else {
                 StorageError::Io(error)
             }
         })?;
+        let payload = fs::read(claimed)?;
+        Ok(serde_json::from_slice(&payload)?)
+    }
+
+    fn delete(&self, approval_id: &str) -> Result<(), StorageError> {
+        let path = self.path(approval_id)?;
+        let claimed = self.claimed_path(approval_id)?;
+        let mut removed = false;
+        for candidate in [path, claimed] {
+            match fs::remove_file(candidate) {
+                Ok(()) => removed = true,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(StorageError::Io(error)),
+            }
+        }
+        if !removed {
+            return Err(StorageError::NotFound(approval_id.to_owned()));
+        }
         Ok(())
     }
 }
@@ -95,6 +119,8 @@ mod tests {
             call_id: "call-1".into(),
             tool_name: "file.write".into(),
             reason: "requires approval".into(),
+            state: kolyan_core::ApprovalState::Pending,
+            expires_at_ms: None,
             continuation: kolyan_core::TurnContinuation {
                 continuation_id: "continuation-1".into(),
                 approval_id: "approval-1".into(),
@@ -141,6 +167,11 @@ mod tests {
         let value = request();
         store.save(&value).unwrap();
         assert_eq!(store.load("approval-1").unwrap(), value);
+        assert_eq!(store.claim("approval-1").unwrap(), value);
+        assert!(matches!(
+            store.claim("approval-1"),
+            Err(StorageError::NotFound(_))
+        ));
         store.delete("approval-1").unwrap();
         assert!(matches!(
             store.load("approval-1"),
