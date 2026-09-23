@@ -45,3 +45,9 @@ SessionExecutionService
   恢复时由 Server 根据 execution/approval id 重新装配 Runtime。
 - `session_execution_live.rs` 对 21 个配置模型/协议组合执行两轮真实 Session Turn，
   并在第二轮前重建 Server、Runtime 和 SessionStore。
+
+## Provider 诊断约定
+
+Anthropic 流传输错误支持通过 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 开启诊断。诊断只在
+显式开启时保留最多 1024 字节的响应尾部，同时记录 HTTP 状态、响应类型、编码和
+已接收字节数；默认模式不记录响应内容。

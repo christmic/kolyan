@@ -6,6 +6,9 @@ pub struct AnthropicConfig {
     pub api_key: String,
     pub version: String,
     pub timeout: Duration,
+    /// Include bounded response diagnostics in stream transport errors.
+    /// Disabled by default because response fragments may contain user data.
+    pub diagnostics: bool,
 }
 
 impl AnthropicConfig {
@@ -15,6 +18,7 @@ impl AnthropicConfig {
             api_key: api_key.into(),
             version: "2023-06-01".into(),
             timeout: Duration::from_secs(120),
+            diagnostics: false,
         }
     }
 }

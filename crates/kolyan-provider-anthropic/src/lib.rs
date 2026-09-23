@@ -299,7 +299,7 @@ fn metadata(fields: std::collections::BTreeMap<String, Value>) -> kolyan_model::
 fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> ProviderError {
     let message = error.to_string();
     let (kind, phase) = match error {
-        kolyan_protocol_anthropic::AnthropicError::Transport(_) => {
+        kolyan_protocol_anthropic::AnthropicError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
         }
         kolyan_protocol_anthropic::AnthropicError::Http { status, .. } => (

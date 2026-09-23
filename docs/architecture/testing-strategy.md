@@ -77,6 +77,9 @@ Server / Coordinator
   不污染下一轮 Session 上下文；不需要模型 API Key。
 - `session_execution_live.rs`：对配置中的 21 个模型/协议矩阵项逐项执行两轮真实
   Session Turn，重建 Server/Runtime/SessionStore 后验证第二轮收到第一轮助手上下文。
+- Anthropic 协议层支持按需诊断流响应；设置 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 后，
+  传输错误会带 HTTP 状态、Content-Type、Content-Encoding、已接收字节数和长度受限
+  的响应尾部片段，默认关闭以避免响应内容进入日志。
 - `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 

@@ -8,5 +8,5 @@ pub mod sse;
 
 pub use client::AnthropicClient;
 pub use config::AnthropicConfig;
-pub use error::AnthropicError;
+pub use error::{AnthropicError, ResponseDiagnostics};
 pub use messages::{Message, MessageCreateRequest, MessageStream, MessageStreamEvent, Tool};

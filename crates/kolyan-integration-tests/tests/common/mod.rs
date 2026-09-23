@@ -295,6 +295,9 @@ pub fn build_anthropic_provider(cfg: &AnthropicProviderConfig, api_key: &str) ->
         api_key: api_key.to_string(),
         version: cfg.anthropic_version.clone(),
         timeout: Duration::from_secs(cfg.timeout_secs),
+        diagnostics: std::env::var("KOLYAN_PROTOCOL_DIAGNOSTICS")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
     };
     let client = AnthropicClient::new(protocol_cfg)
         .expect("AnthropicClient::new should succeed with a valid base_url and timeout");

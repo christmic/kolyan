@@ -25,13 +25,21 @@ impl AnthropicClient {
         &self,
         request: &MessageCreateRequest,
     ) -> Result<MessageStream, AnthropicError> {
-        Ok(MessageStream::new(
-            self.request("/v1/messages")
-                .json(request)
-                .send()
-                .await?
-                .error_for_status()?,
-        ))
+        let response = self
+            .request("/v1/messages")
+            .json(request)
+            .send()
+            .await
+            .map_err(|source| AnthropicError::Transport {
+                source,
+                diagnostics: None,
+            })?
+            .error_for_status()
+            .map_err(|source| AnthropicError::Transport {
+                source,
+                diagnostics: None,
+            })?;
+        Ok(MessageStream::new(response, self.config.diagnostics))
     }
 
     fn request(&self, path: &str) -> RequestBuilder {
