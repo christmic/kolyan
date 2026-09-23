@@ -16,11 +16,12 @@ Session
         └── Step
 ```
 
-- `Session`：长期会话边界，未来承载历史消息、恢复、分叉和持久化。
+- `Session`：长期会话边界，承载历史消息、恢复、分叉和持久化；由 Server
+  在 Turn 执行前后协调，Runtime/Turn 不直接依赖 SessionStore。
 - `Turn`：一次用户输入触发的一次完整 Agent 执行，从输入开始，到最终回答、失败、取消或达到上限结束。
 - `Step`：Turn 内的一次 LLM 调用和响应处理；模型产生的 Tool Call 由 Turn 调度，Tool Result 由 Turn 回填。
 
-第一阶段不实现 Session 持久化；Session 作为架构边界保留。当前实现优先完成 `Turn + Step` 的内存闭环。
+当前已完成 Session 的最小持久化执行闭环；后续再扩展分叉、并发策略和更丰富的会话治理。
 
 ## 仓库分区
 
@@ -44,3 +45,4 @@ Session
 - [Server Execution Service](docs/requirements/0021-server-execution-service.md)
 - [Minimal Session Boundary](docs/requirements/0022-session-boundary.md)
 - [Server JSON-RPC Entrypoint](docs/requirements/0023-server-rpc-entrypoint.md)
+- [Session Execution Integration](docs/requirements/0024-session-execution-integration.md)

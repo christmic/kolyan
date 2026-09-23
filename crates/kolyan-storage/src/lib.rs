@@ -60,6 +60,18 @@ pub enum SessionTurnStatus {
 pub trait SessionStore: Send + Sync {
     fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
     fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
+    fn begin_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+    ) -> Result<SessionRecord, StorageError>;
+    fn update_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        status: SessionTurnStatus,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError>;
     fn append_turn(
         &self,
         session_id: &str,
@@ -135,6 +147,49 @@ impl SessionStore for FileSessionStore {
     fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
         let _guard = self.lock.lock().expect("session lock must not be poisoned");
         Self::read(&self.path(session_id)?, session_id)
+    }
+
+    fn begin_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+    ) -> Result<SessionRecord, StorageError> {
+        let _guard = self.lock.lock().expect("session lock must not be poisoned");
+        let path = self.path(session_id)?;
+        let mut record = Self::read(&path, session_id)?;
+        if record
+            .turns
+            .iter()
+            .any(|item| item.turn_id == turn.turn_id || item.execution_id == turn.execution_id)
+        {
+            return Err(StorageError::Conflict(turn.turn_id));
+        }
+        record.turns.push(turn);
+        record.version += 1;
+        Self::write(&path, &record)?;
+        Ok(record)
+    }
+
+    fn update_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        status: SessionTurnStatus,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        let _guard = self.lock.lock().expect("session lock must not be poisoned");
+        let path = self.path(session_id)?;
+        let mut record = Self::read(&path, session_id)?;
+        let turn = record
+            .turns
+            .iter_mut()
+            .find(|item| item.turn_id == turn_id)
+            .ok_or_else(|| StorageError::NotFound(turn_id.to_owned()))?;
+        turn.status = status;
+        record.messages.extend(messages);
+        record.version += 1;
+        Self::write(&path, &record)?;
+        Ok(record)
     }
 
     fn append_turn(

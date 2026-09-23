@@ -1,8 +1,10 @@
-use kolyan_core::{ToolExecutor, TurnExecutor, TurnRequest};
+use kolyan_core::{
+    ApprovalRequest, ToolExecutor, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
+};
 use kolyan_ledger::{LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
-use kolyan_model::{Message, ModelProvider};
+use kolyan_model::{Message, MessageRole, ModelProvider};
 use kolyan_runtime::{DurableTurnDriver, DurableTurnResult, RuntimeError};
-use kolyan_storage::{SessionRecord, SessionStore, SessionTurn, StorageError};
+use kolyan_storage::{SessionRecord, SessionStore, SessionTurn, SessionTurnStatus, StorageError};
 use kolyan_trace::TraceSink;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -144,6 +146,25 @@ where
         self.store.load(session_id)
     }
 
+    pub fn begin_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+    ) -> Result<SessionRecord, StorageError> {
+        self.store.begin_turn(session_id, turn)
+    }
+
+    pub fn update_turn(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        status: SessionTurnStatus,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        self.store
+            .update_turn(session_id, turn_id, status, messages)
+    }
+
     pub fn append_turn(
         &self,
         session_id: &str,
@@ -231,6 +252,18 @@ where
         Ok(result?)
     }
 
+    pub fn load_approval(
+        &self,
+        execution_id: &str,
+        approval_id: &str,
+    ) -> Result<ApprovalRequest, ServerError> {
+        let driver = DurableTurnDriver::new(
+            self.server.coordinator().ledger().clone(),
+            self.trace.clone(),
+        );
+        Ok(driver.load_approval(execution_id, approval_id)?)
+    }
+
     pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
         self.server.cancel(execution)?;
         Ok(())
@@ -239,6 +272,179 @@ where
     pub fn state(&self, execution_id: &str) -> Result<ExecutionState, ServerError> {
         Ok(self.server.state(execution_id)?)
     }
+}
+
+/// Server-owned composition of persistent Session context and one-turn
+/// execution. Session data is committed around the Runtime call; Runtime and
+/// Turn remain unaware of SessionStore.
+#[derive(Clone)]
+pub struct SessionExecutionService<L, S, SS> {
+    execution: ExecutionService<L, S>,
+    sessions: SessionService<SS>,
+}
+
+impl<L, S, SS> SessionExecutionService<L, S, SS>
+where
+    L: LedgerStore + Clone + 'static,
+    S: TraceSink + Clone,
+    SS: SessionStore + Clone,
+{
+    pub fn new(execution: ExecutionService<L, S>, sessions: SessionService<SS>) -> Self {
+        Self {
+            execution,
+            sessions,
+        }
+    }
+
+    pub fn execution(&self) -> &ExecutionService<L, S> {
+        &self.execution
+    }
+
+    pub fn sessions(&self) -> &SessionService<SS> {
+        &self.sessions
+    }
+
+    pub async fn start<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        mut request: TurnRequest,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let turn_id = request.turn_id.clone();
+        let current_messages = request.model_request.messages.clone();
+        let session = self.sessions.load(&session_id)?;
+        let mut contextual_messages = session.messages;
+        contextual_messages.extend(current_messages.clone());
+        request.model_request.messages = contextual_messages;
+        self.sessions.begin_turn(
+            &session_id,
+            SessionTurn {
+                turn_id: turn_id.clone(),
+                execution_id: execution_id.clone(),
+                status: SessionTurnStatus::Running,
+            },
+        )?;
+
+        let result = self
+            .execution
+            .start(executor, request, session_id.clone(), execution_id)
+            .await;
+        self.commit_result(&session_id, &turn_id, current_messages, result)
+    }
+
+    pub async fn resume<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        approval_id: &str,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let approval = self.execution.load_approval(&execution_id, approval_id)?;
+        let session = self.sessions.load(&session_id)?;
+        let prefix_len = session.messages.len();
+        let pending_messages = approval
+            .continuation
+            .model_request
+            .messages
+            .get(prefix_len..)
+            .unwrap_or_default()
+            .to_vec();
+        let result = self
+            .execution
+            .resume(executor, session_id.clone(), execution_id, approval_id)
+            .await;
+        self.commit_result(&session_id, &approval.turn_id, pending_messages, result)
+    }
+
+    pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
+        self.execution.cancel(execution)?;
+        self.sessions.update_turn(
+            &execution.session_id,
+            &execution.turn_id,
+            SessionTurnStatus::Cancelled,
+            Vec::new(),
+        )?;
+        Ok(())
+    }
+
+    pub fn state(&self, execution_id: &str) -> Result<ExecutionState, ServerError> {
+        self.execution.state(execution_id)
+    }
+
+    fn commit_result(
+        &self,
+        session_id: &str,
+        turn_id: &str,
+        input_messages: Vec<Message>,
+        result: Result<DurableTurnResult, ServerError>,
+    ) -> Result<DurableTurnResult, ServerError> {
+        match result {
+            Ok(DurableTurnResult::AwaitingApproval {
+                approval,
+                trajectory,
+            }) => {
+                self.sessions.update_turn(
+                    session_id,
+                    turn_id,
+                    SessionTurnStatus::Suspended,
+                    Vec::new(),
+                )?;
+                Ok(DurableTurnResult::AwaitingApproval {
+                    approval,
+                    trajectory,
+                })
+            }
+            Ok(DurableTurnResult::Completed(execution, trajectory)) => {
+                let messages = completed_messages(&execution, input_messages);
+                self.sessions.update_turn(
+                    session_id,
+                    turn_id,
+                    SessionTurnStatus::Completed,
+                    messages,
+                )?;
+                Ok(DurableTurnResult::Completed(execution, trajectory))
+            }
+            Err(error) => {
+                self.sessions.update_turn(
+                    session_id,
+                    turn_id,
+                    SessionTurnStatus::Failed,
+                    Vec::new(),
+                )?;
+                Err(error)
+            }
+        }
+    }
+}
+
+fn completed_messages(execution: &TurnExecution, input: Vec<Message>) -> Vec<Message> {
+    let mut messages = input;
+    let response = match &execution.result.outcome {
+        TurnOutcome::FinalAnswer { response }
+        | TurnOutcome::Refused { response }
+        | TurnOutcome::Incomplete { response } => Some(response),
+        TurnOutcome::Rejected { .. } | TurnOutcome::Expired { .. } | TurnOutcome::MaxSteps => None,
+    };
+    if let Some(response) = response {
+        messages.push(Message {
+            role: MessageRole::Assistant,
+            content: response.content.clone(),
+        });
+    }
+    messages
 }
 
 impl<L> ExecutionServer<L>
