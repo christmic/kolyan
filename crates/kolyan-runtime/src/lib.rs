@@ -139,6 +139,9 @@ fn encode_turn_event(event: &TurnEvent) -> (LedgerEventKind, Value) {
             LedgerEventKind::ToolExecutionFailed,
             json!({ "call_id": call_id, "name": name, "error": error.to_string() }),
         ),
+        TurnEvent::Failed { error, .. } => (LedgerEventKind::TurnFailed, json!({ "error": error })),
+        TurnEvent::Cancelled { .. } => (LedgerEventKind::TurnCancelled, Value::Null),
+        TurnEvent::TimedOut { .. } => (LedgerEventKind::TurnTimedOut, Value::Null),
         TurnEvent::Completed { outcome, .. } => (
             LedgerEventKind::TurnCompleted,
             json!({ "outcome": format!("{outcome:?}") }),

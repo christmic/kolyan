@@ -15,6 +15,9 @@ pub enum LedgerEventKind {
     ToolExecutionStarted,
     ToolExecutionCompleted,
     ToolExecutionFailed,
+    TurnFailed,
+    TurnCancelled,
+    TurnTimedOut,
     TurnCompleted,
 }
 

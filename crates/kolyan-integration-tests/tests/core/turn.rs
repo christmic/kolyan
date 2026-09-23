@@ -1150,6 +1150,11 @@ fn turn_event_record(event: &TurnEvent) -> Value {
         TurnEvent::ToolExecutionFailed { name, .. } => {
             json!({"event": "tool_execution_failed", "name": name})
         }
+        TurnEvent::Failed { error, .. } => {
+            json!({"event": "failed", "error": error})
+        }
+        TurnEvent::Cancelled { .. } => json!({"event": "cancelled"}),
+        TurnEvent::TimedOut { .. } => json!({"event": "timed_out"}),
         TurnEvent::Completed { outcome, .. } => {
             json!({"event": "completed", "outcome": turn_outcome_name(outcome)})
         }

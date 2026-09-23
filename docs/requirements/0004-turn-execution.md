@@ -134,15 +134,17 @@ pub enum TurnEvent {
     Completed { turn_id: String, outcome: TurnOutcome },
     Failed { turn_id: String, error: TurnError },
     Cancelled { turn_id: String },
+    TimedOut { turn_id: String },
 }
 ```
 
 V1.1 已提供 `TurnEvent`、`TurnExecution` 和 `TurnEventStream`。当前事件覆盖
-Turn/Step/Tool 的生命周期，以及最终完成结果；模型文本、思考和参数增量仍由
+Turn/Step/Tool 的生命周期，以及成功和失败终态；`MaxSteps` 作为
+`TurnOutcome::MaxSteps` 完成。模型文本、思考和参数增量仍由
 Step 的 `StepEventStream` 提供，避免在 Turn 层复制 Provider 细节。
 
-事件流是观察面，不是 Turn 的状态存储。轨迹持久化由 `kolyan-trace` 或
-`kolyan-storage` 后续订阅事件完成。V1.1 不引入重试、预算、并发工具或持久化恢复。
+事件流是观察面，不是 Turn 的状态存储，并且在事件产生后实时发送。轨迹持久化由
+`kolyan-trace` 或 `kolyan-storage` 后续订阅事件完成。V1.1 不引入重试、预算、并发工具或持久化恢复。
 
 ## Tool 抽象
 

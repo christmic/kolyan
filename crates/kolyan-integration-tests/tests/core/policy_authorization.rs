@@ -275,6 +275,11 @@ fn event_record(event: &TurnEvent) -> Value {
         TurnEvent::ToolExecutionFailed { name, .. } => {
             serde_json::json!({"event":"tool_execution_failed","name":name})
         }
+        TurnEvent::Failed { error, .. } => {
+            serde_json::json!({"event":"failed","error":error})
+        }
+        TurnEvent::Cancelled { .. } => serde_json::json!({"event":"cancelled"}),
+        TurnEvent::TimedOut { .. } => serde_json::json!({"event":"timed_out"}),
         TurnEvent::ToolResult { result, .. } => {
             serde_json::json!({"event":"tool_result","is_error":result.is_error,"content":result.content})
         }
