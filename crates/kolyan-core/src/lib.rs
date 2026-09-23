@@ -11,7 +11,8 @@ pub use step::{
 pub use turn::{
     ApprovalRequest, ApprovalState, NoopToolExecutor, ResumableTurn, ToolCallBatch,
     ToolDispatchMode, ToolDispatchPolicy, ToolDispatchResult, ToolError, ToolErrorPolicy,
-    ToolExecutor, ToolFuture, TurnConfig, TurnContinuation, TurnControl, TurnEndReason, TurnError,
+    ToolExecutor, ToolFuture, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
+    TurnBoundaryKind, TurnConfig, TurnContinuation, TurnControl, TurnEndReason, TurnError,
     TurnEvent, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest, TurnResult,
     TurnState,
 };

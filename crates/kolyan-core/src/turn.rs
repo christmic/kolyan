@@ -22,6 +22,9 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
+mod boundary;
+pub use boundary::{TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind};
+
 /// Durable checkpoint for a turn paused at an approval boundary.
 ///
 /// This contains the exact pending call and the model context that led to it,

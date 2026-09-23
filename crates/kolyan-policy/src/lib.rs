@@ -257,6 +257,12 @@ impl BatchExecutionPlan {
     pub fn stage_count(&self) -> usize {
         self.stages.len()
     }
+
+    /// Schedule granted approvals using the same resource ordering as allows.
+    /// This only plans execution; callers must still validate and issue grants.
+    pub fn stages_with_approvals(&self, approved_call_ids: &[String]) -> Vec<Vec<String>> {
+        execution_stages(&self.decisions, approved_call_ids)
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
@@ -347,34 +353,41 @@ impl PolicyEngine {
                 decision: self.decide_with_context(call, context),
             })
             .collect::<Vec<_>>();
-        let mut stages: Vec<Vec<String>> = Vec::new();
-        for (index, current) in decisions.iter().enumerate() {
-            if !matches!(
-                current.decision.kind,
-                PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
-            ) {
-                continue;
-            }
-            let mut stage_index = 0;
-            for previous in &decisions[..index] {
-                if matches!(
-                    previous.decision.kind,
-                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
-                ) && claims_conflict(&previous.claim, &current.claim)
-                    && let Some(previous_stage) = stages
-                        .iter()
-                        .position(|stage| stage.contains(&previous.call_id))
-                {
-                    stage_index = stage_index.max(previous_stage + 1);
-                }
-            }
-            while stages.len() <= stage_index {
-                stages.push(Vec::new());
-            }
-            stages[stage_index].push(current.call_id.clone());
-        }
+        let stages = execution_stages(&decisions, &[]);
         BatchExecutionPlan { decisions, stages }
     }
+}
+
+fn execution_stages(decisions: &[BatchCallDecision], approved: &[String]) -> Vec<Vec<String>> {
+    let executable = |item: &BatchCallDecision| {
+        matches!(
+            item.decision.kind,
+            PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints
+        ) || (item.decision.kind == PolicyDecisionKind::RequireApproval
+            && approved.contains(&item.call_id))
+    };
+    let mut stages: Vec<Vec<String>> = Vec::new();
+    for (index, current) in decisions.iter().enumerate() {
+        if !executable(current) {
+            continue;
+        }
+        let mut stage_index = 0;
+        for previous in &decisions[..index] {
+            if executable(previous)
+                && claims_conflict(&previous.claim, &current.claim)
+                && let Some(previous_stage) = stages
+                    .iter()
+                    .position(|stage| stage.contains(&previous.call_id))
+            {
+                stage_index = stage_index.max(previous_stage + 1);
+            }
+        }
+        while stages.len() <= stage_index {
+            stages.push(Vec::new());
+        }
+        stages[stage_index].push(current.call_id.clone());
+    }
+    stages
 }
 
 fn claims_conflict(left: &InvocationClaim, right: &InvocationClaim) -> bool {
@@ -520,5 +533,39 @@ mod tests {
         let plan = engine.resolve_batch(&context, &[call("/workspace/src/a.rs")]);
         assert!(plan.is_empty());
         assert_eq!(plan.decisions[0].decision.kind, PolicyDecisionKind::Deny);
+    }
+
+    #[test]
+    fn approved_calls_keep_resource_dependencies_and_parallelism() {
+        let mut engine = PolicyEngine::default();
+        let mut manifest = write_manifest();
+        manifest.approval = ApprovalMode::Always;
+        engine.register(manifest);
+        let calls = vec![
+            call("/workspace/src/a.rs"),
+            ToolCall {
+                id: "b".into(),
+                ..call("/workspace/src/b.rs")
+            },
+            ToolCall {
+                id: "a-again".into(),
+                ..call("/workspace/src/a.rs")
+            },
+        ];
+        let plan = engine.resolve_batch(&PolicyContext::default(), &calls);
+        assert!(plan.stages.is_empty());
+        let approved = calls.iter().map(|call| call.id.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            plan.stages_with_approvals(&approved),
+            vec![vec!["call-1", "b"], vec!["a-again"]]
+        );
+        assert_eq!(plan.stages_with_approvals(&["b".into()]), vec![vec!["b"]]);
+    }
+
+    #[test]
+    fn denied_calls_cannot_be_scheduled_by_an_approval_id() {
+        let engine = PolicyEngine::default();
+        let plan = engine.resolve_batch(&PolicyContext::default(), &[call("/workspace/src/a.rs")]);
+        assert!(plan.stages_with_approvals(&["call-1".into()]).is_empty());
     }
 }
