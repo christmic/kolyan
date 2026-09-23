@@ -120,6 +120,32 @@ If either env var is unset, matrix rows for that provider are reported as
 running, Provider or aggregation errors fail the row; live execution never
 silently converts an adapter error into a passing test.
 
+## Turn continuation cases
+
+Turn continuation coverage is in `tests/core/turn_resume.rs`:
+
+```sh
+cargo test -p kolyan-integration-tests --test turn_resume
+cargo test -p kolyan-integration-tests --test turn_resume -- --ignored --nocapture
+```
+
+`turn_resume_contracts.json` supplies 18 deterministic scenarios. The matching
+JSONL file tags expected events by case. Additional tests exercise concurrent
+cancel/completion ordering, preservation of completed tool events on cancel,
+and absence of tool-start events for denied batches.
+`turn_resume_live.json` selects real workflows, expected results and JSONL
+contracts; `turn_resume_workflow.json` supplies model inputs. The live runner
+requires every configured provider key and reports every model/protocol/case
+row. It reconstructs executors from serialized continuations between approvals,
+using caller-owned in-memory control rather than pretending to test process
+crash recovery.
+
+Only test code writes temporary JSONL. Actual traces retain full neutral model
+requests, text/reasoning events, tool arguments/results, admission decisions,
+approval checkpoints and outcomes. Each trace is read back and compared against
+the data-defined ordered contract. Successful traces are retained in the OS
+temporary directory; the runner prints their absolute paths for inspection.
+
 ## Provider matrix
 
 Configured in `tests/config/live-tests.toml`:

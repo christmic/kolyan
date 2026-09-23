@@ -13,10 +13,13 @@ The durable path is:
 3. Persist the checkpoint in an application-owned store.
 4. End the current task and process if necessary.
 5. Load the checkpoint after approval and resume with `resume_approval`.
-6. Execute the approved tool exactly once, then continue from the next step.
+6. Execute the approved tool, then continue from the next step. A caller-owned
+   claim prevents duplicate admission in the current reference store; crash-safe
+   exactly-once effects require Runtime receipts/reconciliation and are not
+   guaranteed by Core.
 
-The existing in-process `TurnControl` approval is retained only as a short-lived
-compatibility API for callers that explicitly accept process-local waiting.
+In-process `TurnControl` approval is a short-lived local waiting option. Both
+entry points now use the same loop; see [0016](0016-turn-boundary-and-resume.md).
 
 ## Checkpoint contract
 

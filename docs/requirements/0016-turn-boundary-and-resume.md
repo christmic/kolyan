@@ -1,8 +1,9 @@
 # 0016 Turn boundary control and unified continuation
 
-Status: implementation in progress. Supersedes the split ordinary/resumable
-execution paths in 0011–0015. Session persistence and distributed scheduling
-remain outside this increment.
+Status: implemented. Supersedes the split ordinary/resumable execution paths
+in 0011–0015. Verification results, including observed live-model failures,
+are recorded in [testing strategy](../architecture/testing-strategy.md#0016-turn-边界与恢复收尾验证).
+Session persistence and distributed scheduling remain outside this increment.
 
 ## Problem and scope
 
@@ -78,6 +79,9 @@ complete batch is appended to model context in original call order.
 
 Tests are additive and data-driven. Existing cases remain regression coverage;
 identifier literals may change when the identity contract is corrected.
+The two older policy trajectory contracts are corrected: approval precedes tool
+start, and denied invocations have no start event. Their runners and side-effect
+assertions remain in place.
 Actual JSONL contains model text/reasoning, calls/results, admission boundaries
 and approval decisions; expectations compare stable structure and semantics,
 not nondeterministic wording. Only test code writes temporary artifacts.

@@ -18,7 +18,7 @@ Session
 
 - `Session`：长期会话边界，未来承载历史消息、恢复、分叉和持久化。
 - `Turn`：一次用户输入触发的一次完整 Agent 执行，从输入开始，到最终回答、失败、取消或达到上限结束。
-- `Step`：Turn 内的一次 LLM 调用及其对应的模型响应、Tool Call 和 Tool Result 处理。
+- `Step`：Turn 内的一次 LLM 调用和响应处理；模型产生的 Tool Call 由 Turn 调度，Tool Result 由 Turn 回填。
 
 第一阶段不实现 Session 持久化；Session 作为架构边界保留。当前实现优先完成 `Turn + Step` 的内存闭环。
 
@@ -36,3 +36,4 @@ Session
 ## 设计文档
 
 - [Agent 执行模型](docs/architecture/agent-execution-model.md)
+- [Turn 边界控制与恢复收尾](docs/requirements/0016-turn-boundary-and-resume.md)

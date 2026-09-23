@@ -85,7 +85,6 @@ Context Snapshot
   → LLM Request
   → Model Response / Stream
   → Tool Calls
-  → Tool Results
 ```
 
 Step 可以记录：
@@ -94,13 +93,18 @@ Step 可以记录：
 - 输入消息数量；
 - 模型响应；
 - Tool Calls；
-- Tool Results；
 - finish reason；
-- token usage（后续加入）。
+- token usage。
 
-Step 不决定长期会话，也不直接实现 Session 恢复。
+Step 不执行工具或回填 Tool Results，也不决定长期会话或直接实现 Session 恢复。
 
-## 最小接口
+当前 Turn 的普通执行、审批挂起和恢复共用一个内核循环。外部取消通过
+`TurnBoundaryControl::admit` 在模型、工具、审批和完成边界接入；
+`TurnControl` 提供当前执行的快速中断。运行实例的身份和持久化由 Runtime
+负责，不改变 Session / Turn / Step 三层抽象。完整契约见
+[0016](../requirements/0016-turn-boundary-and-resume.md)。
+
+## 概念示例（非当前 API）
 
 ```rust
 struct Turn {
@@ -128,7 +132,7 @@ trait Tools {
 }
 ```
 
-第一阶段的 `complete` 可以先返回完整响应。需要实时 UI 时，再替换为 Stream，不改变 Turn / Step 的边界：
+当前实现以 Provider/Step 事件流为基础，再聚合出完整响应；下面仅表达二者关系，不是后续才实现流的计划：
 
 ```text
 complete(messages)

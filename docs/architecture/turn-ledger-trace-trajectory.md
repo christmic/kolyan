@@ -1,5 +1,10 @@
 # Turn Ledger、Trajectory 与 Trace
 
+当前实现范围：`InMemoryLedger` 与 `TurnDriver` 提供成功执行后的事件映射示例。
+执行前事务提交、失败过程记录、完整上下文重建和进程崩溃恢复尚未实现。
+Core 的取消准入端口见 [0016](../requirements/0016-turn-boundary-and-resume.md)，
+它为 Runtime 保留接入位置，不等同于持久化账本实现。
+
 ## 边界
 
 Turn Core 产生 TurnEvent；Runtime / TurnDriver 负责编排、提交 Ledger 和生成
