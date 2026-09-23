@@ -48,6 +48,7 @@ kolyan-integration-tests/
 - `core/turn_resume.rs`：18 个数据驱动恢复/取消/预算/错误场景，加取消竞态、已完成工具事件保留和拒绝批次无开始事件测试；真实矩阵覆盖多审批与普通工具交替，以及审批挂起后外部取消。
 - `runtime/boundary.rs`：使用真实文件 Ledger，关闭并重开 Runtime，验证收据重放不重复执行，以及持久取消阻止新的准入。
 - `DurableTurnDriver` 真实集成覆盖实际 Core `TurnExecutor`、真实文件 Ledger、Step/Terminal 边界持久化和重开后的 Ledger replay。
+- SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
 2026-09-23 的 Runtime v0 验证：
 

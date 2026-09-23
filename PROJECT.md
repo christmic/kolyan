@@ -39,3 +39,4 @@ Session
 - [Turn 边界控制与恢复收尾](docs/requirements/0016-turn-boundary-and-resume.md)
 - [Runtime 执行边界](docs/requirements/0017-runtime-execution-boundary.md)
 - [Durable Turn Driver](docs/requirements/0018-durable-turn-driver.md)
+- [SQLite Ledger 与 Execution Lease](docs/requirements/0019-sqlite-ledger-and-execution-lease.md)

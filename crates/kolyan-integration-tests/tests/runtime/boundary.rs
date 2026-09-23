@@ -1,6 +1,6 @@
 use futures_util::stream;
 use kolyan_core::{TurnConfig, TurnExecutor, TurnRequest};
-use kolyan_ledger::{FileLedger, LedgerEventKind, LedgerStore};
+use kolyan_ledger::{FileLedger, LeaseStore, LedgerEventKind, LedgerStore, SqliteLedger};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRef, ModelRequest,
     ModelResponse, ProviderFuture, StopReason, TokenUsage, ToolChoice,
@@ -252,5 +252,43 @@ async fn durable_turn_driver_records_real_core_boundaries() {
     drop(driver);
     let reopened = FileLedger::open(&file).unwrap();
     assert!(reopened.events_after(0).unwrap().len() >= 4);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn sqlite_ledger_reopens_and_fences_execution_leases() {
+    let root = std::env::temp_dir().join(format!("kolyan-runtime-sqlite-{}", std::process::id()));
+    let file = root.join("ledger.sqlite3");
+    let ledger = SqliteLedger::open(&file).unwrap();
+    let event = kolyan_ledger::LedgerEvent {
+        event_id: "sqlite-event-1".into(),
+        turn_id: "turn-sqlite".into(),
+        execution_id: "execution-sqlite".into(),
+        cursor: 0,
+        kind: LedgerEventKind::ExecutionStarted,
+        idempotency_key: "sqlite-event-1".into(),
+        payload: Value::Null,
+    };
+    assert_eq!(ledger.append(event.clone()).unwrap().cursor, 1);
+    assert!(ledger.claim("claim-1").unwrap());
+    assert!(!ledger.claim("claim-1").unwrap());
+    let lease = ledger
+        .acquire_lease("execution-sqlite", "owner-a", 100, 10)
+        .unwrap();
+    assert_eq!(lease.revision, 1);
+    assert!(
+        ledger
+            .acquire_lease("execution-sqlite", "owner-b", 105, 10)
+            .is_err()
+    );
+    let taken = ledger
+        .acquire_lease("execution-sqlite", "owner-b", 111, 10)
+        .unwrap();
+    assert_eq!(taken.revision, 2);
+    assert!(ledger.renew_lease(&lease, 112, 10).is_err());
+    drop(ledger);
+    let reopened = SqliteLedger::open(&file).unwrap();
+    assert_eq!(reopened.events_after(0).unwrap().len(), 1);
+    assert!(reopened.release_lease(&taken).is_ok());
     std::fs::remove_dir_all(root).unwrap();
 }
