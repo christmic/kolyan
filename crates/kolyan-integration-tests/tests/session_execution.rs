@@ -3,13 +3,13 @@ use kolyan_core::{TurnConfig, TurnExecutor, TurnRequest};
 use kolyan_ledger::{FileLedger, LedgerStore};
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelEvent, ModelEventStream, ModelProvider, ModelRef,
-    ModelRequest, ModelResponse, ProviderFuture, StopReason, SystemInstruction, TokenUsage,
-    ToolCall, ToolChoice,
+    ModelRequest, ModelResponse, ProviderError, ProviderErrorKind, ProviderErrorPhase,
+    ProviderFuture, StopReason, SystemInstruction, TokenUsage, ToolCall, ToolChoice,
 };
 use kolyan_policy::{
     ApprovalMode, Capability, Effect, Idempotency, PathScope, PolicyEngine, ToolManifest,
 };
-use kolyan_server::{ExecutionService, SessionExecutionService, SessionService};
+use kolyan_server::{ExecutionRef, ExecutionService, SessionExecutionService, SessionService};
 use kolyan_storage::{FileSessionStore, SessionStore, SessionTurnStatus};
 use kolyan_tools::{PolicyEnforcingTool, RestrictedFileTool};
 use kolyan_trace::VecTraceSink;
@@ -25,11 +25,31 @@ struct RecordingProvider {
 #[derive(Clone)]
 struct ApprovalProvider {
     calls: Arc<Mutex<usize>>,
+    requests: Arc<Mutex<Vec<ModelRequest>>>,
     tool_call: ToolCall,
+}
+
+#[derive(Clone)]
+struct FailureProvider;
+
+impl ModelProvider for FailureProvider {
+    fn stream(&self, _request: ModelRequest) -> ProviderFuture<'_> {
+        Box::pin(async {
+            Err(ProviderError::new(
+                ProviderErrorKind::Unavailable,
+                ProviderErrorPhase::Open,
+                "deterministic session failure",
+            ))
+        })
+    }
 }
 
 impl ModelProvider for ApprovalProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+        self.requests
+            .lock()
+            .expect("approval provider request lock")
+            .push(request.clone());
         let mut calls = self.calls.lock().expect("approval provider lock");
         let first = *calls == 0;
         *calls += 1;
@@ -242,6 +262,7 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
     let policy = approval_policy();
     let provider = ApprovalProvider {
         calls: Arc::default(),
+        requests: Arc::default(),
         tool_call: ToolCall {
             id: "approval-call".into(),
             name: "file.write".into(),
@@ -301,13 +322,31 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
         )
         .await
         .unwrap();
+    reopened
+        .start(
+            executor(),
+            approval_request("approval-next-turn"),
+            "approval-session",
+            "approval-next-execution",
+        )
+        .await
+        .unwrap();
     let completed = FileSessionStore::new(&session_path)
         .unwrap()
         .load("approval-session")
         .unwrap();
     assert_eq!(completed.turns[0].status, SessionTurnStatus::Completed);
-    assert_eq!(completed.messages.len(), 2);
+    assert_eq!(completed.turns[1].status, SessionTurnStatus::Completed);
+    assert_eq!(completed.messages.len(), 4);
     assert!(safe.join("result.txt").exists());
+    let requests = provider.requests.lock().unwrap();
+    assert!(requests.len() >= 3);
+    assert!(requests[2].messages.iter().all(|message| {
+        !message
+            .content
+            .iter()
+            .any(|block| matches!(block, ContentBlock::ToolResult { .. }))
+    }));
     assert!(
         FileLedger::open(&ledger_path)
             .unwrap()
@@ -315,6 +354,78 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
             .unwrap()
             .iter()
             .any(|event| event.kind == kolyan_ledger::LedgerEventKind::ExecutionSuspended)
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[tokio::test]
+async fn session_execution_marks_failure_and_external_cancel() {
+    let root = std::env::temp_dir().join(format!("kolyan-session-terminal-{}", std::process::id()));
+    let ledger_path = root.join("ledger.jsonl");
+    let session_path = root.join("sessions");
+    let store = FileSessionStore::new(&session_path).unwrap();
+    store.create("terminal-session").unwrap();
+    let service = SessionExecutionService::new(
+        ExecutionService::new(
+            FileLedger::open(&ledger_path).unwrap(),
+            VecTraceSink::default(),
+        ),
+        SessionService::new(store),
+    );
+    let failed = service
+        .start(
+            TurnExecutor::new(FailureProvider),
+            request("failed-turn", "fail this turn"),
+            "terminal-session",
+            "failed-execution",
+        )
+        .await;
+    assert!(failed.is_err());
+    let failed_record = FileSessionStore::new(&session_path)
+        .unwrap()
+        .load("terminal-session")
+        .unwrap();
+    assert_eq!(failed_record.turns[0].status, SessionTurnStatus::Failed);
+
+    let awaiting = service
+        .start(
+            TurnExecutor::with_tools(
+                ApprovalProvider {
+                    calls: Arc::default(),
+                    requests: Arc::default(),
+                    tool_call: ToolCall {
+                        id: "cancel-call".into(),
+                        name: "file.write".into(),
+                        arguments: json!({"path":"safe/cancel.txt","content":"cancelled"}),
+                    },
+                },
+                PolicyEnforcingTool::new(RestrictedFileTool::new(&root), approval_policy()),
+            )
+            .with_policy_engine(approval_policy()),
+            approval_request("cancel-turn"),
+            "terminal-session",
+            "cancel-execution",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        awaiting,
+        kolyan_runtime::DurableTurnResult::AwaitingApproval { .. }
+    ));
+    service
+        .cancel(&ExecutionRef {
+            session_id: "terminal-session".into(),
+            turn_id: "cancel-turn".into(),
+            execution_id: "cancel-execution".into(),
+        })
+        .unwrap();
+    let cancelled_record = FileSessionStore::new(&session_path)
+        .unwrap()
+        .load("terminal-session")
+        .unwrap();
+    assert_eq!(
+        cancelled_record.turns[1].status,
+        SessionTurnStatus::Cancelled
     );
     std::fs::remove_dir_all(root).unwrap();
 }

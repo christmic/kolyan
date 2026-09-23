@@ -73,7 +73,10 @@ Server / Coordinator
 - `session.rs`：两个独立 Turn 写入同一 Session，关闭并重开后验证顺序和上下文恢复。
 - `session_execution.rs`：通过真实文件 SessionStore、FileLedger 和临时轨迹，验证
   两个独立 Turn 跨重启共享上下文，以及审批挂起后 Session 状态持久为 Suspended、
-  Server 重建后恢复为 Completed；不需要模型 API Key。
+  Server 重建后恢复为 Completed；同时覆盖 Session 失败、外部取消，以及工具结果
+  不污染下一轮 Session 上下文；不需要模型 API Key。
+- `session_execution_live.rs`：对配置中的 21 个模型/协议矩阵项逐项执行两轮真实
+  Session Turn，重建 Server/Runtime/SessionStore 后验证第二轮收到第一轮助手上下文。
 - `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
@@ -108,7 +111,12 @@ execution.start → execution.status → execution.cancel
 
 ```text
 cargo test -p kolyan-integration-tests --test session_execution -- --nocapture
-结果：2 passed；覆盖跨重启上下文、Session 状态提交、审批暂停和恢复。
+结果：3 passed；覆盖跨重启上下文、Session 状态提交、审批暂停/恢复、失败、
+外部取消和工具结果隔离。
+
+zsh -lc 'source /Users/christmix/.zshrc; cargo test -p kolyan-integration-tests \
+  --test session_execution_live -- --ignored --nocapture'
+结果：1 passed，0 failed；21 个模型/协议矩阵项全部执行，耗时 149.75s。
 ```
 ```
 

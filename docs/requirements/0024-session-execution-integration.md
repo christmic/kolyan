@@ -43,3 +43,5 @@ SessionExecutionService
 - `SessionExecutionService` 位于 Server 层，负责历史消息拼接和结果提交；
 - Runtime 的 Approval checkpoint 仍由 Ledger 持有，Session 只记录 Suspended 状态，
   恢复时由 Server 根据 execution/approval id 重新装配 Runtime。
+- `session_execution_live.rs` 对 21 个配置模型/协议组合执行两轮真实 Session Turn，
+  并在第二轮前重建 Server、Runtime 和 SessionStore。
