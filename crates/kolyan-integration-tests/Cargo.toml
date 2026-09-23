@@ -54,6 +54,10 @@ path = "tests/server/runtime_approval.rs"
 name = "server_runtime_approval_live"
 path = "tests/server/runtime_approval_live.rs"
 
+[[test]]
+name = "session"
+path = "tests/session.rs"
+
 [lints]
 workspace = true
 

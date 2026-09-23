@@ -70,6 +70,8 @@ Server / Coordinator
 - `DurableTurnDriver` 真实集成覆盖实际 Core `TurnExecutor`、真实文件 Ledger、Step/Terminal 边界持久化和重开后的 Ledger replay。
 - `server/runtime_approval.rs`：Server Coordinator → Runtime → 多轮 Turn → 审批暂停 → Server 重建 → 恢复 → 工具副作用 → Completed 的完整确定性场景。
 - `server/runtime_approval_live.rs`：真实 Provider 矩阵覆盖 Server→Runtime→多 Step→审批暂停→Server 重建→恢复→真实文件写入。
+- `session.rs`：两个独立 Turn 写入同一 Session，关闭并重开后验证顺序和上下文恢复。
+- `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
 ## 0020 Server 验证记录
@@ -83,6 +85,23 @@ zsh -lc 'source /Users/christmix/.zshrc; cargo test -p kolyan-integration-tests 
 配置中的 21 个模型/协议矩阵项全部执行；MiniMax 与 Qwen 两个项目内 API
 Key 环境变量均存在。每个矩阵项均验证 Server/Coordinator 启动、Runtime
 审批暂停、实例释放、Server 重建、Runtime 恢复、真实文件副作用和轨迹契约。
+```
+
+2026-09-23，Session 与 RPC 验证：
+
+```text
+cargo test -p kolyan-storage -p kolyan-server --all-targets
+结果：SessionStore 4 passed；Server 4 passed。
+
+cargo test --workspace --all-targets
+结果：全部启用测试通过；真实 Provider 用例仍按约定显式 ignored。
+
+cargo clippy --workspace --all-targets -- -D warnings
+结果：通过。
+
+实际执行 `kolyan-server` JSONL RPC：
+execution.start → execution.status → execution.cancel
+结果：依次返回 Start、Running、cancelled。
 ```
 
 2026-09-23 的 Runtime v0 验证：

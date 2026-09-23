@@ -42,3 +42,5 @@ Session
 - [SQLite Ledger 与 Execution Lease](docs/requirements/0019-sqlite-ledger-and-execution-lease.md)
 - [Server 与 Execution Coordinator 边界](docs/requirements/0020-server-coordinator-boundary.md)
 - [Server Execution Service](docs/requirements/0021-server-execution-service.md)
+- [Minimal Session Boundary](docs/requirements/0022-session-boundary.md)
+- [Server JSON-RPC Entrypoint](docs/requirements/0023-server-rpc-entrypoint.md)

@@ -633,6 +633,7 @@ dependencies = [
  "kolyan-ledger",
  "kolyan-model",
  "kolyan-runtime",
+ "kolyan-storage",
  "kolyan-trace",
  "serde",
  "serde_json",
@@ -647,6 +648,7 @@ dependencies = [
  "kolyan-core",
  "kolyan-model",
  "kolyan-types",
+ "serde",
  "serde_json",
  "thiserror",
 ]

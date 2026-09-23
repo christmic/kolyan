@@ -1,6 +1,9 @@
 use kolyan_core::ApprovalRequest;
+use kolyan_model::Message;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -11,6 +14,8 @@ pub enum StorageError {
     Serialization(#[from] serde_json::Error),
     #[error("approval checkpoint not found: {0}")]
     NotFound(String),
+    #[error("storage record conflict: {0}")]
+    Conflict(String),
     #[error("invalid approval id")]
     InvalidId,
 }
@@ -25,6 +30,135 @@ pub trait ApprovalStore: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct FileApprovalStore {
     root: PathBuf,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionRecord {
+    pub session_id: String,
+    pub version: u64,
+    pub turns: Vec<SessionTurn>,
+    pub messages: Vec<Message>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionTurn {
+    pub turn_id: String,
+    pub execution_id: String,
+    pub status: SessionTurnStatus,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionTurnStatus {
+    Running,
+    Suspended,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+pub trait SessionStore: Send + Sync {
+    fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
+    fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
+    fn append_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError>;
+}
+
+#[derive(Debug, Clone)]
+pub struct FileSessionStore {
+    root: PathBuf,
+    lock: Arc<Mutex<()>>,
+}
+
+impl FileSessionStore {
+    pub fn new(root: impl Into<PathBuf>) -> Result<Self, StorageError> {
+        let root = root.into();
+        fs::create_dir_all(&root)?;
+        Ok(Self {
+            root,
+            lock: Arc::new(Mutex::new(())),
+        })
+    }
+
+    fn path(&self, session_id: &str) -> Result<PathBuf, StorageError> {
+        if session_id.is_empty()
+            || session_id == "."
+            || session_id == ".."
+            || session_id.contains('/')
+            || session_id.contains('\\')
+        {
+            return Err(StorageError::InvalidId);
+        }
+        Ok(self.root.join(format!("{session_id}.json")))
+    }
+
+    fn read(path: &std::path::Path, session_id: &str) -> Result<SessionRecord, StorageError> {
+        let payload = fs::read(path).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::NotFound {
+                StorageError::NotFound(session_id.to_owned())
+            } else {
+                StorageError::Io(error)
+            }
+        })?;
+        Ok(serde_json::from_slice(&payload)?)
+    }
+
+    fn write(path: &std::path::Path, record: &SessionRecord) -> Result<(), StorageError> {
+        let temp = path.with_extension("json.tmp");
+        fs::write(&temp, serde_json::to_vec_pretty(record)?)?;
+        fs::rename(temp, path)?;
+        Ok(())
+    }
+}
+
+impl SessionStore for FileSessionStore {
+    fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
+        let _guard = self.lock.lock().expect("session lock must not be poisoned");
+        let path = self.path(session_id)?;
+        if path.exists() {
+            return Err(StorageError::Conflict(session_id.to_owned()));
+        }
+        let record = SessionRecord {
+            session_id: session_id.to_owned(),
+            version: 0,
+            turns: Vec::new(),
+            messages: Vec::new(),
+        };
+        Self::write(&path, &record)?;
+        Ok(record)
+    }
+
+    fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
+        let _guard = self.lock.lock().expect("session lock must not be poisoned");
+        Self::read(&self.path(session_id)?, session_id)
+    }
+
+    fn append_turn(
+        &self,
+        session_id: &str,
+        turn: SessionTurn,
+        messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        let _guard = self.lock.lock().expect("session lock must not be poisoned");
+        let path = self.path(session_id)?;
+        let mut record = Self::read(&path, session_id)?;
+        if record
+            .turns
+            .iter()
+            .any(|item| item.turn_id == turn.turn_id || item.execution_id == turn.execution_id)
+        {
+            return Err(StorageError::Conflict(turn.turn_id));
+        }
+        record.turns.push(turn);
+        record.messages.extend(messages);
+        record.version += 1;
+        Self::write(&path, &record)?;
+        Ok(record)
+    }
 }
 
 impl FileApprovalStore {
@@ -109,7 +243,9 @@ impl ApprovalStore for FileApprovalStore {
 mod tests {
     use super::*;
     use kolyan_core::{StepOutcome, StepResult};
-    use kolyan_model::{ModelRef, ModelResponse, StopReason, TokenUsage};
+    use kolyan_model::{
+        ContentBlock, Message, MessageRole, ModelRef, ModelResponse, StopReason, TokenUsage,
+    };
     use serde_json::json;
 
     fn request() -> ApprovalRequest {
@@ -206,6 +342,84 @@ mod tests {
         assert!(matches!(
             store.load("approval-corrupt"),
             Err(StorageError::Serialization(_))
+        ));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn session_store_reopens_and_preserves_ordered_turns_and_messages() {
+        let root = std::env::temp_dir().join(format!("kolyan-session-{}", std::process::id()));
+        let first = FileSessionStore::new(&root).unwrap();
+        assert_eq!(first.create("session-1").unwrap().version, 0);
+        let message_one = Message {
+            role: MessageRole::User,
+            content: vec![ContentBlock::Text {
+                text: "first turn".into(),
+            }],
+        };
+        let message_two = Message {
+            role: MessageRole::Assistant,
+            content: vec![ContentBlock::Text {
+                text: "first answer".into(),
+            }],
+        };
+        let after_first = first
+            .append_turn(
+                "session-1",
+                SessionTurn {
+                    turn_id: "turn-1".into(),
+                    execution_id: "execution-1".into(),
+                    status: SessionTurnStatus::Completed,
+                },
+                vec![message_one.clone(), message_two.clone()],
+            )
+            .unwrap();
+        assert_eq!(after_first.version, 1);
+        let message_three = Message {
+            role: MessageRole::User,
+            content: vec![ContentBlock::Text {
+                text: "second turn".into(),
+            }],
+        };
+        first
+            .append_turn(
+                "session-1",
+                SessionTurn {
+                    turn_id: "turn-2".into(),
+                    execution_id: "execution-2".into(),
+                    status: SessionTurnStatus::Running,
+                },
+                vec![message_three.clone()],
+            )
+            .unwrap();
+        drop(first);
+
+        let reopened = FileSessionStore::new(&root).unwrap();
+        let record = reopened.load("session-1").unwrap();
+        assert_eq!(record.version, 2);
+        assert_eq!(
+            record
+                .turns
+                .iter()
+                .map(|turn| turn.turn_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["turn-1", "turn-2"]
+        );
+        assert_eq!(
+            record.messages,
+            vec![message_one, message_two, message_three]
+        );
+        assert!(matches!(
+            reopened.append_turn(
+                "session-1",
+                SessionTurn {
+                    turn_id: "turn-1".into(),
+                    execution_id: "execution-duplicate".into(),
+                    status: SessionTurnStatus::Completed,
+                },
+                Vec::new(),
+            ),
+            Err(StorageError::Conflict(_))
         ));
         fs::remove_dir_all(root).unwrap();
     }

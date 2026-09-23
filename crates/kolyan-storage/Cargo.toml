@@ -12,4 +12,5 @@ kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-types = { path = "../kolyan-types" }
 serde_json.workspace = true
+serde.workspace = true
 thiserror.workspace = true
