@@ -51,3 +51,6 @@ SessionExecutionService
 Anthropic 流传输错误支持通过 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 开启诊断。诊断只在
 显式开启时保留最多 1024 字节的响应尾部，同时记录 HTTP 状态、响应类型、编码和
 已接收字节数；默认模式不记录响应内容。
+
+OpenAI 和 Anthropic 客户端对尚未收到 HTTP 响应的连接/请求/超时错误执行一次有界
+重试；一旦收到 HTTP 响应，不自动重试，避免重复或掩盖模型及协议错误。

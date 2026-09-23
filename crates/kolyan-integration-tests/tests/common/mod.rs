@@ -283,6 +283,7 @@ pub fn build_openai_provider(cfg: &ProviderConfig, api_key: &str) -> OpenAiProvi
         base_url: cfg.base_url.clone(),
         api_key: api_key.to_string(),
         timeout: Duration::from_secs(cfg.timeout_secs),
+        transport_retries: 1,
     };
     let client = OpenAiClient::new(protocol_cfg)
         .expect("OpenAiClient::new should succeed with a valid base_url and timeout");
@@ -298,6 +299,7 @@ pub fn build_anthropic_provider(cfg: &AnthropicProviderConfig, api_key: &str) ->
         diagnostics: std::env::var("KOLYAN_PROTOCOL_DIAGNOSTICS")
             .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
             .unwrap_or(false),
+        transport_retries: 1,
     };
     let client = AnthropicClient::new(protocol_cfg)
         .expect("AnthropicClient::new should succeed with a valid base_url and timeout");

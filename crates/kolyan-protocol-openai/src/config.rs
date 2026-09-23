@@ -5,6 +5,8 @@ pub struct OpenAiConfig {
     pub base_url: String,
     pub api_key: String,
     pub timeout: Duration,
+    /// Number of retries for transport failures before an HTTP response.
+    pub transport_retries: u8,
 }
 
 impl OpenAiConfig {
@@ -13,6 +15,7 @@ impl OpenAiConfig {
             base_url: "https://api.openai.com".into(),
             api_key: api_key.into(),
             timeout: Duration::from_secs(120),
+            transport_retries: 1,
         }
     }
 }

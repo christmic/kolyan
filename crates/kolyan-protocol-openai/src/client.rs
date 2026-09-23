@@ -25,13 +25,19 @@ impl OpenAiClient {
         &self,
         request: &ResponseCreateRequest,
     ) -> Result<ResponseStream, OpenAiError> {
-        Ok(ResponseStream::new(
-            self.request("/v1/responses")
-                .json(request)
-                .send()
-                .await?
-                .error_for_status()?,
-        ))
+        let mut attempts = 0;
+        loop {
+            match self.request("/v1/responses").json(request).send().await {
+                Ok(response) => return Ok(ResponseStream::new(response.error_for_status()?)),
+                Err(error)
+                    if attempts < self.config.transport_retries
+                        && (error.is_timeout() || error.is_connect() || error.is_request()) =>
+                {
+                    attempts += 1;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
     }
 
     fn request(&self, path: &str) -> RequestBuilder {

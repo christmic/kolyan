@@ -9,6 +9,8 @@ pub struct AnthropicConfig {
     /// Include bounded response diagnostics in stream transport errors.
     /// Disabled by default because response fragments may contain user data.
     pub diagnostics: bool,
+    /// Number of retries for transport failures before an HTTP response.
+    pub transport_retries: u8,
 }
 
 impl AnthropicConfig {
@@ -19,6 +21,7 @@ impl AnthropicConfig {
             version: "2023-06-01".into(),
             timeout: Duration::from_secs(120),
             diagnostics: false,
+            transport_retries: 1,
         }
     }
 }

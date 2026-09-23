@@ -80,6 +80,8 @@ Server / Coordinator
 - Anthropic 协议层支持按需诊断流响应；设置 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 后，
   传输错误会带 HTTP 状态、Content-Type、Content-Encoding、已接收字节数和长度受限
   的响应尾部片段，默认关闭以避免响应内容进入日志。
+- OpenAI/Anthropic 协议客户端对尚未收到 HTTP 响应的连接、请求和超时错误执行一次
+  有界重试；收到 HTTP 响应后不自动重试，避免掩盖协议或模型错误。
 - `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
