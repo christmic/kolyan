@@ -1134,13 +1134,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
     }
 
     pub async fn execute(&self, request: TurnRequest) -> Result<TurnResult, TurnError> {
-        let execution = self
+        Ok(self
             .execute_with_events(request, TurnControl::default())
-            .await?;
-        if matches!(execution.result.outcome, TurnOutcome::MaxSteps) {
-            return Err(TurnError::MaxSteps);
-        }
-        Ok(execution.result)
+            .await?
+            .result)
     }
 
     pub async fn execute_with_control(

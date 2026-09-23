@@ -3,7 +3,7 @@
 use futures_util::stream;
 use kolyan_core::{
     ToolDispatchMode, ToolDispatchPolicy, ToolError, ToolErrorPolicy, ToolExecutor, ToolFuture,
-    TurnConfig, TurnControl, TurnError, TurnExecutor, TurnRequest,
+    TurnConfig, TurnControl, TurnError, TurnExecutor, TurnOutcome, TurnRequest,
 };
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelEvent, ModelEventStream, ModelProvider, ModelRef,
@@ -220,16 +220,16 @@ async fn max_steps_stops_an_unfinished_tool_loop() {
     let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
     let executor = TurnExecutor::with_tools(provider.clone(), SelectiveTool { fail_call_id: None });
 
-    let error = executor
+    let result = executor
         .execute(TurnRequest {
             turn_id: "turn-max-steps".into(),
             model_request: request(),
             config: TurnConfig { max_steps: 1 },
         })
         .await
-        .expect_err("unfinished tool loop must hit max steps");
+        .expect("unfinished tool loop must produce a terminal result");
 
-    assert!(matches!(error, TurnError::MaxSteps));
+    assert!(matches!(result.outcome, TurnOutcome::MaxSteps));
     assert_eq!(provider.request_count(), 1);
 }
 

@@ -15,10 +15,6 @@ Turn 的终态分为两类：
 
 `MaxSteps` 不再作为异常返回。它是一个可观察、可判断的正常 Turn 结果，且不能继续调用模型。
 
-兼容说明：历史便捷接口 `execute()` 仍将 `MaxSteps` 映射为 `TurnError::MaxSteps`；完整的
-`execute_with_events()` 和 `execute_event_stream()` 使用本需求定义的
-`TurnOutcome::MaxSteps` 终态，以保持已有调用方兼容并让事件轨迹完整。
-
 ## 事件契约
 
 事件顺序必须满足：
