@@ -160,6 +160,8 @@ mod tests {
                 max_tool_calls: None,
                 tool_calls_used: 0,
                 deadline_at_ms: None,
+                tool_dispatch: Default::default(),
+                tool_timeout_ms: None,
             },
         }
     }

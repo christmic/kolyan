@@ -23,6 +23,8 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 mod boundary;
+mod dispatch;
+mod engine;
 pub use boundary::{TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind};
 
 /// Durable checkpoint for a turn paused at an approval boundary.
@@ -52,6 +54,8 @@ pub struct TurnContinuation {
     pub tool_calls_used: usize,
     #[serde(default)]
     pub deadline_at_ms: Option<u64>,
+    pub tool_dispatch: ToolDispatchPolicy,
+    pub tool_timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -108,19 +112,19 @@ impl Default for TurnConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ToolDispatchMode {
     Serial,
     Parallel,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ToolErrorPolicy {
     FailTurn,
     ContinueBatch,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ToolDispatchPolicy {
     pub mode: ToolDispatchMode,
     pub on_error: ToolErrorPolicy,
@@ -367,26 +371,30 @@ pub type TurnEventStream<'a> =
 type EventQueue = Arc<Mutex<VecDeque<Result<TurnEvent, TurnError>>>>;
 
 struct EventEmitter {
-    events: Vec<TurnEvent>,
+    events: Mutex<Vec<TurnEvent>>,
     queue: Option<EventQueue>,
 }
 
 impl EventEmitter {
     fn new(queue: Option<EventQueue>) -> Self {
         Self {
-            events: Vec::new(),
+            events: Mutex::new(Vec::new()),
             queue,
         }
     }
 
-    fn emit(&mut self, event: TurnEvent) {
+    fn emit(&self, event: TurnEvent) {
         if let Some(queue) = &self.queue {
             queue
                 .lock()
                 .expect("turn event queue must not be poisoned")
                 .push_back(Ok(event.clone()));
         }
-        self.events.push(event);
+        self.events.lock().expect("turn events lock").push(event);
+    }
+
+    fn into_events(self) -> Vec<TurnEvent> {
+        self.events.into_inner().expect("turn events lock")
     }
 }
 
@@ -418,6 +426,8 @@ pub enum TurnOutcome {
 
 #[derive(Debug, Error)]
 pub enum TurnError {
+    #[error("turn boundary control failed: {message}")]
+    BoundaryControl { message: String },
     #[error("turn request is invalid: {message}")]
     InvalidRequest { message: String },
     #[error("turn step failed: {0}")]
@@ -445,6 +455,7 @@ impl TurnError {
             Self::Tool(ToolError::Cancelled) => TurnEndReason::Cancelled,
             Self::Tool(ToolError::TimedOut) => TurnEndReason::TimedOut,
             Self::InvalidRequest { .. }
+            | Self::BoundaryControl { .. }
             | Self::Step(_)
             | Self::Tool(_)
             | Self::ToolBudgetExceeded
@@ -566,7 +577,7 @@ impl Future for ApprovalFuture {
             .approved_tools
             .lock()
             .expect("approval lock must not be poisoned")
-            .contains(&self.tool_name)
+            .remove(&self.tool_name)
         {
             return Poll::Ready(());
         }
@@ -581,7 +592,7 @@ impl Future for ApprovalFuture {
             .approved_tools
             .lock()
             .expect("approval lock must not be poisoned")
-            .contains(&self.tool_name)
+            .remove(&self.tool_name)
         {
             Poll::Ready(())
         } else {
@@ -612,6 +623,7 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     tool_dispatch: ToolDispatchPolicy,
     tool_timeout: Option<Duration>,
     policy_engine: Option<Arc<PolicyEngine>>,
+    boundary_control: Option<Arc<dyn TurnBoundaryControl>>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -622,6 +634,7 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
             policy_engine: None,
+            boundary_control: None,
         }
     }
 }
@@ -634,6 +647,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
             policy_engine: None,
+            boundary_control: None,
         }
     }
 
@@ -644,6 +658,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_dispatch: ToolDispatchPolicy::default(),
             tool_timeout: None,
             policy_engine: None,
+            boundary_control: None,
         }
     }
 
@@ -657,6 +672,11 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
         self
     }
 
+    pub fn with_boundary_control(mut self, control: Arc<dyn TurnBoundaryControl>) -> Self {
+        self.boundary_control = Some(control);
+        self
+    }
+
     pub fn with_policy_engine(mut self, policy_engine: Arc<PolicyEngine>) -> Self {
         self.policy_engine = Some(policy_engine);
         self
@@ -664,390 +684,46 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 }
 
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
-    /// Starts an execution that can cross a process boundary at approval.
-    ///
-    /// Unlike execute_with_events, this method never waits on TurnControl.
-    /// It returns a serializable checkpoint when policy requires approval.
+    /// Run until completion or a serializable approval boundary.
     pub async fn start_resumable(&self, request: TurnRequest) -> Result<ResumableTurn, TurnError> {
-        validate_request(&request)?;
-        let turn_id = request.turn_id.clone();
-        let mut model_request = request.model_request.clone();
-        let step_id = format!("{}-step-0", request.turn_id);
-        model_request.request_id = step_id.clone();
-        let deadline = request.config.deadline.map(|limit| Instant::now() + limit);
-        let step_control = StepControl::default();
-        let step_future = self.step_executor.execute_with_control(
-            StepRequest {
-                step_id: step_id.clone(),
-                model_request: model_request.clone(),
-                options: StepExecutionOptions {
-                    deadline,
-                    ..StepExecutionOptions::default()
-                },
-            },
-            step_control.clone(),
-        );
-        let step = match deadline {
-            Some(deadline) => tokio::time::timeout_at(deadline.into(), step_future)
-                .await
-                .map_err(|_| TurnError::TimedOut)?
-                .map_err(map_step_error)?,
-            None => step_future.await.map_err(map_step_error)?,
-        };
-        let mut events = vec![
-            TurnEvent::Started {
-                turn_id: turn_id.clone(),
-            },
-            TurnEvent::StepStarted {
-                turn_id: turn_id.clone(),
-                step_id,
-            },
-            TurnEvent::StepCompleted {
-                turn_id: turn_id.clone(),
-                step: step.clone(),
-            },
-        ];
-        match step.outcome {
-            StepOutcome::FinalAnswer | StepOutcome::Refused | StepOutcome::Incomplete => {
-                let (outcome, end_reason) = outcome_from_step(&step);
-                events.push(TurnEvent::Completed {
-                    turn_id: turn_id.clone(),
-                    outcome: outcome.clone(),
-                });
-                return Ok(ResumableTurn::Completed(Box::new(TurnExecution {
-                    result: TurnResult {
-                        turn_id,
-                        outcome,
-                        end_reason,
-                        steps: vec![step],
-                    },
-                    events,
-                })));
-            }
-            StepOutcome::ToolCalls => {}
-        }
-
-        let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
-        let Some(policy) = &self.policy_engine else {
-            return Err(TurnError::InvalidRequest {
-                message: "resumable approval requires a policy engine".into(),
-            });
-        };
-        let plan = policy.resolve_batch(
-            &PolicyContext {
-                turn_id: Some(request.turn_id.clone()),
-                ..PolicyContext::default()
-            },
-            batch.calls(),
-        );
-        let Some(decision) = plan
-            .decisions
-            .iter()
-            .find(|item| item.decision.kind == PolicyDecisionKind::RequireApproval)
-        else {
-            return Err(TurnError::InvalidRequest {
-                message: "resumable start requires an approval boundary".into(),
-            });
-        };
-        let call = batch
-            .call(&decision.call_id)
-            .expect("planned call exists")
-            .clone();
-        let pending_calls = batch.into_calls();
-        events.push(TurnEvent::ToolCallRequested {
-            turn_id: request.turn_id.clone(),
-            call: call.clone(),
-        });
-        events.push(TurnEvent::ApprovalRequested {
-            turn_id: request.turn_id.clone(),
-            call_id: call.id.clone(),
-            name: call.name.clone(),
-        });
-        Ok(ResumableTurn::AwaitingApproval(Box::new(
-            make_approval_request(
-                &request,
-                model_request,
-                vec![step],
-                pending_calls,
-                &call,
-                decision.decision.reason.clone(),
-                decision.decision.policy_version.clone(),
-            ),
-        )))
+        self.start_resumable_with_control(request, TurnControl::default())
+            .await
     }
 
-    /// Resumes a persisted approval without relying on the original task or
-    /// process. The approval id is supplied separately to prevent accidental
-    /// acceptance of a checkpoint for another user decision.
+    pub async fn start_resumable_with_control(
+        &self,
+        request: TurnRequest,
+        control: TurnControl,
+    ) -> Result<ResumableTurn, TurnError> {
+        let state = engine::RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
+        self.run(state, control, true, None).await
+    }
+
     pub async fn resume_approval(
         &self,
         approval: ApprovalRequest,
         approved_approval_id: &str,
     ) -> Result<ResumableTurn, TurnError> {
-        if approval.approval_id != approved_approval_id
-            || approval.continuation.approval_id != approval.approval_id
-        {
-            return Err(TurnError::InvalidRequest {
-                message: "approval id does not match checkpoint".into(),
-            });
-        }
-        if approval.state != ApprovalState::Pending {
-            return Err(TurnError::InvalidRequest {
-                message: "approval checkpoint is already resolved".into(),
-            });
-        }
-        if approval
-            .expires_at_ms
-            .is_some_and(|deadline| deadline <= now_ms())
-        {
-            return Err(TurnError::InvalidRequest {
-                message: "approval checkpoint has expired".into(),
-            });
-        }
-        let mut continuation = approval.continuation;
-        if continuation
-            .deadline_at_ms
-            .is_some_and(|deadline| deadline <= now_ms())
-        {
-            return Err(TurnError::TimedOut);
-        }
-        if continuation.max_tool_calls.is_some_and(|limit| {
-            continuation.tool_calls_used + continuation.pending_calls.len() > limit
-        }) {
-            return Err(TurnError::ToolBudgetExceeded);
-        }
-        let deadline = deadline_instant(continuation.deadline_at_ms);
-        let Some(call) = continuation
-            .pending_calls
-            .iter()
-            .find(|call| call.id == continuation.call_id)
-            .cloned()
-        else {
-            return Err(TurnError::InvalidRequest {
-                message: "checkpoint is missing its pending call".into(),
-            });
-        };
-        if call.name != continuation.tool_name
-            || serde_json::to_string(&call.arguments).map_err(|error| {
-                TurnError::InvalidRequest {
-                    message: format!("cannot fingerprint tool arguments: {error}"),
-                }
-            })? != continuation.args_fingerprint
-        {
-            return Err(TurnError::InvalidRequest {
-                message: "checkpoint tool call was modified".into(),
-            });
-        }
-        let Some(policy) = &self.policy_engine else {
-            return Err(TurnError::InvalidRequest {
-                message: "resumable approval requires a policy engine".into(),
-            });
-        };
-        let plan = policy.resolve_batch(
-            &PolicyContext {
-                turn_id: Some(continuation.turn_id.clone()),
-                ..PolicyContext::default()
-            },
-            &continuation.pending_calls,
-        );
-        let Some(decision) = plan
-            .decisions
-            .iter()
-            .find(|item| item.call_id == continuation.call_id)
-        else {
-            return Err(TurnError::InvalidRequest {
-                message: "checkpoint call is absent from the current policy plan".into(),
-            });
-        };
-        if decision.decision.kind != PolicyDecisionKind::RequireApproval
-            || decision.decision.policy_version != continuation.policy_version
-        {
-            return Err(TurnError::InvalidRequest {
-                message: "approval is stale under the current policy".into(),
-            });
-        }
-        if !continuation.approved_call_ids.contains(&call.id) {
-            continuation.approved_call_ids.push(call.id.clone());
-        }
-        if let Some(next_decision) = plan.decisions.iter().find(|item| {
-            item.decision.kind == PolicyDecisionKind::RequireApproval
-                && !continuation.approved_call_ids.contains(&item.call_id)
-        }) {
-            let next_call = continuation
-                .pending_calls
-                .iter()
-                .find(|pending| pending.id == next_decision.call_id)
-                .expect("planned approval call must exist")
-                .clone();
-            return Ok(ResumableTurn::AwaitingApproval(Box::new(
-                make_followup_approval(
-                    continuation,
-                    &next_call,
-                    next_decision.decision.reason.clone(),
-                    next_decision.decision.policy_version.clone(),
-                ),
-            )));
-        }
-        let control = TurnControl::default();
-        let mut events = vec![TurnEvent::Started {
-            turn_id: continuation.turn_id.clone(),
-        }];
-        let mut tool_results = Vec::with_capacity(continuation.pending_calls.len());
-        for pending_call in &continuation.pending_calls {
-            let decision = plan
-                .decisions
-                .iter()
-                .find(|item| item.call_id == pending_call.id)
-                .ok_or_else(|| TurnError::InvalidRequest {
-                    message: "checkpoint call is absent from the current policy plan".into(),
-                })?;
-            let grant = match decision.decision.kind {
-                PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints => decision
-                    .decision
-                    .clone()
-                    .into_grant(pending_call)
-                    .map_err(|error| TurnError::InvalidRequest {
-                        message: error.to_string(),
-                    })?,
-                PolicyDecisionKind::RequireApproval
-                    if continuation.approved_call_ids.contains(&pending_call.id) =>
-                {
-                    decision
-                        .decision
-                        .clone()
-                        .into_approved_grant(pending_call)
-                        .map_err(|error| TurnError::InvalidRequest {
-                            message: error.to_string(),
-                        })?
-                }
-                PolicyDecisionKind::Deny | PolicyDecisionKind::RequireApproval => {
-                    return Err(TurnError::InvalidRequest {
-                        message: "approval batch contains an unapproved or denied call".into(),
-                    });
-                }
-            };
-            events.push(TurnEvent::ToolExecutionStarted {
-                turn_id: continuation.turn_id.clone(),
-                call_id: pending_call.id.clone(),
-                name: pending_call.name.clone(),
-            });
-            let tool_result = self
-                .execute_tool(pending_call.clone(), &control, Some(grant), deadline)
-                .await?;
-            events.push(TurnEvent::ToolResult {
-                turn_id: continuation.turn_id.clone(),
-                result: tool_result.clone(),
-            });
-            tool_results.push(tool_result);
-        }
-        let mut model_request = continuation.model_request;
-        append_tool_context(
-            &mut model_request.messages,
-            &continuation.assistant_content,
-            tool_results,
-        );
-        model_request.tool_choice = ToolChoice::Auto;
-        let step_id = format!(
-            "{}-step-{}",
-            continuation.turn_id, continuation.next_step_index
-        );
-        model_request.request_id = step_id.clone();
-        let step_control = StepControl::default();
-        let step_future = self.step_executor.execute_with_control(
-            StepRequest {
-                step_id: step_id.clone(),
-                model_request: model_request.clone(),
-                options: StepExecutionOptions {
-                    deadline,
-                    ..StepExecutionOptions::default()
-                },
-            },
-            step_control,
-        );
-        let step = match deadline {
-            Some(deadline) => tokio::time::timeout_at(deadline.into(), step_future)
-                .await
-                .map_err(|_| TurnError::TimedOut)?
-                .map_err(map_step_error)?,
-            None => step_future.await.map_err(map_step_error)?,
-        };
-        events.push(TurnEvent::StepStarted {
-            turn_id: continuation.turn_id.clone(),
-            step_id,
-        });
-        events.push(TurnEvent::StepCompleted {
-            turn_id: continuation.turn_id.clone(),
-            step: step.clone(),
-        });
-        if step.outcome != StepOutcome::ToolCalls {
-            let (outcome, end_reason) = outcome_from_step(&step);
-            events.push(TurnEvent::Completed {
-                turn_id: continuation.turn_id.clone(),
-                outcome: outcome.clone(),
-            });
-            return Ok(ResumableTurn::Completed(Box::new(TurnExecution {
-                result: TurnResult {
-                    turn_id: continuation.turn_id,
-                    outcome,
-                    end_reason,
-                    steps: continuation
-                        .steps
-                        .into_iter()
-                        .chain(std::iter::once(step))
-                        .collect(),
-                },
-                events,
-            })));
-        }
-        let next_batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
-        let next_plan = policy.resolve_batch(
-            &PolicyContext {
-                turn_id: Some(continuation.turn_id.clone()),
-                ..PolicyContext::default()
-            },
-            next_batch.calls(),
-        );
-        let Some(next_decision) = next_plan
-            .decisions
-            .iter()
-            .find(|item| item.decision.kind == PolicyDecisionKind::RequireApproval)
-        else {
-            return Err(TurnError::InvalidRequest {
-                message: "resumable v1 requires the next step to end or request approval".into(),
-            });
-        };
-        let next_call = next_batch
-            .call(&next_decision.call_id)
-            .expect("planned call exists")
-            .clone();
-        let next_pending_calls = next_batch.into_calls();
-        let max_tool_calls = continuation.max_tool_calls;
-        let tool_calls_used = continuation.tool_calls_used + continuation.pending_calls.len();
-        let deadline_at_ms = continuation.deadline_at_ms;
-        let mut steps = continuation.steps;
-        steps.push(step);
-        let next_request = TurnRequest {
-            turn_id: continuation.turn_id.clone(),
-            model_request: model_request.clone(),
-            config: TurnConfig {
-                max_steps: continuation.max_steps,
-                max_tool_calls,
-                deadline: deadline_at_ms
-                    .map(|deadline| Duration::from_millis(deadline.saturating_sub(now_ms()))),
-            },
-        };
-        let mut next_approval = make_approval_request(
-            &next_request,
-            model_request,
-            steps,
-            next_pending_calls,
-            &next_call,
-            next_decision.decision.reason.clone(),
-            next_decision.decision.policy_version.clone(),
-        );
-        next_approval.continuation.tool_calls_used = tool_calls_used;
-        next_approval.continuation.deadline_at_ms = deadline_at_ms;
-        Ok(ResumableTurn::AwaitingApproval(Box::new(next_approval)))
+        self.resume_approval_with_control(approval, approved_approval_id, TurnControl::default())
+            .await
+    }
+
+    pub async fn resume_approval_with_control(
+        &self,
+        approval: ApprovalRequest,
+        approved_approval_id: &str,
+        control: TurnControl,
+    ) -> Result<ResumableTurn, TurnError> {
+        validate_approval_transition(&approval, approved_approval_id)?;
+        let mut state = engine::RunState::restore(&approval)?;
+        self.validate_approval_policy(&approval)?;
+        state
+            .pending
+            .as_mut()
+            .expect("validated pending batch")
+            .approved
+            .push(approval.call_id);
+        self.run(state, control, true, None).await
     }
 
     pub fn reject_approval(
@@ -1081,216 +757,6 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         )
     }
 
-    async fn execute_tool(
-        &self,
-        call: ToolCall,
-        control: &TurnControl,
-        grant: Option<ExecutionGrant>,
-        deadline: Option<Instant>,
-    ) -> Result<ToolResult, ToolError> {
-        let execute = match grant {
-            Some(grant) => self.tool_executor.execute_with_grant(call, grant),
-            None => self.tool_executor.execute(call),
-        };
-        let execute_with_cancel = async {
-            tokio::select! {
-                result = execute => result,
-                _ = control.wait_cancelled() => Err(ToolError::Cancelled),
-            }
-        };
-        let execute_with_timeout = async {
-            if let Some(timeout) = self.tool_timeout {
-                tokio::time::timeout(timeout, execute_with_cancel)
-                    .await
-                    .unwrap_or(Err(ToolError::TimedOut))
-            } else {
-                execute_with_cancel.await
-            }
-        };
-        if let Some(deadline) = deadline {
-            tokio::time::timeout_at(deadline.into(), execute_with_timeout)
-                .await
-                .unwrap_or(Err(ToolError::TimedOut))
-        } else {
-            execute_with_timeout.await
-        }
-    }
-
-    async fn execute_batch(
-        &self,
-        batch: &ToolCallBatch,
-        turn_id: &str,
-        control: &TurnControl,
-        deadline: Option<Instant>,
-        events: &mut EventEmitter,
-    ) -> Vec<ToolDispatchResult> {
-        let Some(policy) = &self.policy_engine else {
-            return match self.tool_dispatch.mode {
-                ToolDispatchMode::Serial => {
-                    let mut results = Vec::with_capacity(batch.len());
-                    for call in batch.calls() {
-                        results.push(ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result: self
-                                .execute_tool(call.clone(), control, None, deadline)
-                                .await,
-                        });
-                    }
-                    results
-                }
-                ToolDispatchMode::Parallel => {
-                    let futures = batch
-                        .calls()
-                        .iter()
-                        .cloned()
-                        .map(|call| self.execute_tool(call, control, None, deadline));
-                    join_all(futures)
-                        .await
-                        .into_iter()
-                        .zip(batch.calls())
-                        .map(|(result, call)| ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result,
-                        })
-                        .collect()
-                }
-            };
-        };
-
-        let plan = policy.resolve_batch(
-            &PolicyContext {
-                turn_id: Some(turn_id.to_string()),
-                ..PolicyContext::default()
-            },
-            batch.calls(),
-        );
-        let mut grants = std::collections::HashMap::new();
-        let mut results = batch
-            .calls()
-            .iter()
-            .filter_map(|call| {
-                let decision = plan.decisions.iter().find(|item| item.call_id == call.id)?;
-                match decision.decision.kind {
-                    PolicyDecisionKind::Allow | PolicyDecisionKind::AllowWithConstraints => {
-                        let grant = decision
-                            .decision
-                            .clone()
-                            .into_grant(call)
-                            .expect("allow decision must produce a grant");
-                        grants.insert(call.id.clone(), grant);
-                        None
-                    }
-                    PolicyDecisionKind::RequireApproval => None,
-                    PolicyDecisionKind::Deny => Some(ToolDispatchResult {
-                        call_id: call.id.clone(),
-                        result: Err(ToolError::PolicyDenied {
-                            message: decision.decision.reason.clone(),
-                        }),
-                    }),
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let mut stages = plan.stages;
-        for decision in &plan.decisions {
-            if decision.decision.kind != PolicyDecisionKind::RequireApproval {
-                continue;
-            }
-            let call = batch
-                .call(&decision.call_id)
-                .expect("policy call must be in batch");
-            events.emit(TurnEvent::ApprovalRequested {
-                turn_id: turn_id.to_string(),
-                call_id: call.id.clone(),
-                name: call.name.clone(),
-            });
-            let approval = control.wait_for_tool_approval(&call.name);
-            if let Some(deadline) = deadline {
-                tokio::select! {
-                    result = tokio::time::timeout_at(deadline.into(), approval) => {
-                        if result.is_err() {
-                            return vec![ToolDispatchResult {
-                                call_id: call.id.clone(),
-                                result: Err(ToolError::TimedOut),
-                            }];
-                        }
-                    }
-                    _ = control.wait_cancelled() => {
-                        return vec![ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result: Err(ToolError::Cancelled),
-                        }];
-                    }
-                }
-            } else {
-                tokio::select! {
-                    _ = approval => {}
-                    _ = control.wait_cancelled() => {
-                        return vec![ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result: Err(ToolError::Cancelled),
-                        }];
-                    }
-                }
-            }
-            let grant = decision
-                .decision
-                .clone()
-                .into_approved_grant(call)
-                .expect("approved call must produce a grant");
-            grants.insert(call.id.clone(), grant);
-            stages.push(vec![call.id.clone()]);
-        }
-
-        for stage in stages {
-            let calls = stage
-                .iter()
-                .filter_map(|call_id| batch.call(call_id).cloned())
-                .collect::<Vec<_>>();
-            let stage_results = match self.tool_dispatch.mode {
-                ToolDispatchMode::Serial => {
-                    let mut stage_results = Vec::with_capacity(calls.len());
-                    for call in calls {
-                        stage_results.push(ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result: self
-                                .execute_tool(
-                                    call.clone(),
-                                    control,
-                                    grants.remove(&call.id),
-                                    deadline,
-                                )
-                                .await,
-                        });
-                    }
-                    stage_results
-                }
-                ToolDispatchMode::Parallel => {
-                    let futures = calls.into_iter().map(|call| {
-                        let grant = grants.get(&call.id).cloned();
-                        async move {
-                            let call_id = call.id.clone();
-                            ToolDispatchResult {
-                                call_id,
-                                result: self.execute_tool(call, control, grant, deadline).await,
-                            }
-                        }
-                    });
-                    join_all(futures).await
-                }
-            };
-            results.extend(stage_results);
-        }
-        results.sort_by_key(|result| {
-            batch
-                .calls()
-                .iter()
-                .position(|call| call.id == result.call_id)
-                .unwrap_or(usize::MAX)
-        });
-        results
-    }
-
     pub async fn execute(&self, request: TurnRequest) -> Result<TurnResult, TurnError> {
         Ok(self
             .execute_with_events(request, TurnControl::default())
@@ -1320,259 +786,11 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         control: TurnControl,
         queue: Option<EventQueue>,
     ) -> Result<TurnExecution, TurnError> {
-        validate_request(&request)?;
-        let turn_id = request.turn_id.clone();
-        let mut model_request = request.model_request;
-        let mut steps = Vec::new();
-        let deadline = request.config.deadline.map(|limit| Instant::now() + limit);
-        let mut tool_calls_used = 0usize;
-        let mut events = EventEmitter::new(queue);
-        events.emit(TurnEvent::Started {
-            turn_id: turn_id.clone(),
-        });
-        if control.is_cancelled() {
-            events.emit(TurnEvent::Cancelled {
-                turn_id: turn_id.clone(),
-            });
-            return Err(TurnError::Cancelled);
+        let state = engine::RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
+        match self.run(state, control, false, queue).await? {
+            ResumableTurn::Completed(execution) => Ok(*execution),
+            ResumableTurn::AwaitingApproval(_) => unreachable!("inline approval does not suspend"),
         }
-        let mut state = TurnState::Pending.transition(TurnState::Running)?;
-
-        for step_index in 0..request.config.max_steps {
-            if control.is_cancelled() {
-                events.emit(TurnEvent::Cancelled {
-                    turn_id: turn_id.clone(),
-                });
-                return Err(TurnError::Cancelled);
-            }
-            if deadline.is_some_and(|value| value <= Instant::now()) {
-                let error = TurnError::TimedOut;
-                events.emit(terminal_event(&turn_id, &error));
-                return Err(error);
-            }
-
-            state = state.transition(TurnState::WaitingModel)?;
-            let step_id = format!("{}-step-{step_index}", request.turn_id);
-            events.emit(TurnEvent::StepStarted {
-                turn_id: turn_id.clone(),
-                step_id: step_id.clone(),
-            });
-            model_request.request_id = step_id.clone();
-            let step_control = StepControl::default();
-            let step_future = self.step_executor.execute_with_control(
-                StepRequest {
-                    step_id,
-                    model_request: model_request.clone(),
-                    options: StepExecutionOptions {
-                        deadline,
-                        ..StepExecutionOptions::default()
-                    },
-                },
-                step_control.clone(),
-            );
-            let step_result = match deadline {
-                Some(deadline) => {
-                    tokio::select! {
-                        result = tokio::time::timeout_at(deadline.into(), step_future) => {
-                            result.map_err(|_| TurnError::TimedOut).and_then(|result| result.map_err(map_step_error))
-                        }
-                        _ = control.wait_cancelled() => {
-                            step_control.cancel();
-                            Err(TurnError::Cancelled)
-                        }
-                    }
-                }
-                None => {
-                    tokio::select! {
-                        result = step_future => result.map_err(map_step_error),
-                        _ = control.wait_cancelled() => {
-                            step_control.cancel();
-                            Err(TurnError::Cancelled)
-                        }
-                    }
-                }
-            };
-            let step = match step_result {
-                Ok(step) => step,
-                Err(error) => {
-                    events.emit(terminal_event(&turn_id, &error));
-                    return Err(error);
-                }
-            };
-            steps.push(step.clone());
-            events.emit(TurnEvent::StepCompleted {
-                turn_id: turn_id.clone(),
-                step: step.clone(),
-            });
-
-            match step.outcome {
-                StepOutcome::FinalAnswer => {
-                    let result = TurnResult {
-                        turn_id: request.turn_id,
-                        outcome: TurnOutcome::FinalAnswer {
-                            response: step.response,
-                        },
-                        end_reason: TurnEndReason::FinalAnswer,
-                        steps,
-                    };
-                    let _ = state.transition(TurnState::Completed)?;
-                    events.emit(TurnEvent::Completed {
-                        turn_id: turn_id.clone(),
-                        outcome: result.outcome.clone(),
-                    });
-                    return Ok(TurnExecution {
-                        result,
-                        events: events.events,
-                    });
-                }
-                StepOutcome::Refused => {
-                    let result = TurnResult {
-                        turn_id: request.turn_id,
-                        outcome: TurnOutcome::Refused {
-                            response: step.response,
-                        },
-                        end_reason: TurnEndReason::Refused,
-                        steps,
-                    };
-                    let _ = state.transition(TurnState::Completed)?;
-                    events.emit(TurnEvent::Completed {
-                        turn_id: turn_id.clone(),
-                        outcome: result.outcome.clone(),
-                    });
-                    return Ok(TurnExecution {
-                        result,
-                        events: events.events,
-                    });
-                }
-                StepOutcome::Incomplete => {
-                    let result = TurnResult {
-                        turn_id: request.turn_id,
-                        outcome: TurnOutcome::Incomplete {
-                            response: step.response,
-                        },
-                        end_reason: TurnEndReason::Incomplete,
-                        steps,
-                    };
-                    let _ = state.transition(TurnState::Completed)?;
-                    events.emit(TurnEvent::Completed {
-                        turn_id: turn_id.clone(),
-                        outcome: result.outcome.clone(),
-                    });
-                    return Ok(TurnExecution {
-                        result,
-                        events: events.events,
-                    });
-                }
-                StepOutcome::ToolCalls => {
-                    state = state.transition(TurnState::WaitingTool)?;
-                    let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
-                    if request
-                        .config
-                        .max_tool_calls
-                        .is_some_and(|limit| tool_calls_used + batch.len() > limit)
-                    {
-                        let error = TurnError::ToolBudgetExceeded;
-                        events.emit(terminal_event(&turn_id, &error));
-                        return Err(error);
-                    }
-                    tool_calls_used += batch.len();
-                    state = state.transition(TurnState::ExecutingTools)?;
-                    for call in batch.calls() {
-                        events.emit(TurnEvent::ToolCallRequested {
-                            turn_id: turn_id.clone(),
-                            call: call.clone(),
-                        });
-                        events.emit(TurnEvent::ToolExecutionStarted {
-                            turn_id: turn_id.clone(),
-                            call_id: call.id.clone(),
-                            name: call.name.clone(),
-                        });
-                    }
-                    let results = self
-                        .execute_batch(&batch, &turn_id, &control, deadline, &mut events)
-                        .await;
-                    if control.is_cancelled() {
-                        let error = TurnError::Cancelled;
-                        events.emit(terminal_event(&turn_id, &error));
-                        return Err(error);
-                    }
-                    if deadline.is_some_and(|value| value <= Instant::now()) {
-                        let error = TurnError::TimedOut;
-                        events.emit(terminal_event(&turn_id, &error));
-                        return Err(error);
-                    }
-                    if let Err(error) = batch.validate_results(&results) {
-                        let error = TurnError::Tool(error);
-                        events.emit(terminal_event(&turn_id, &error));
-                        return Err(error);
-                    }
-                    let mut tool_results = Vec::with_capacity(results.len());
-                    for dispatch in results {
-                        let call = batch.call(&dispatch.call_id).expect("validated call id");
-                        match dispatch.result {
-                            Ok(result) => {
-                                events.emit(TurnEvent::ToolResult {
-                                    turn_id: turn_id.clone(),
-                                    result: result.clone(),
-                                });
-                                tool_results.push(result);
-                            }
-                            Err(error) => {
-                                events.emit(TurnEvent::ToolExecutionFailed {
-                                    turn_id: turn_id.clone(),
-                                    call_id: call.id.clone(),
-                                    name: call.name.clone(),
-                                    error: error.clone(),
-                                });
-                                match self.tool_dispatch.on_error {
-                                    ToolErrorPolicy::FailTurn => {
-                                        let _ = state.transition(TurnState::Failed)?;
-                                        let error = TurnError::Tool(error);
-                                        events.emit(terminal_event(&turn_id, &error));
-                                        return Err(error);
-                                    }
-                                    ToolErrorPolicy::ContinueBatch => {
-                                        let result = ToolResult {
-                                            call_id: call.id.clone(),
-                                            content: error.to_string(),
-                                            is_error: true,
-                                        };
-                                        events.emit(TurnEvent::ToolResult {
-                                            turn_id: turn_id.clone(),
-                                            result: result.clone(),
-                                        });
-                                        tool_results.push(result);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    append_tool_context(
-                        &mut model_request.messages,
-                        &step.response.content,
-                        tool_results,
-                    );
-                    state = state.transition(TurnState::Running)?;
-                    model_request.tool_choice = ToolChoice::Auto;
-                }
-            }
-        }
-
-        let _ = state.transition(TurnState::MaxSteps)?;
-        let result = TurnResult {
-            turn_id: request.turn_id,
-            outcome: TurnOutcome::MaxSteps,
-            end_reason: TurnEndReason::MaxSteps,
-            steps,
-        };
-        events.emit(TurnEvent::Completed {
-            turn_id: turn_id.clone(),
-            outcome: result.outcome.clone(),
-        });
-        Ok(TurnExecution {
-            result,
-            events: events.events,
-        })
     }
 
     pub async fn execute_event_stream(
@@ -1661,15 +879,10 @@ fn terminal_approval_execution(
     end_reason: TurnEndReason,
 ) -> Result<TurnExecution, TurnError> {
     let turn_id = approval.turn_id;
-    let events = vec![
-        TurnEvent::Started {
-            turn_id: turn_id.clone(),
-        },
-        TurnEvent::Completed {
-            turn_id: turn_id.clone(),
-            outcome: outcome.clone(),
-        },
-    ];
+    let events = vec![TurnEvent::Completed {
+        turn_id: turn_id.clone(),
+        outcome: outcome.clone(),
+    }];
     Ok(TurnExecution {
         result: TurnResult {
             turn_id,
@@ -1714,83 +927,6 @@ fn outcome_from_step(step: &StepResult) -> (TurnOutcome, TurnEndReason) {
             TurnEndReason::Incomplete,
         ),
         StepOutcome::ToolCalls => (TurnOutcome::MaxSteps, TurnEndReason::MaxSteps),
-    }
-}
-
-fn make_approval_request(
-    request: &TurnRequest,
-    model_request: ModelRequest,
-    steps: Vec<StepResult>,
-    pending_calls: Vec<ToolCall>,
-    call: &ToolCall,
-    reason: String,
-    policy_version: String,
-) -> ApprovalRequest {
-    let args_fingerprint =
-        serde_json::to_string(&call.arguments).expect("JSON tool arguments must be serializable");
-    let approval_id = format!("{}-{}", request.turn_id, call.id);
-    ApprovalRequest {
-        approval_id: approval_id.clone(),
-        turn_id: request.turn_id.clone(),
-        call_id: call.id.clone(),
-        tool_name: call.name.clone(),
-        reason,
-        state: ApprovalState::Pending,
-        expires_at_ms: None,
-        continuation: TurnContinuation {
-            continuation_id: format!("continuation-{}", approval_id),
-            approval_id,
-            turn_id: request.turn_id.clone(),
-            model_request,
-            assistant_content: steps
-                .last()
-                .map(|step| step.response.content.clone())
-                .unwrap_or_default(),
-            pending_calls,
-            steps,
-            max_steps: request.config.max_steps,
-            next_step_index: request
-                .config
-                .max_steps
-                .saturating_sub(request.config.max_steps.saturating_sub(1)),
-            call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            args_fingerprint,
-            policy_version,
-            approved_call_ids: Vec::new(),
-            max_tool_calls: request.config.max_tool_calls,
-            tool_calls_used: 0,
-            deadline_at_ms: request
-                .config
-                .deadline
-                .map(|deadline| now_ms().saturating_add(deadline.as_millis() as u64)),
-        },
-    }
-}
-
-fn make_followup_approval(
-    mut continuation: TurnContinuation,
-    call: &ToolCall,
-    reason: String,
-    policy_version: String,
-) -> ApprovalRequest {
-    let approval_id = format!("{}-{}", continuation.turn_id, call.id);
-    continuation.approval_id = approval_id.clone();
-    continuation.continuation_id = format!("continuation-{approval_id}");
-    continuation.call_id = call.id.clone();
-    continuation.tool_name = call.name.clone();
-    continuation.args_fingerprint =
-        serde_json::to_string(&call.arguments).expect("JSON tool arguments must be serializable");
-    continuation.policy_version = policy_version;
-    ApprovalRequest {
-        approval_id,
-        turn_id: continuation.turn_id.clone(),
-        call_id: call.id.clone(),
-        tool_name: call.name.clone(),
-        reason,
-        state: ApprovalState::Pending,
-        expires_at_ms: None,
-        continuation,
     }
 }
 
@@ -2598,7 +1734,7 @@ mod tests {
         assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         let second = executor
-            .resume_approval(first, "turn-multi-approval-call-approval-a")
+            .resume_approval(first, "turn-multi-approval-step-0-approval-call-approval-a")
             .await
             .expect("first approval should expose the second boundary");
         let second = match second {
@@ -2609,7 +1745,10 @@ mod tests {
         assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 
         let completed = executor
-            .resume_approval(second, "turn-multi-approval-call-approval-b")
+            .resume_approval(
+                second,
+                "turn-multi-approval-step-0-approval-call-approval-b",
+            )
             .await
             .expect("second approval should execute the batch");
         let execution = match completed {
@@ -2750,7 +1889,7 @@ mod tests {
         approval.continuation.pending_calls[0].arguments =
             serde_json::json!({"command": "delete_everything"});
         let error = executor
-            .resume_approval(approval, "turn-tampered-call-tampered")
+            .resume_approval(approval, "turn-tampered-step-0-approval-call-tampered")
             .await
             .expect_err("tampered checkpoint must fail closed");
         assert!(matches!(error, TurnError::InvalidRequest { .. }));
