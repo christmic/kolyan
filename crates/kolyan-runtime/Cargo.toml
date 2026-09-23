@@ -9,4 +9,14 @@ workspace = true
 
 [dependencies]
 kolyan-core = { path = "../kolyan-core" }
+kolyan-ledger = { path = "../kolyan-ledger" }
+kolyan-model = { path = "../kolyan-model" }
+kolyan-trace = { path = "../kolyan-trace" }
 kolyan-types = { path = "../kolyan-types" }
+serde_json.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+futures-util.workspace = true
+tokio = { version = "1", features = ["macros", "rt"] }

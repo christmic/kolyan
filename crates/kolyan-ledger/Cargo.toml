@@ -1,5 +1,5 @@
 [package]
-name = "kolyan-trace"
+name = "kolyan-ledger"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,7 +8,9 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-kolyan-types = { path = "../kolyan-types" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -481,6 +481,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "kolyan-ledger"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "kolyan-model"
 version = "0.1.0"
 dependencies = [
@@ -556,8 +565,16 @@ dependencies = [
 name = "kolyan-runtime"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
  "kolyan-core",
+ "kolyan-ledger",
+ "kolyan-model",
+ "kolyan-trace",
  "kolyan-types",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -592,6 +609,9 @@ name = "kolyan-trace"
 version = "0.1.0"
 dependencies = [
  "kolyan-types",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
