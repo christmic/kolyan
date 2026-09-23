@@ -1,0 +1,46 @@
+[
+  {
+    "name": "mixed_resume",
+    "fixture": "turn_resume_workflow.json",
+    "approval_tools": [
+      "file.write"
+    ],
+    "dispatch": {
+      "mode": "Parallel",
+      "on_error": "FailTurn"
+    },
+    "cancel_when_suspended": false,
+    "expected": {
+      "outcome": "FinalAnswer",
+      "min_steps": 5,
+      "min_approvals": 3,
+      "min_multi_approval_batches": 1,
+      "files": {
+        "safe/a.txt": "ALPHA",
+        "safe/b.txt": "BETA",
+        "safe/combined.txt": "ALPHA|BETA"
+      },
+      "trace": "turn_resume_live.jsonl"
+    }
+  },
+  {
+    "name": "cancel_suspended",
+    "fixture": "turn_resume_workflow.json",
+    "approval_tools": [
+      "file.write"
+    ],
+    "dispatch": {
+      "mode": "Parallel",
+      "on_error": "FailTurn"
+    },
+    "cancel_when_suspended": true,
+    "expected": {
+      "outcome": "Cancelled",
+      "min_steps": 1,
+      "min_approvals": 1,
+      "min_multi_approval_batches": 0,
+      "files": {},
+      "trace": "turn_resume_cancelled.jsonl"
+    }
+  }
+]
