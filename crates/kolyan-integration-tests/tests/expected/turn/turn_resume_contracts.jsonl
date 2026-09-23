@@ -1,0 +1,109 @@
+{"case":"ordinary_between_approvals","event":"boundary","boundary":"step","allowed":true}
+{"case":"ordinary_between_approvals","event":"model_request","step_id":"ordinary_between_approvals-step-0"}
+{"case":"ordinary_between_approvals","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"ordinary_between_approvals","event":"boundary","boundary":"approval","allowed":true}
+{"case":"ordinary_between_approvals","event":"suspended","approval":{"continuation":{"next_step_index":2}}}
+{"case":"ordinary_between_approvals","event":"boundary","boundary":"resume","allowed":true}
+{"case":"ordinary_between_approvals","event":"suspended"}
+{"case":"ordinary_between_approvals","event":"tool_start","call":{"id":"w1"}}
+{"case":"ordinary_between_approvals","event":"tool_start","call":{"id":"w2"}}
+{"case":"ordinary_between_approvals","event":"model_request","step_id":"ordinary_between_approvals-step-2"}
+{"case":"ordinary_between_approvals","event":"tool_start","call":{"id":"read-middle"}}
+{"case":"ordinary_between_approvals","event":"suspended","approval":{"continuation":{"next_step_index":4}}}
+{"case":"ordinary_between_approvals","event":"tool_start","call":{"id":"w1"}}
+{"case":"ordinary_between_approvals","event":"outcome","reason":"FinalAnswer"}
+{"case":"max_steps_after_approval","event":"boundary","boundary":"step","allowed":true}
+{"case":"max_steps_after_approval","event":"model_request","step_id":"max_steps_after_approval-step-0"}
+{"case":"max_steps_after_approval","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"max_steps_after_approval","event":"boundary","boundary":"approval","allowed":true}
+{"case":"max_steps_after_approval","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"max_steps_after_approval","event":"tool_start"}
+{"case":"max_steps_after_approval","event":"outcome","reason":"MaxSteps"}
+{"case":"resume_budget","event":"boundary","boundary":"step","allowed":true}
+{"case":"resume_budget","event":"model_request","step_id":"resume_budget-step-0"}
+{"case":"resume_budget","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"resume_budget","event":"boundary","boundary":"approval","allowed":true}
+{"case":"resume_budget","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"resume_budget","event":"tool_start"}
+{"case":"resume_budget","event":"outcome","reason":"Failed"}
+{"case":"serial_fail_after_approval","event":"boundary","boundary":"step","allowed":true}
+{"case":"serial_fail_after_approval","event":"model_request","step_id":"serial_fail_after_approval-step-0"}
+{"case":"serial_fail_after_approval","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"serial_fail_after_approval","event":"boundary","boundary":"approval","allowed":true}
+{"case":"serial_fail_after_approval","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"serial_fail_after_approval","event":"tool_start"}
+{"case":"serial_fail_after_approval","event":"outcome","reason":"Failed"}
+{"case":"parallel_continue_after_approval","event":"boundary","boundary":"step","allowed":true}
+{"case":"parallel_continue_after_approval","event":"model_request","step_id":"parallel_continue_after_approval-step-0"}
+{"case":"parallel_continue_after_approval","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"parallel_continue_after_approval","event":"boundary","boundary":"approval","allowed":true}
+{"case":"parallel_continue_after_approval","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"parallel_continue_after_approval","event":"tool_start"}
+{"case":"parallel_continue_after_approval","event":"outcome","reason":"FinalAnswer"}
+{"case":"parallel_resource_stages","event":"boundary","boundary":"step","allowed":true}
+{"case":"parallel_resource_stages","event":"model_request","step_id":"parallel_resource_stages-step-0"}
+{"case":"parallel_resource_stages","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"parallel_resource_stages","event":"boundary","boundary":"approval","allowed":true}
+{"case":"parallel_resource_stages","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"parallel_resource_stages","event":"tool_start","call":{"id":"a"}}
+{"case":"parallel_resource_stages","event":"tool_start","call":{"id":"b"}}
+{"case":"parallel_resource_stages","event":"tool_result","result":{"call_id":"a"}}
+{"case":"parallel_resource_stages","event":"tool_result","result":{"call_id":"b"}}
+{"case":"parallel_resource_stages","event":"tool_start","call":{"id":"a-again"}}
+{"case":"parallel_resource_stages","event":"outcome","reason":"FinalAnswer"}
+{"case":"cancel_during_approval","event":"boundary","boundary":"step","allowed":true}
+{"case":"cancel_during_approval","event":"model_request","step_id":"cancel_during_approval-step-0"}
+{"case":"cancel_during_approval","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"cancel_during_approval","event":"boundary","boundary":"approval","allowed":true}
+{"case":"cancel_during_approval","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"cancel_during_approval","event":"boundary","boundary":"resume","allowed":false}
+{"case":"cancel_during_approval","event":"outcome","reason":"Cancelled"}
+{"case":"cancel_before_next_step","event":"boundary","boundary":"step","allowed":true}
+{"case":"cancel_before_next_step","event":"model_request","step_id":"cancel_before_next_step-step-0"}
+{"case":"cancel_before_next_step","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"cancel_before_next_step","event":"tool_start"}
+{"case":"cancel_before_next_step","event":"boundary","boundary":"step","allowed":false}
+{"case":"cancel_before_next_step","event":"outcome","reason":"Cancelled"}
+{"case":"cancel_between_tools","event":"boundary","boundary":"step","allowed":true}
+{"case":"cancel_between_tools","event":"model_request","step_id":"cancel_between_tools-step-0"}
+{"case":"cancel_between_tools","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"cancel_between_tools","event":"tool_start"}
+{"case":"cancel_between_tools","event":"boundary","boundary":"tool","allowed":false}
+{"case":"cancel_between_tools","event":"outcome","reason":"Cancelled"}
+{"case":"cancel_before_completion","event":"boundary","boundary":"step","allowed":true}
+{"case":"cancel_before_completion","event":"model_request","step_id":"cancel_before_completion-step-0"}
+{"case":"cancel_before_completion","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"cancel_before_completion","event":"boundary","boundary":"terminal","allowed":false}
+{"case":"cancel_before_completion","event":"outcome","reason":"Cancelled"}
+{"case":"cancel_before_model","event":"boundary","boundary":"step","allowed":false}
+{"case":"cancel_before_model","event":"outcome","reason":"Cancelled"}
+{"case":"control_unavailable","event":"boundary","boundary":"step","allowed":false}
+{"case":"control_unavailable","event":"outcome","reason":"Failed"}
+{"case":"deadline_during_approval","event":"boundary","boundary":"step","allowed":true}
+{"case":"deadline_during_approval","event":"model_request","step_id":"deadline_during_approval-step-0"}
+{"case":"deadline_during_approval","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"deadline_during_approval","event":"boundary","boundary":"approval","allowed":true}
+{"case":"deadline_during_approval","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"deadline_during_approval","event":"outcome","reason":"TimedOut"}
+{"case":"local_cancel_on_resume","event":"boundary","boundary":"step","allowed":true}
+{"case":"local_cancel_on_resume","event":"model_request","step_id":"local_cancel_on_resume-step-0"}
+{"case":"local_cancel_on_resume","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"local_cancel_on_resume","event":"boundary","boundary":"approval","allowed":true}
+{"case":"local_cancel_on_resume","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"local_cancel_on_resume","event":"outcome","reason":"Cancelled"}
+{"case":"denied_mixed_batch","event":"boundary","boundary":"step","allowed":true}
+{"case":"denied_mixed_batch","event":"model_request","step_id":"denied_mixed_batch-step-0"}
+{"case":"denied_mixed_batch","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"denied_mixed_batch","event":"outcome","reason":"Failed"}
+{"case":"denied_continue_batch","event":"boundary","boundary":"step","allowed":true}
+{"case":"denied_continue_batch","event":"model_request","step_id":"denied_continue_batch-step-0"}
+{"case":"denied_continue_batch","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"denied_continue_batch","event":"tool_start"}
+{"case":"denied_continue_batch","event":"outcome","reason":"FinalAnswer"}
+{"case":"tool_timeout_after_resume","event":"boundary","boundary":"step","allowed":true}
+{"case":"tool_timeout_after_resume","event":"model_request","step_id":"tool_timeout_after_resume-step-0"}
+{"case":"tool_timeout_after_resume","event":"model_event","content":{"ReasoningDelta":"fixture planning"}}
+{"case":"tool_timeout_after_resume","event":"boundary","boundary":"approval","allowed":true}
+{"case":"tool_timeout_after_resume","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
+{"case":"tool_timeout_after_resume","event":"tool_start"}
+{"case":"tool_timeout_after_resume","event":"outcome","reason":"TimedOut"}

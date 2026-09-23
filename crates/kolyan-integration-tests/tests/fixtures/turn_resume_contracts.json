@@ -1,0 +1,150 @@
+[
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "ordinary_between_approvals",
+    "batches": [[{"id":"read-before","name":"file.read","arguments":{"path":"safe/read-before"}}],[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}},{"id":"w2","name":"file.write","arguments":{"path":"safe/w2","content":"w2"}}],[{"id":"read-middle","name":"file.read","arguments":{"path":"safe/read-middle"}}],[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[{"id":"read-after","name":"file.read","arguments":{"path":"safe/read-after"}}],[]],
+    "approvals": ["file.write"],
+    "expected": {"outcome":"FinalAnswer","model_calls":6,"tool_calls":6,"approvals":3,"max_parallel":1}
+  },
+  {
+    "max_steps": 1,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "max_steps_after_approval",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "approvals": ["file.write"],
+    "expected": {"outcome":"MaxSteps","model_calls":1,"tool_calls":1,"approvals":1,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "resume_budget",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[{"id":"w2","name":"file.write","arguments":{"path":"safe/w2","content":"w2"}}],[]],
+    "max_tool_calls": 1,
+    "approvals": ["file.write"],
+    "expected": {"outcome":"Failed","model_calls":2,"tool_calls":1,"approvals":1,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "serial_fail_after_approval",
+    "batches": [[{"id":"first","name":"file.write","arguments":{"path":"safe/first","content":"first"}},{"id":"second","name":"file.write","arguments":{"path":"safe/second","content":"second"}}],[]],
+    "approvals": ["file.write"],
+    "fail_calls": ["first"],
+    "expected": {"outcome":"Failed","model_calls":1,"tool_calls":1,"approvals":2,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Parallel","on_error":"ContinueBatch"},
+    "name": "parallel_continue_after_approval",
+    "batches": [[{"id":"first","name":"file.write","arguments":{"path":"safe/first","content":"first"}},{"id":"second","name":"file.write","arguments":{"path":"safe/second","content":"second"}}],[]],
+    "approvals": ["file.write"],
+    "fail_calls": ["first"],
+    "tool_delay_ms": 10,
+    "expected": {"outcome":"FinalAnswer","model_calls":2,"tool_calls":2,"approvals":2,"max_parallel":2,"context_errors":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Parallel","on_error":"FailTurn"},
+    "name": "parallel_resource_stages",
+    "batches": [[{"id":"a","name":"file.write","arguments":{"path":"safe/a","content":"a"}},{"id":"b","name":"file.write","arguments":{"path":"safe/b","content":"b"}},{"id":"a-again","name":"file.write","arguments":{"path":"safe/a","content":"a-again"}}],[]],
+    "approvals": ["file.write"],
+    "tool_delay_ms": 10,
+    "expected": {"outcome":"FinalAnswer","model_calls":2,"tool_calls":3,"approvals":3,"max_parallel":2}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "cancel_during_approval",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "approvals": ["file.write"],
+    "cancel_at": {"boundary":"resume","occurrence":1},
+    "expected": {"outcome":"Cancelled","model_calls":1,"tool_calls":0,"approvals":1,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "cancel_before_next_step",
+    "batches": [[{"id":"r1","name":"file.read","arguments":{"path":"safe/r1"}}],[]],
+    "cancel_at": {"boundary":"step","occurrence":2},
+    "expected": {"outcome":"Cancelled","model_calls":1,"tool_calls":1,"approvals":0,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "cancel_between_tools",
+    "batches": [[{"id":"r1","name":"file.read","arguments":{"path":"safe/r1"}},{"id":"r2","name":"file.read","arguments":{"path":"safe/r2"}}],[]],
+    "cancel_at": {"boundary":"tool","occurrence":2},
+    "expected": {"outcome":"Cancelled","model_calls":1,"tool_calls":1,"approvals":0,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "cancel_before_completion",
+    "batches": [[]],
+    "cancel_at": {"boundary":"terminal","occurrence":1},
+    "expected": {"outcome":"Cancelled","model_calls":1,"tool_calls":0,"approvals":0,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "cancel_before_model",
+    "batches": [[]],
+    "cancel_at": {"boundary":"step","occurrence":1},
+    "expected": {"outcome":"Cancelled","model_calls":0,"tool_calls":0,"approvals":0,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "control_unavailable",
+    "batches": [[]],
+    "fail_at": {"boundary":"step","occurrence":1},
+    "expected": {"outcome":"Failed","model_calls":0,"tool_calls":0,"approvals":0,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "deadline_during_approval",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "approvals": ["file.write"],
+    "deadline_ms": 80,
+    "provider_delay_ms": 25,
+    "resume_delay_ms": 100,
+    "expected": {"outcome":"TimedOut","model_calls":1,"tool_calls":0,"approvals":1,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "local_cancel_on_resume",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "approvals": ["file.write"],
+    "cancel_locally_on_resume": true,
+    "expected": {"outcome":"Cancelled","model_calls":1,"tool_calls":0,"approvals":1,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "denied_mixed_batch",
+    "batches": [[{"id":"r1","name":"file.read","arguments":{"path":"safe/r1"}},{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "denied": ["file.write"],
+    "expected": {"outcome":"Failed","model_calls":1,"tool_calls":0,"approvals":0,"max_parallel":0}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"ContinueBatch"},
+    "name": "denied_continue_batch",
+    "batches": [[{"id":"r1","name":"file.read","arguments":{"path":"safe/r1"}},{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "denied": ["file.write"],
+    "expected": {"outcome":"FinalAnswer","model_calls":2,"tool_calls":1,"approvals":0,"max_parallel":1,"context_errors":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Serial","on_error":"FailTurn"},
+    "name": "tool_timeout_after_resume",
+    "batches": [[{"id":"w1","name":"file.write","arguments":{"path":"safe/w1","content":"w1"}}],[]],
+    "approvals": ["file.write"],
+    "tool_timeout_ms": 5,
+    "tool_delay_ms": 30,
+    "expected": {"outcome":"TimedOut","model_calls":1,"tool_calls":1,"approvals":1,"max_parallel":1}
+  }
+]
