@@ -138,3 +138,32 @@ async fn inline_approval_is_consumed_once() {
             .is_none()
     );
 }
+
+#[tokio::test]
+async fn unavailable_admission_cannot_hold_a_timed_out_turn_open() {
+    struct NeverProvider;
+    impl ModelProvider for NeverProvider {
+        fn stream(&self, _: ModelRequest) -> kolyan_model::ProviderFuture<'_> {
+            panic!("provider must not run without admission")
+        }
+    }
+    struct HangingControl;
+    impl TurnBoundaryControl for HangingControl {
+        fn admit(&self, _: TurnBoundary) -> TurnBoundaryFuture<'_> {
+            Box::pin(std::future::pending())
+        }
+    }
+    let executor = TurnExecutor::new(NeverProvider).with_boundary_control(Arc::new(HangingControl));
+    let request = TurnRequest {
+        turn_id: "admission-timeout".into(),
+        model_request: state().model_request,
+        config: TurnConfig {
+            deadline: Some(Duration::from_millis(5)),
+            ..Default::default()
+        },
+    };
+    let result = tokio::time::timeout(Duration::from_millis(100), executor.execute(request))
+        .await
+        .unwrap();
+    assert!(matches!(result, Err(TurnError::TimedOut)));
+}
