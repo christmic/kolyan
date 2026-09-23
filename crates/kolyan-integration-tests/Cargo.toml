@@ -34,6 +34,10 @@ path = "tests/core/policy_authorization.rs"
 name = "durable_approval"
 path = "tests/core/durable_approval.rs"
 
+[[test]]
+name = "turn_resume"
+path = "tests/core/turn_resume.rs"
+
 [lints]
 workspace = true
 
