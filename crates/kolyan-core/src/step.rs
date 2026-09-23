@@ -199,6 +199,15 @@ impl<P> StepExecutor<P> {
 
 impl<P: ModelProvider> StepExecutor<P> {
     pub async fn start(&self, request: StepRequest) -> Result<StepExecution, StepError> {
+        self.start_with_control(request, StepControl::default())
+            .await
+    }
+
+    pub async fn start_with_control(
+        &self,
+        request: StepRequest,
+        control: StepControl,
+    ) -> Result<StepExecution, StepError> {
         if request.step_id.is_empty() {
             return Err(StepError::InvalidRequest {
                 message: "step_id must not be empty".into(),
@@ -208,7 +217,6 @@ impl<P: ModelProvider> StepExecutor<P> {
         let step_id = request.step_id;
         let options = request.options;
         let model_request = request.model_request;
-        let control = StepControl::default();
         let stream = self.provider.stream(model_request.clone()).await?;
         let events = ControlledStepStream {
             inner: stream,
@@ -234,6 +242,15 @@ impl<P: ModelProvider> StepExecutor<P> {
 
     pub async fn execute(&self, request: StepRequest) -> Result<StepResult, StepError> {
         let execution = self.start(request).await?;
+        aggregate_step_stream(execution.stream).await
+    }
+
+    pub async fn execute_with_control(
+        &self,
+        request: StepRequest,
+        control: StepControl,
+    ) -> Result<StepResult, StepError> {
+        let execution = self.start_with_control(request, control).await?;
         aggregate_step_stream(execution.stream).await
     }
 }

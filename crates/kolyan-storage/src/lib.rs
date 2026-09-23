@@ -156,6 +156,10 @@ mod tests {
                 tool_name: "file.write".into(),
                 args_fingerprint: "fp".into(),
                 policy_version: "v1".into(),
+                approved_call_ids: Vec::new(),
+                max_tool_calls: None,
+                tool_calls_used: 0,
+                deadline_at_ms: None,
             },
         }
     }

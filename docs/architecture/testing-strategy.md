@@ -44,3 +44,33 @@ kolyan-integration-tests/
 - `provider/openai_compat.rs`：OpenAI-compatible 请求、流、Tool、Structured Output、Prompt Cache；
 - `provider/anthropic_compat.rs`：Anthropic-compatible 请求、流、Tool、Structured Output、Prompt Cache；
 - `core/step.rs`：使用 MiniMax 两种协议真实执行同一组 Step fixtures。
+- `core/turn.rs`：覆盖单步、事件流、多步工具循环、批次/并行工具、文件读写、结束原因和全模型双协议矩阵；`core/durable_approval.rs` 覆盖真实审批恢复、拒绝和过期。
+
+## Turn 变更验收规则
+
+涉及 Turn 主流程、事件、工具批次、审批、取消、deadline 或预算的变更，必须同时完成：
+
+1. 模块单测：验证状态机、错误和边界条件；
+2. 确定性跨 crate 测试：使用手工构造 Provider/Tool 输入验证编排轨迹；
+3. 真实网络矩阵：执行 `core_turn` 和受影响的 `durable_approval`，覆盖配置中的所有模型与 OpenAI/Anthropic 两种协议；
+4. 在提交说明或项目记忆中记录命令、覆盖范围、耗时和结果。真实矩阵未执行时，不得宣称 Turn 测试全面通过。
+
+取消、超时、预算上限和多审批等无法稳定由真实模型自然触发的分支，必须由确定性跨 crate 测试覆盖；真实矩阵仍需验证新增配置不破坏正常模型闭环。
+
+## 最近一次 Turn 验证记录
+
+2026-09-23，在项目根目录通过 zsh 登录环境执行：
+
+```text
+cargo test -p kolyan-integration-tests --test core_turn -- --ignored --nocapture
+结果：8 passed，覆盖全部配置模型 × OpenAI/Anthropic 两种协议，622.42s
+
+cargo test -p kolyan-integration-tests --test durable_approval -- --ignored --nocapture
+结果：2 passed，覆盖审批恢复、拒绝和过期，92.18s
+
+cargo test -q
+结果：普通 workspace 测试通过；真实网络用例仍只通过 --ignored 显式执行
+```
+
+本次 Turn 新增的多审批、工具预算、deadline 和取消传播由 `kolyan-core` 的
+确定性测试覆盖；真实模型矩阵用于验证这些 Turn 配置不破坏正常闭环。

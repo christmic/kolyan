@@ -216,6 +216,7 @@ fn turn_config(fixture: &common::Fixture) -> TurnConfig {
             .as_ref()
             .and_then(|turn| turn.max_steps)
             .unwrap_or(4),
+        ..TurnConfig::default()
     }
 }
 

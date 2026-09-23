@@ -50,7 +50,8 @@ pub struct TurnConfig {
 }
 ```
 
-第一版只使用 `max_steps`。`max_tool_calls` 作为后续工具执行阶段的安全上限保留。
+Turn 当前使用 `max_steps`、可选 `max_tool_calls` 和可选 `deadline`；工具调用总量和
+Turn 总时限由 Turn 统一 fail-closed 控制。
 
 Turn 的 deadline、取消和 trace 元数据应通过 TurnControl/TurnExecutionOptions 统一向下传递给 Step，而不是复制到每个业务接口中。
 

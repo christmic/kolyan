@@ -476,7 +476,10 @@ async fn run_openai_one_step(
             format!("turn-one-step-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig { max_steps: 1 },
+        config: TurnConfig {
+            max_steps: 1,
+            ..TurnConfig::default()
+        },
     };
     let result = TurnExecutor::new(provider.clone())
         .execute(request)
@@ -506,7 +509,10 @@ async fn run_anthropic_one_step(
             format!("turn-one-step-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig { max_steps: 1 },
+        config: TurnConfig {
+            max_steps: 1,
+            ..TurnConfig::default()
+        },
     };
     let result = TurnExecutor::new(provider.clone())
         .execute(request)
@@ -542,7 +548,10 @@ async fn run_openai_end_reason(
                 format!("turn-end-reason-{family}-{}", entry.model),
                 entry.max_output_tokens,
             ),
-            config: TurnConfig { max_steps: 1 },
+            config: TurnConfig {
+                max_steps: 1,
+                ..TurnConfig::default()
+            },
         })
         .await
         .unwrap_or_else(|error| panic!("[{family}/openai_compat/{}] {error}", entry.model));
@@ -565,7 +574,10 @@ async fn run_anthropic_end_reason(
                 format!("turn-end-reason-{family}-{}", entry.model),
                 entry.max_output_tokens,
             ),
-            config: TurnConfig { max_steps: 1 },
+            config: TurnConfig {
+                max_steps: 1,
+                ..TurnConfig::default()
+            },
         })
         .await
         .unwrap_or_else(|error| panic!("[{family}/anthropic_compat/{}] {error}", entry.model));
@@ -629,6 +641,7 @@ async fn run_file_read_write<P, T>(
                         .as_ref()
                         .and_then(|turn| turn.max_steps)
                         .unwrap_or(5),
+                    ..TurnConfig::default()
                 },
             },
             Default::default(),
@@ -685,6 +698,7 @@ async fn run_parallel_file_writes<P>(
                         .as_ref()
                         .and_then(|turn| turn.max_steps)
                         .unwrap_or(3),
+                    ..TurnConfig::default()
                 },
             },
             Default::default(),
@@ -739,6 +753,7 @@ async fn run_parallel_context<P>(
                         .as_ref()
                         .and_then(|turn| turn.max_steps)
                         .unwrap_or(3),
+                    ..TurnConfig::default()
                 },
             },
             Default::default(),
@@ -817,6 +832,7 @@ async fn run_multi_batch_file_writes<P>(
                         .as_ref()
                         .and_then(|turn| turn.max_steps)
                         .unwrap_or(5),
+                    ..TurnConfig::default()
                 },
             },
             Default::default(),
@@ -865,7 +881,10 @@ async fn run_openai_event_stream(
             format!("turn-event-stream-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig { max_steps: 1 },
+        config: TurnConfig {
+            max_steps: 1,
+            ..TurnConfig::default()
+        },
     };
     let events = collect_event_stream(
         &executor,
@@ -892,7 +911,10 @@ async fn run_anthropic_event_stream(
             format!("turn-event-stream-{family}-{}", entry.model),
             entry.max_output_tokens,
         ),
-        config: TurnConfig { max_steps: 1 },
+        config: TurnConfig {
+            max_steps: 1,
+            ..TurnConfig::default()
+        },
     };
     let events = collect_event_stream(
         &executor,
@@ -977,6 +999,7 @@ async fn run_openai_multi_step(
                     .as_ref()
                     .and_then(|turn| turn.max_steps)
                     .unwrap_or(12),
+                ..TurnConfig::default()
             },
         })
         .await
@@ -1018,6 +1041,7 @@ async fn run_anthropic_multi_step(
                     .as_ref()
                     .and_then(|turn| turn.max_steps)
                     .unwrap_or(12),
+                ..TurnConfig::default()
             },
         })
         .await

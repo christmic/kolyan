@@ -119,6 +119,7 @@ async fn run_case<P>(
         turn_id: turn_id.clone(),
         config: TurnConfig {
             max_steps: fixture.turn.as_ref().and_then(|v| v.max_steps).unwrap_or(4),
+            ..TurnConfig::default()
         },
     };
 
@@ -204,6 +205,7 @@ where
         ),
         config: TurnConfig {
             max_steps: fixture.turn.as_ref().and_then(|v| v.max_steps).unwrap_or(4),
+            ..TurnConfig::default()
         },
     };
 

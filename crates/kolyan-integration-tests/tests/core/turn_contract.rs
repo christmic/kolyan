@@ -128,7 +128,10 @@ async fn fail_turn_stops_before_the_next_model_request() {
         .execute(TurnRequest {
             turn_id: "turn-fail-fast".into(),
             model_request: request(),
-            config: TurnConfig { max_steps: 2 },
+            config: TurnConfig {
+                max_steps: 2,
+                ..TurnConfig::default()
+            },
         })
         .await
         .expect_err("FailTurn must return the tool failure");
@@ -164,7 +167,10 @@ async fn continue_batch_returns_success_and_error_results_together() {
         .execute(TurnRequest {
             turn_id: "turn-continue-batch".into(),
             model_request: request(),
-            config: TurnConfig { max_steps: 2 },
+            config: TurnConfig {
+                max_steps: 2,
+                ..TurnConfig::default()
+            },
         })
         .await
         .expect("ContinueBatch must continue to the final response");
@@ -224,7 +230,10 @@ async fn max_steps_stops_an_unfinished_tool_loop() {
         .execute(TurnRequest {
             turn_id: "turn-max-steps".into(),
             model_request: request(),
-            config: TurnConfig { max_steps: 1 },
+            config: TurnConfig {
+                max_steps: 1,
+                ..TurnConfig::default()
+            },
         })
         .await
         .expect("unfinished tool loop must produce a terminal result");
@@ -264,7 +273,10 @@ async fn provider_failure_does_not_start_a_tool_or_second_step() {
         .execute(TurnRequest {
             turn_id: "turn-provider-failure".into(),
             model_request: request(),
-            config: TurnConfig { max_steps: 2 },
+            config: TurnConfig {
+                max_steps: 2,
+                ..TurnConfig::default()
+            },
         })
         .await
         .expect_err("provider failure must propagate");
@@ -284,7 +296,10 @@ async fn cancellation_interrupts_a_running_tool() {
                 TurnRequest {
                     turn_id: "turn-tool-cancelled".into(),
                     model_request: request(),
-                    config: TurnConfig { max_steps: 1 },
+                    config: TurnConfig {
+                        max_steps: 1,
+                        ..TurnConfig::default()
+                    },
                 },
                 task_control,
             )
@@ -298,7 +313,7 @@ async fn cancellation_interrupts_a_running_tool() {
         .expect("cancelled tool task must join")
         .expect_err("cancelled tool must fail the Turn");
 
-    assert!(matches!(error, TurnError::Tool(ToolError::Cancelled)));
+    assert!(matches!(error, TurnError::Cancelled));
 }
 
 #[tokio::test]
@@ -311,7 +326,10 @@ async fn tool_timeout_interrupts_a_running_tool() {
         .execute(TurnRequest {
             turn_id: "turn-tool-timeout".into(),
             model_request: request(),
-            config: TurnConfig { max_steps: 1 },
+            config: TurnConfig {
+                max_steps: 1,
+                ..TurnConfig::default()
+            },
         })
         .await
         .expect_err("timed out tool must fail the Turn");
