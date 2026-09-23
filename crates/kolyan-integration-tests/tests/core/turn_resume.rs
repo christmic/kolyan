@@ -23,6 +23,7 @@ struct Case {
     denied: Vec<String>,
     #[serde(default)]
     fail_calls: Vec<String>,
+    tool_failure_kind: Option<String>,
     max_steps: usize,
     max_tool_calls: Option<usize>,
     deadline_ms: Option<u64>,
@@ -107,6 +108,7 @@ struct ToolStats {
 #[derive(Clone)]
 struct FixtureTool {
     fail_calls: Vec<String>,
+    failure_kind: Option<String>,
     delay: u64,
     stats: Arc<Mutex<ToolStats>>,
 }
@@ -121,6 +123,11 @@ impl ToolExecutor for FixtureTool {
             tokio::time::sleep(Duration::from_millis(self.delay)).await;
             self.stats.lock().unwrap().active -= 1;
             if self.fail_calls.contains(&call.id) {
+                if self.failure_kind.as_deref() == Some("policy_denied") {
+                    return Err(ToolError::PolicyDenied {
+                        message: "tool enforcement rejected grant".into(),
+                    });
+                }
                 return Err(ToolError::Failed {
                     message: "fixture failure".into(),
                 });
@@ -178,6 +185,7 @@ async fn data_driven_resume_and_boundary_contracts() {
         };
         let tools = FixtureTool {
             fail_calls: case.fail_calls.clone(),
+            failure_kind: case.tool_failure_kind.clone(),
             delay: case.tool_delay_ms,
             stats: Arc::default(),
         };
@@ -230,6 +238,18 @@ async fn data_driven_resume_and_boundary_contracts() {
         }
         let outcome = match result {
             Ok(ResumableTurn::Completed(execution)) => {
+                let mut step = String::new();
+                let mut failures = std::collections::HashSet::new();
+                for event in &execution.events {
+                    match event {
+                        TurnEvent::StepStarted { step_id, .. } => step = step_id.clone(),
+                        TurnEvent::ToolExecutionFailed { call_id, .. } => assert!(
+                            failures.insert((step.clone(), call_id.clone())),
+                            "duplicate tool failure event"
+                        ),
+                        _ => {}
+                    }
+                }
                 assert!(
                     !gate.cancel(),
                     "completion must win against late cancellation"

@@ -107,3 +107,9 @@
 {"case":"tool_timeout_after_resume","event":"suspended","approval":{"continuation":{"next_step_index":1}}}
 {"case":"tool_timeout_after_resume","event":"tool_start"}
 {"case":"tool_timeout_after_resume","event":"outcome","reason":"TimedOut"}
+{"case":"tool_denial_after_approval","event":"model_request"}
+{"case":"tool_denial_after_approval","event":"suspended"}
+{"case":"tool_denial_after_approval","event":"suspended"}
+{"case":"tool_denial_after_approval","event":"tool_start","call":{"id":"first"}}
+{"case":"tool_denial_after_approval","event":"tool_error","call_id":"first"}
+{"case":"tool_denial_after_approval","event":"outcome","reason":"FinalAnswer"}

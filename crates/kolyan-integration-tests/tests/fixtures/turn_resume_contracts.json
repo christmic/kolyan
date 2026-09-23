@@ -146,5 +146,16 @@
     "tool_timeout_ms": 5,
     "tool_delay_ms": 30,
     "expected": {"outcome":"TimedOut","model_calls":1,"tool_calls":1,"approvals":1,"max_parallel":1}
+  },
+  {
+    "max_steps": 8,
+    "dispatch": {"mode":"Parallel","on_error":"ContinueBatch"},
+    "name": "tool_denial_after_approval",
+    "batches": [[{"id":"first","name":"file.write","arguments":{"path":"safe/first","content":"first"}},{"id":"second","name":"file.write","arguments":{"path":"safe/second","content":"second"}}],[]],
+    "approvals": ["file.write"],
+    "fail_calls": ["first"],
+    "tool_delay_ms": 10,
+    "expected": {"outcome":"FinalAnswer","model_calls":2,"tool_calls":2,"approvals":2,"max_parallel":2,"context_errors":1},
+    "tool_failure_kind": "policy_denied"
   }
 ]

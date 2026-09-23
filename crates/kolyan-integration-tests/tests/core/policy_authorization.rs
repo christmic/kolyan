@@ -19,7 +19,7 @@ use serde_json::Value;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[tokio::test]
 #[ignore = "real-network test: requires configured provider API keys"]
@@ -32,39 +32,72 @@ async fn policy_allows_scoped_write_and_denies_out_of_scope_write() {
         let key = require_api_key(&config.minimax_openai);
         let provider = build_openai_provider(&config.minimax_openai, &key);
         for entry in &config.minimax_openai.model_matrix {
-            run_cases(&provider, entry, "minimax", &root).await;
+            run_cases(
+                &provider,
+                entry,
+                "minimax",
+                &root,
+                Duration::from_secs(config.minimax_openai.timeout_secs),
+            )
+            .await;
         }
     }
     if has_api_key_anthropic(&config.minimax_anthropic) {
         let key = require_api_key_anthropic(&config.minimax_anthropic);
         let provider = build_anthropic_provider(&config.minimax_anthropic, &key);
         for entry in &config.minimax_anthropic.model_matrix {
-            run_cases(&provider, entry, "minimax", &root).await;
+            run_cases(
+                &provider,
+                entry,
+                "minimax",
+                &root,
+                Duration::from_secs(config.minimax_anthropic.timeout_secs),
+            )
+            .await;
         }
     }
     if has_api_key(&config.qwen_openai) {
         let key = require_api_key(&config.qwen_openai);
         let provider = build_openai_provider(&config.qwen_openai, &key);
         for entry in &config.qwen_openai.model_matrix {
-            run_cases(&provider, entry, "qwen", &root).await;
+            run_cases(
+                &provider,
+                entry,
+                "qwen",
+                &root,
+                Duration::from_secs(config.qwen_openai.timeout_secs),
+            )
+            .await;
         }
     }
     if has_api_key_anthropic(&config.qwen_anthropic) {
         let key = require_api_key_anthropic(&config.qwen_anthropic);
         let provider = build_anthropic_provider(&config.qwen_anthropic, &key);
         for entry in &config.qwen_anthropic.model_matrix {
-            run_cases(&provider, entry, "qwen", &root).await;
+            run_cases(
+                &provider,
+                entry,
+                "qwen",
+                &root,
+                Duration::from_secs(config.qwen_anthropic.timeout_secs),
+            )
+            .await;
         }
     }
 
     fs::remove_dir_all(root).expect("policy live root should be removed");
 }
 
-async fn run_cases<P>(provider: &P, entry: &ModelMatrixEntry, family: &str, root: &Path)
-where
+async fn run_cases<P>(
+    provider: &P,
+    entry: &ModelMatrixEntry,
+    family: &str,
+    root: &Path,
+    timeout: Duration,
+) where
     P: ModelProvider + Clone + 'static,
 {
-    run_allowed(provider, entry, family, root).await;
+    run_allowed(provider, entry, family, root, timeout).await;
     run_denied(provider, entry, family, root).await;
 }
 
@@ -73,6 +106,7 @@ async fn run_allowed<P: ModelProvider + Clone + 'static>(
     entry: &ModelMatrixEntry,
     family: &str,
     root: &Path,
+    timeout: Duration,
 ) {
     let fixture = load_fixture("turn_policy_allowed");
     let model = entry.model.clone();
@@ -84,7 +118,8 @@ async fn run_allowed<P: ModelProvider + Clone + 'static>(
         turn_id.clone(),
         entry.max_output_tokens,
     );
-    let config = turn_config(&fixture);
+    let mut config = turn_config(&fixture);
+    config.deadline = Some(timeout);
     let control = kolyan_core::TurnControl::default();
     let task_control = control.clone();
     let executor = authorized_executor(provider.clone(), root, ApprovalMode::Always);
@@ -100,17 +135,26 @@ async fn run_allowed<P: ModelProvider + Clone + 'static>(
             )
             .await
     });
-    let mut waiting = false;
-    for _ in 0..300 {
-        if control.is_waiting_for_approval("file.write") {
-            waiting = true;
-            break;
+    let waiting = tokio::time::timeout(timeout, async {
+        loop {
+            if control.is_waiting_for_approval("file.write") {
+                break true;
+            }
+            if task.is_finished() {
+                break false;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    })
+    .await
+    .unwrap_or(false);
+    if !waiting {
+        task.abort();
     }
     assert!(
         waiting,
-        "real Turn should expose an approval wait before approval"
+        "[{family}/{}] real Turn should expose an approval wait within the configured provider timeout",
+        entry.model
     );
     assert!(
         !task.is_finished(),

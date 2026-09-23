@@ -27,6 +27,7 @@ async fn cancellation_preserves_completed_tool_events() {
             provider,
             FixtureTool {
                 fail_calls: vec![],
+                failure_kind: None,
                 delay: 1,
                 stats: Arc::default(),
             },
@@ -95,4 +96,44 @@ fn cancellation_and_completion_are_atomically_ordered() {
             other => panic!("inconsistent terminal ordering: {other:?}"),
         }
     }
+}
+
+#[tokio::test]
+async fn denied_batch_has_no_tool_started_event() {
+    let cases: Vec<Case> =
+        serde_json::from_str(include_str!("../fixtures/turn_resume_contracts.json")).unwrap();
+    let case = cases
+        .into_iter()
+        .find(|case| case.name == "denied_mixed_batch")
+        .unwrap();
+    let provider = Scripted {
+        batches: Mutex::new(case.batches.clone().into()),
+        delay: 0,
+    };
+    let executor =
+        TurnExecutor::new(provider).with_policy_engine(policy(&case.approvals, &case.denied));
+    let events = executor
+        .execute_event_stream(request(&case), TurnControl::default())
+        .await
+        .unwrap()
+        .collect::<Vec<_>>()
+        .await;
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, Ok(TurnEvent::ToolExecutionStarted { .. })))
+            .count(),
+        case.expected.tool_calls
+    );
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, Ok(TurnEvent::ToolExecutionFailed { .. })))
+            .count(),
+        1
+    );
+    assert!(matches!(
+        events.last(),
+        Some(Err(TurnError::Tool(ToolError::PolicyDenied { .. })))
+    ));
 }

@@ -151,7 +151,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 Ok(result) => result.clone(),
                 Err(error) => {
                     // Denied calls never entered the dispatch boundary.
-                    if matches!(error, ToolError::PolicyDenied { .. }) {
+                    if plan.is_some_and(|plan| {
+                        plan.decisions.iter().any(|item| {
+                            item.call_id == call.id
+                                && item.decision.kind == PolicyDecisionKind::Deny
+                        })
+                    }) {
                         events.emit(TurnEvent::ToolExecutionFailed {
                             turn_id: state.turn_id.clone(),
                             call_id: call.id.clone(),
