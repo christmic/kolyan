@@ -146,6 +146,13 @@ approval checkpoints and outcomes. Each trace is read back and compared against
 the data-defined ordered contract. Successful traces are retained in the OS
 temporary directory; the runner prints their absolute paths for inspection.
 
+## Runtime boundary cases
+
+`tests/runtime/boundary.rs` uses the real file-backed Ledger and reconstructs a
+new `ExecutionRuntime` after closing the first instance. It verifies that a
+completed effect is replayed from the receipt without invoking the external
+executor again, and that a durable cancellation prevents a new admission.
+
 ## Provider matrix
 
 Configured in `tests/config/live-tests.toml`:

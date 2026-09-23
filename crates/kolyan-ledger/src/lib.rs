@@ -1,5 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -19,6 +22,18 @@ pub enum LedgerEventKind {
     TurnCancelled,
     TurnTimedOut,
     TurnCompleted,
+    ExecutionStarted,
+    ExecutionSuspended,
+    ExecutionCancelled,
+    EffectPrepared,
+    EffectAuthorized,
+    EffectAwaitingDecision,
+    EffectStarted,
+    EffectCompleted,
+    EffectFailed,
+    EffectUncertain,
+    EffectDenied,
+    EffectReceipt,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -90,6 +105,94 @@ impl LedgerStore for InMemoryLedger {
     }
 }
 
+/// A small append-only file ledger used by Runtime adapters and integration tests.
+/// Each line is one complete JSON event; reopening the file reconstructs the cursor.
+#[derive(Clone, Debug)]
+pub struct FileLedger {
+    path: PathBuf,
+    lock: Arc<Mutex<()>>,
+}
+
+impl FileLedger {
+    pub fn open(path: impl Into<PathBuf>) -> Result<Self, LedgerError> {
+        let path = path.into();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| LedgerError::Storage(error.to_string()))?;
+        }
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&path)
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        Ok(Self {
+            path,
+            lock: Arc::new(Mutex::new(())),
+        })
+    }
+
+    fn read_events(path: &Path) -> Result<Vec<LedgerEvent>, LedgerError> {
+        let file = OpenOptions::new()
+            .read(true)
+            .open(path)
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        BufReader::new(file)
+            .lines()
+            .map(|line| {
+                let line = line.map_err(|error| LedgerError::Storage(error.to_string()))?;
+                serde_json::from_str(&line).map_err(|error| LedgerError::Storage(error.to_string()))
+            })
+            .collect()
+    }
+}
+
+impl LedgerStore for FileLedger {
+    fn append(&self, mut event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        let _guard = self
+            .lock
+            .lock()
+            .expect("file ledger lock must not be poisoned");
+        let events = Self::read_events(&self.path)?;
+        if events.iter().any(|item| item.event_id == event.event_id) {
+            return Err(LedgerError::Conflict(event.event_id));
+        }
+        event.cursor = events.last().map_or(0, |item| item.cursor) + 1;
+        let line =
+            serde_json::to_vec(&event).map_err(|error| LedgerError::Storage(error.to_string()))?;
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        file.write_all(&line)
+            .and_then(|_| file.write_all(b"\n"))
+            .and_then(|_| file.sync_data())
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        Ok(event)
+    }
+
+    fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError> {
+        let _guard = self
+            .lock
+            .lock()
+            .expect("file ledger lock must not be poisoned");
+        Ok(Self::read_events(&self.path)?
+            .into_iter()
+            .filter(|event| event.cursor > cursor)
+            .collect())
+    }
+
+    fn claim(&self, idempotency_key: &str) -> Result<bool, LedgerError> {
+        let _guard = self
+            .lock
+            .lock()
+            .expect("file ledger lock must not be poisoned");
+        let events = Self::read_events(&self.path)?;
+        Ok(!events
+            .iter()
+            .any(|event| event.idempotency_key == idempotency_key))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -131,5 +234,22 @@ mod tests {
         let ledger = InMemoryLedger::default();
         assert!(ledger.claim("turn-1/step-1/call-1").unwrap());
         assert!(!ledger.claim("turn-1/step-1/call-1").unwrap());
+    }
+
+    #[test]
+    fn file_ledger_reopens_and_replays() {
+        let root = std::env::temp_dir().join(format!("kolyan-ledger-{}", std::process::id()));
+        let file = root.join("ledger.jsonl");
+        let first = FileLedger::open(&file).unwrap();
+        first
+            .append(event("e1", LedgerEventKind::ExecutionStarted))
+            .unwrap();
+        drop(first);
+        let second = FileLedger::open(&file).unwrap();
+        let events = second.events_after(0).unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].cursor, 1);
+        assert!(!second.claim("e1").unwrap());
+        fs::remove_dir_all(root).unwrap();
     }
 }

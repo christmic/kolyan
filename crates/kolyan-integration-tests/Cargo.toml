@@ -38,6 +38,10 @@ path = "tests/core/durable_approval.rs"
 name = "turn_resume"
 path = "tests/core/turn_resume.rs"
 
+[[test]]
+name = "runtime_boundary"
+path = "tests/runtime/boundary.rs"
+
 [lints]
 workspace = true
 
@@ -63,6 +67,8 @@ kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
 kolyan-policy = { path = "../kolyan-policy" }
 kolyan-tools = { path = "../kolyan-tools" }
+kolyan-ledger = { path = "../kolyan-ledger" }
+kolyan-runtime = { path = "../kolyan-runtime" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
 
