@@ -5,8 +5,10 @@ use kolyan_trace::{TraceKind, TraceRecord, TraceSink};
 use serde_json::{Value, json};
 use thiserror::Error;
 
+mod driver;
 mod execution;
 
+pub use driver::{DurableTurnDriver, DurableTurnResult};
 pub use execution::{
     AdmissionDecision, AdmissionPort, EffectDisposition, EffectExecutor, EffectGrant,
     EffectOutcome, EffectReceipt, EffectRequest, ExecutionKey, ExecutionRuntime, ExecutionStatus,
@@ -35,6 +37,8 @@ pub enum RuntimeError {
     Ledger(#[from] LedgerError),
     #[error("trace failed: {0}")]
     Trace(String),
+    #[error("runtime driver failed: {0}")]
+    Driver(String),
 }
 
 pub struct TurnDriver<L, S> {

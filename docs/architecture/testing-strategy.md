@@ -47,6 +47,7 @@ kolyan-integration-tests/
 - `core/turn.rs`：覆盖单步、事件流、多步工具循环、批次/并行工具、文件读写、结束原因和全模型双协议矩阵；`core/durable_approval.rs` 覆盖真实审批恢复、拒绝和过期。
 - `core/turn_resume.rs`：18 个数据驱动恢复/取消/预算/错误场景，加取消竞态、已完成工具事件保留和拒绝批次无开始事件测试；真实矩阵覆盖多审批与普通工具交替，以及审批挂起后外部取消。
 - `runtime/boundary.rs`：使用真实文件 Ledger，关闭并重开 Runtime，验证收据重放不重复执行，以及持久取消阻止新的准入。
+- `DurableTurnDriver` 真实集成覆盖实际 Core `TurnExecutor`、真实文件 Ledger、Step/Terminal 边界持久化和重开后的 Ledger replay。
 
 2026-09-23 的 Runtime v0 验证：
 

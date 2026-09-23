@@ -1,9 +1,16 @@
+use futures_util::stream;
+use kolyan_core::{TurnConfig, TurnExecutor, TurnRequest};
 use kolyan_ledger::{FileLedger, LedgerEventKind, LedgerStore};
-use kolyan_runtime::{
-    AdmissionDecision, AdmissionPort, EffectExecutor, EffectGrant, EffectOutcome, EffectReceipt,
-    EffectRequest, ExecutionKey, ExecutionRuntime, ReceiptStatus, RuntimeExecutionError,
+use kolyan_model::{
+    ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRef, ModelRequest,
+    ModelResponse, ProviderFuture, StopReason, TokenUsage, ToolChoice,
 };
-use serde_json::json;
+use kolyan_runtime::{
+    AdmissionDecision, AdmissionPort, DurableTurnDriver, DurableTurnResult, EffectExecutor,
+    EffectGrant, EffectOutcome, EffectReceipt, EffectRequest, ExecutionKey, ExecutionRuntime,
+    ReceiptStatus, RuntimeExecutionError,
+};
+use serde_json::{Value, json};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -160,5 +167,90 @@ fn cancellation_is_durable_before_a_new_effect_is_admitted() {
     ));
     assert_eq!(decisions.load(Ordering::SeqCst), 0);
     assert_eq!(executions.load(Ordering::SeqCst), 0);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[derive(Clone)]
+struct FinalProvider;
+
+impl ModelProvider for FinalProvider {
+    fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+        let response = ModelResponse {
+            id: request.request_id.clone(),
+            model: request.model,
+            content: vec![ContentBlock::Text {
+                text: "runtime done".into(),
+            }],
+            structured_output: None,
+            stop_reason: StopReason::EndTurn,
+            usage: TokenUsage::default(),
+            metadata: Value::Null,
+        };
+        Box::pin(async move {
+            Ok(Box::pin(stream::iter(vec![
+                Ok(ModelEvent::Started),
+                Ok(ModelEvent::Completed(response)),
+            ])) as ModelEventStream)
+        })
+    }
+}
+
+fn turn_request() -> TurnRequest {
+    TurnRequest {
+        turn_id: "turn-driver-real".into(),
+        model_request: ModelRequest {
+            request_id: "request-driver-real".into(),
+            model: ModelRef::new("fixture", "runtime"),
+            system: Vec::new(),
+            messages: Vec::new(),
+            tools: Vec::new(),
+            tool_choice: ToolChoice::Auto,
+            output_format: None,
+            prompt_cache: None,
+            reasoning: None,
+            max_output_tokens: None,
+            extensions: Value::Null,
+        },
+        config: TurnConfig::default(),
+    }
+}
+
+#[tokio::test]
+async fn durable_turn_driver_records_real_core_boundaries() {
+    let root = std::env::temp_dir().join(format!("kolyan-runtime-driver-{}", std::process::id()));
+    let file = root.join("ledger.jsonl");
+    let driver = DurableTurnDriver::new(
+        FileLedger::open(&file).unwrap(),
+        kolyan_trace::VecTraceSink::default(),
+    );
+    let result = driver
+        .start(
+            TurnExecutor::new(FinalProvider),
+            turn_request(),
+            "session-driver-real",
+            "execution-driver-real",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(result, DurableTurnResult::Completed(_, _)));
+    let events = driver.ledger().events_after(0).unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == LedgerEventKind::ExecutionStarted)
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == LedgerEventKind::StepStarted)
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.kind == LedgerEventKind::TurnCompleted)
+    );
+    drop(driver);
+    let reopened = FileLedger::open(&file).unwrap();
+    assert!(reopened.events_after(0).unwrap().len() >= 4);
     std::fs::remove_dir_all(root).unwrap();
 }

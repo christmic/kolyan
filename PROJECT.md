@@ -38,3 +38,4 @@ Session
 - [Agent 执行模型](docs/architecture/agent-execution-model.md)
 - [Turn 边界控制与恢复收尾](docs/requirements/0016-turn-boundary-and-resume.md)
 - [Runtime 执行边界](docs/requirements/0017-runtime-execution-boundary.md)
+- [Durable Turn Driver](docs/requirements/0018-durable-turn-driver.md)
