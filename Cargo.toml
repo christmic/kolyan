@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/*",
     "apps/*",
+    "services/*",
 ]
 
 [workspace.package]

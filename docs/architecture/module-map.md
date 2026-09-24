@@ -7,7 +7,7 @@
 | `kolyan-types` | 消息、Tool、事件和结果类型 | 执行流程、存储 |
 | `kolyan-core` | Step、最小 Agent Loop | Turn、Session、供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
-| `apps/kolyan-server` | Server 门面、ExecutionCoordinator、ExecutionService 和 JSON-RPC 适配器 | Turn/Step 逻辑、模型、租约实现 |
+| `crates/kolyan-server` | Server 门面、ExecutionCoordinator、ExecutionService 和 Server 核心适配器 | Turn/Step 逻辑、模型、租约实现 |
 | `kolyan-model` | LLM trait 和模型适配器 | Turn 状态机 |
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
@@ -26,7 +26,7 @@
 | --- | --- |
 | `apps/kolyan-agent` | 个人 Agent 产品行为和默认配置 |
 | `apps/kolyan-tui` | 终端交互界面 |
-| `apps/kolyan-server` | JSON-RPC 入口；未来承载 HTTP / WebSocket 适配 |
+| `services/kolyan-server` | 常驻 Server 进程、JSON-RPC 入口；未来承载 HTTP / WebSocket 适配 |
 | `bindings/` | Python、TypeScript 等绑定 |
 | `protocols/` | 跨语言事件、消息和 Tool 契约 |
 | `schemas/` | 机器可读协议定义 |

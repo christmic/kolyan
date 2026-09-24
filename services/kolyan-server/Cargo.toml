@@ -1,0 +1,16 @@
+[package]
+name = "kolyan-server-service"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "kolyan-server"
+path = "src/main.rs"
+
+[dependencies]
+kolyan-server = { path = "../../crates/kolyan-server" }
+kolyan-ledger = { path = "../../crates/kolyan-ledger" }

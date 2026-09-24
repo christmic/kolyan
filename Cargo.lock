@@ -642,6 +642,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "kolyan-server-service"
+version = "0.1.0"
+dependencies = [
+ "kolyan-ledger",
+ "kolyan-server",
+]
+
+[[package]]
 name = "kolyan-storage"
 version = "0.1.0"
 dependencies = [

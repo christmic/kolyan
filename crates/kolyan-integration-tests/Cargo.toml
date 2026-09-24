@@ -93,7 +93,7 @@ kolyan-policy = { path = "../kolyan-policy" }
 kolyan-tools = { path = "../kolyan-tools" }
 kolyan-ledger = { path = "../kolyan-ledger" }
 kolyan-runtime = { path = "../kolyan-runtime" }
-kolyan-server = { path = "../../apps/kolyan-server" }
+kolyan-server = { path = "../kolyan-server" }
 kolyan-trace = { path = "../kolyan-trace" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }

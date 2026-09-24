@@ -87,7 +87,7 @@ Server / Coordinator
   有界重试；收到 HTTP 响应后不自动重试，避免掩盖协议或模型错误。
 - OpenAI Responses 适配器兼容“文本 delta 已完整、`response.completed.output` 为空”的
   供应商响应：结构化请求从已累计文本恢复 JSON，并由单元测试和全模型矩阵验证。
-- `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
+- `services/kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
 ## 0020 Server 验证记录
@@ -106,7 +106,7 @@ Key 环境变量均存在。每个矩阵项均验证 Server/Coordinator 启动�
 2026-09-23，Session 与 RPC 验证：
 
 ```text
-cargo test -p kolyan-storage -p kolyan-server --all-targets
+cargo test -p kolyan-storage -p kolyan-server -p kolyan-server-service --all-targets
 结果：SessionStore 4 passed；Server 4 passed。
 
 cargo test --workspace --all-targets
