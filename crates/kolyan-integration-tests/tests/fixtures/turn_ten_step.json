@@ -42,6 +42,6 @@
   "turn": {
     "min_steps": 11,
     "min_tool_calls": 10,
-    "max_steps": 12
+    "max_steps": 20
   }
 }

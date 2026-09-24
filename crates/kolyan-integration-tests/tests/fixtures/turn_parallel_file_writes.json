@@ -39,6 +39,6 @@
   "turn": {
     "min_steps": 2,
     "min_tool_calls": 2,
-    "max_steps": 3
+    "max_steps": 8
   }
 }
