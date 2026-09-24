@@ -7,6 +7,8 @@ use kolyan_model::{
 use kolyan_protocol_anthropic::{AnthropicClient, MessageCreateRequest, MessageStreamEvent, Tool};
 use serde_json::{Value, json};
 
+mod blocks;
+
 #[derive(Clone)]
 pub struct AnthropicProvider {
     client: AnthropicClient,
@@ -20,7 +22,7 @@ impl AnthropicProvider {
         MessageCreateRequest {
             model: request.model.model.clone(),
             max_tokens: request.max_output_tokens.unwrap_or(4096),
-            messages: request.messages.iter().map(anthropic_message).collect(),
+            messages: request_messages(request),
             system: system(request),
             tools: request
                 .tools
@@ -38,14 +40,11 @@ impl AnthropicProvider {
                 })
                 .collect(),
             tool_choice: tool_choice(&request.tool_choice),
-            thinking: request
-                .reasoning
-                .as_ref()
-                .map(|r| json!({"type":"enabled","budget_tokens":r.budget_tokens.unwrap_or(1024)})),
-            output_config: request
-                .output_format
-                .as_ref()
-                .map(|format| json!({"format":{"type":"json_schema","schema":format.schema}})),
+            thinking: request.reasoning.as_ref().map(|r| match r.budget_tokens {
+                Some(budget) => json!({"type":"enabled","budget_tokens":budget}),
+                None => json!({"type":"adaptive"}),
+            }),
+            output_config: output_config(request),
             stream: true,
         }
     }
@@ -62,41 +61,60 @@ impl ModelProvider for AnthropicProvider {
                 .map_err(anthropic_error)?;
             let model = request.model.clone();
             let structured = request.output_format.is_some();
-            let stream = response.scan(
-                AnthropicState {
-                    structured,
-                    ..AnthropicState::default()
-                },
-                move |state, event| {
-                    if state.failed {
-                        return futures_util::future::ready(None);
-                    }
-                    let result = event
-                        .map_err(anthropic_error)
-                        .and_then(|event| state.event(event, &model))
-                        .and_then(|event| {
-                            if let ModelEvent::Completed(response) = &event {
-                                validator.validate(response)?;
-                            }
-                            Ok(event)
-                        });
-                    state.failed = result.is_err();
-                    futures_util::future::ready(Some(result))
-                },
+            let stream = map_stream(
+                response.map(|event| event.map_err(anthropic_error)),
+                model,
+                structured,
+                validator,
             );
             Ok(Box::pin(stream) as _)
         })
     }
 }
 
+fn map_stream<S>(
+    response: S,
+    model: kolyan_model::ModelRef,
+    structured: bool,
+    validator: kolyan_model::OutputValidator,
+) -> impl futures_core::Stream<Item = Result<ModelEvent, ProviderError>>
+where
+    S: futures_core::Stream<Item = Result<MessageStreamEvent, ProviderError>>,
+{
+    response
+        .chain(futures_util::stream::once(async {
+            Err(protocol_error("stream ended before message_stop"))
+        }))
+        .scan(
+            AnthropicState {
+                structured,
+                ..Default::default()
+            },
+            move |state, event| {
+                if state.failed {
+                    return futures_util::future::ready(None);
+                }
+                let result = event
+                    .and_then(|event| state.event(event, &model))
+                    .and_then(|event| {
+                        if let ModelEvent::Completed(response) = &event {
+                            validator.validate(response)?;
+                        }
+                        Ok(event)
+                    });
+                state.failed = result.is_err() || matches!(result, Ok(ModelEvent::Completed(_)));
+                futures_util::future::ready(Some(result))
+            },
+        )
+}
+
 #[derive(Default)]
 struct AnthropicState {
     failed: bool,
     id: String,
-    text: String,
-    blocks: Vec<ContentBlock>,
+    blocks: std::collections::BTreeMap<u64, ContentBlock>,
     usage: TokenUsage,
-    active_tool: Option<(String, String, String, Value)>,
+    active: blocks::Blocks,
     stop_reason: Option<String>,
     structured: bool,
 }
@@ -114,75 +132,20 @@ impl AnthropicState {
                 }
                 Ok(ModelEvent::Started)
             }
-            "content_block_start" => event
-                .fields
-                .get("content_block")
-                .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_use"))
-                .map(|b| {
-                    self.active_tool = Some((
-                        string_value(b, "id"),
-                        string_value(b, "name"),
-                        String::new(),
-                        b.get("input").cloned().unwrap_or(Value::Null),
-                    ));
-                    Ok(ModelEvent::ToolCallStarted {
-                        id: string_value(b, "id"),
-                        name: string_value(b, "name"),
-                    })
-                })
-                .unwrap_or_else(|| Ok(ModelEvent::Provider(metadata(event.fields)))),
-            "content_block_delta" => {
-                let delta = event.fields.get("delta").cloned().unwrap_or_default();
-                match delta.get("type").and_then(Value::as_str) {
-                    Some("text_delta") => {
-                        let text = string_value(&delta, "text");
-                        self.text.push_str(&text);
-                        Ok(ModelEvent::TextDelta(text))
+            "content_block_start" | "content_block_delta" | "content_block_stop" => {
+                let (mapped, block) = self.active.event(&event)?;
+                if let Some(block) = block {
+                    let index = event
+                        .fields
+                        .get("index")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0);
+                    if self.blocks.insert(index, block).is_some() {
+                        return Err(protocol_error("duplicate completed block index"));
                     }
-                    Some("thinking_delta") => {
-                        Ok(ModelEvent::ReasoningDelta(string_value(&delta, "thinking")))
-                    }
-                    Some("input_json_delta") => {
-                        let partial = string_value(&delta, "partial_json");
-                        if let Some((_, _, arguments, _)) = self.active_tool.as_mut() {
-                            arguments.push_str(&partial);
-                        }
-                        Ok(ModelEvent::ToolCallArgumentsDelta {
-                            id: self
-                                .active_tool
-                                .as_ref()
-                                .map(|(id, _, _, _)| id.clone())
-                                .unwrap_or_default(),
-                            delta: partial,
-                        })
-                    }
-                    _ => Ok(ModelEvent::Provider(metadata(event.fields))),
                 }
+                Ok(mapped.unwrap_or_else(|| ModelEvent::Provider(metadata(event.fields))))
             }
-            "content_block_stop" => self
-                .active_tool
-                .take()
-                .map(|(id, name, arguments, initial_input)| {
-                    let arguments: Value = if arguments.is_empty() {
-                        initial_input
-                    } else {
-                        serde_json::from_str(&arguments).map_err(|error| {
-                            protocol_error(format!("invalid tool arguments: {error}"))
-                        })?
-                    };
-                    if !arguments.is_object() {
-                        return Err(protocol_error("tool arguments must be an object"));
-                    }
-                    let call = ToolCall {
-                        id,
-                        name,
-                        arguments,
-                    };
-                    self.blocks
-                        .push(ContentBlock::ToolCall { call: call.clone() });
-                    Ok(ModelEvent::ToolCallCompleted(call))
-                })
-                .unwrap_or_else(|| Ok(ModelEvent::Provider(metadata(event.fields)))),
             "message_delta" => {
                 self.stop_reason = event
                     .fields
@@ -190,26 +153,23 @@ impl AnthropicState {
                     .and_then(|delta| delta.get("stop_reason"))
                     .and_then(Value::as_str)
                     .map(String::from);
-                if let Some(usage_value) = event.fields.get("usage")
-                    && let Some(n) = usage_value.get("output_tokens").and_then(Value::as_u64)
-                {
-                    self.usage.output_tokens = Some(n);
+                if let Some(usage_value) = event.fields.get("usage") {
+                    // SDK totals are cumulative, not increments; absent fields preserve start usage.
+                    let update = usage(Some(usage_value));
+                    self.usage.input_tokens = update.input_tokens.or(self.usage.input_tokens);
+                    self.usage.output_tokens = update.output_tokens.or(self.usage.output_tokens);
+                    self.usage.cache_read_tokens =
+                        update.cache_read_tokens.or(self.usage.cache_read_tokens);
+                    self.usage.cache_write_tokens =
+                        update.cache_write_tokens.or(self.usage.cache_write_tokens);
                 }
                 Ok(ModelEvent::Usage(self.usage.clone()))
             }
             "message_stop" => {
-                if self.active_tool.is_some() || self.stop_reason.is_none() {
+                if !self.active.is_empty() || self.stop_reason.is_none() {
                     return Err(protocol_error(
                         "message stopped without a reason or with an unfinished tool",
                     ));
-                }
-                if !self.text.is_empty() {
-                    self.blocks.insert(
-                        0,
-                        ContentBlock::Text {
-                            text: self.text.clone(),
-                        },
-                    );
                 }
                 let stop_reason = match self.stop_reason.as_deref() {
                     Some("tool_use") => StopReason::ToolUse,
@@ -219,14 +179,20 @@ impl AnthropicState {
                     Some(other) => StopReason::Other(other.into()),
                     None => StopReason::EndTurn,
                 };
-                let structured_output = self
-                    .structured
-                    .then(|| parse_json_relaxed(&self.text))
-                    .flatten();
+                let text = self
+                    .blocks
+                    .values()
+                    .filter_map(|block| match block {
+                        ContentBlock::Text { text } => Some(text.as_str()),
+                        _ => None,
+                    })
+                    .collect::<String>();
+                let structured_output =
+                    self.structured.then(|| parse_json_relaxed(&text)).flatten();
                 Ok(ModelEvent::Completed(ModelResponse {
                     id: self.id.clone(),
                     model: model.clone(),
-                    content: self.blocks.clone(),
+                    content: self.blocks.values().cloned().collect(),
                     structured_output,
                     stop_reason,
                     usage: self.usage.clone(),
@@ -245,6 +211,41 @@ impl AnthropicState {
 fn anthropic_message(message: &kolyan_model::Message) -> Value {
     json!({"role": if message.role == MessageRole::User {"user"} else {"assistant"}, "content": message.content.iter().map(anthropic_block).collect::<Vec<_>>()})
 }
+
+fn request_messages(request: &ModelRequest) -> Vec<Value> {
+    let mut messages = request
+        .messages
+        .iter()
+        .map(anthropic_message)
+        .collect::<Vec<_>>();
+    if request.prompt_cache.as_ref().is_some_and(|cache| {
+        cache
+            .breakpoints
+            .contains(&kolyan_model::CacheBreakpoint::Messages)
+    }) && let Some(block) = messages
+        .last_mut()
+        .and_then(|message| message.get_mut("content"))
+        .and_then(Value::as_array_mut)
+        .and_then(|content| content.last_mut())
+    {
+        block["cache_control"] = json!({"type":"ephemeral"});
+    }
+    messages
+}
+
+fn output_config(request: &ModelRequest) -> Option<Value> {
+    let mut config = serde_json::Map::new();
+    if let Some(format) = &request.output_format {
+        config.insert(
+            "format".into(),
+            json!({"type":"json_schema","schema":format.schema}),
+        );
+    }
+    if let Some(effort) = request.reasoning.as_ref().and_then(|r| r.effort.as_ref()) {
+        config.insert("effort".into(), json!(effort));
+    }
+    (!config.is_empty()).then_some(Value::Object(config))
+}
 fn anthropic_block(block: &ContentBlock) -> Value {
     match block {
         ContentBlock::Text { text } => json!({"type":"text","text":text}),
@@ -258,6 +259,9 @@ fn anthropic_block(block: &ContentBlock) -> Value {
         ContentBlock::ToolResult { result } => {
             json!({"type":"tool_result","tool_use_id":result.call_id,"content":result.content,"is_error":result.is_error})
         }
+        ContentBlock::Reasoning {
+            opaque: Some(raw), ..
+        } => raw.clone(),
         ContentBlock::Reasoning { text, .. } => json!({"type":"thinking","thinking":text}),
     }
 }
@@ -343,6 +347,9 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
         _ => None,
     };
     let (kind, phase) = match error {
+        kolyan_protocol_anthropic::AnthropicError::Transport {
+            diagnostics: None, ..
+        } => (ProviderErrorKind::Transport, ProviderErrorPhase::Open),
         kolyan_protocol_anthropic::AnthropicError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
         }
