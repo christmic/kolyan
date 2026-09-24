@@ -7,6 +7,71 @@ use kolyan_model::{
 };
 use kolyan_trace::VecTraceSink;
 
+#[test]
+fn every_approval_cycle_has_a_distinct_resume_transition() {
+    let ledger = InMemoryLedger::default();
+    let coordinator = ExecutionCoordinator::new(ledger.clone());
+    let key = execution("cycles");
+    coordinator.start(key.clone()).unwrap();
+    coordinator.release(&key.execution_id);
+    for cycle in 0..3 {
+        ledger
+            .append(LedgerEvent {
+                event_id: format!("pause-{cycle}"),
+                turn_id: key.turn_id.clone(),
+                execution_id: key.execution_id.clone(),
+                cursor: 0,
+                kind: LedgerEventKind::ExecutionSuspended,
+                idempotency_key: format!("pause-{cycle}"),
+                payload: serde_json::json!({"approval_id":cycle}),
+            })
+            .unwrap();
+        assert_eq!(
+            coordinator.state(&key.execution_id).unwrap(),
+            ExecutionState::Suspended
+        );
+        coordinator.resume(key.clone()).unwrap();
+        assert_eq!(
+            coordinator.state(&key.execution_id).unwrap(),
+            ExecutionState::Running
+        );
+        coordinator.release(&key.execution_id);
+    }
+    assert_eq!(
+        ledger
+            .events_after(0)
+            .unwrap()
+            .iter()
+            .filter(|event| event.event_id.contains("execution-resumed/"))
+            .count(),
+        3
+    );
+}
+
+#[test]
+fn cancellation_is_not_overwritten_by_later_completion_facts() {
+    let ledger = InMemoryLedger::default();
+    let coordinator = ExecutionCoordinator::new(ledger.clone());
+    let key = execution("cancelled");
+    coordinator.start(key.clone()).unwrap();
+    coordinator.cancel(&key).unwrap();
+    ledger
+        .append(LedgerEvent {
+            event_id: "late-completion".into(),
+            turn_id: key.turn_id.clone(),
+            execution_id: key.execution_id.clone(),
+            cursor: 0,
+            kind: LedgerEventKind::TurnCompleted,
+            idempotency_key: "late-completion".into(),
+            payload: Value::Null,
+        })
+        .unwrap();
+    assert_eq!(
+        coordinator.state(&key.execution_id).unwrap(),
+        ExecutionState::Cancelled
+    );
+}
+
 #[derive(Clone)]
 struct FinalProvider;
 

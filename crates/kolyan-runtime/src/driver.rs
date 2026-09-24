@@ -153,7 +153,7 @@ where
             &self.ledger,
             &key.execution_id,
             &key.turn_id,
-            "execution-suspended",
+            &format!("execution-suspended/{}", approval.approval_id),
             LedgerEventKind::ExecutionSuspended,
             json!({"approval_id": approval.approval_id}),
         )?;
@@ -163,6 +163,7 @@ where
                 turn_id: key.turn_id.clone(),
                 execution_id: key.execution_id.clone(),
                 records: Vec::new(),
+                trace_errors: Vec::new(),
             },
         })
     }
@@ -185,7 +186,11 @@ where
             &key.execution_id,
             &key.turn_id,
             "turn-error",
-            LedgerEventKind::TurnFailed,
+            match error.end_reason() {
+                kolyan_core::TurnEndReason::Cancelled => LedgerEventKind::TurnCancelled,
+                kolyan_core::TurnEndReason::TimedOut => LedgerEventKind::TurnTimedOut,
+                _ => LedgerEventKind::TurnFailed,
+            },
             json!({"error": error.to_string()}),
         )?;
         Ok(())
@@ -200,6 +205,7 @@ where
             turn_id: key.turn_id.clone(),
             execution_id: key.execution_id.clone(),
             records: Vec::new(),
+            trace_errors: Vec::new(),
         };
         for (index, event) in events.iter().enumerate() {
             let (kind, payload) = encode_turn_event(event);
@@ -212,15 +218,15 @@ where
                 kind,
                 payload.clone(),
             )?;
-            self.trace
-                .record(kolyan_trace::TraceRecord {
-                    turn_id: key.turn_id.clone(),
-                    execution_id: key.execution_id.clone(),
-                    sequence: ledger_event.cursor,
-                    kind: kolyan_trace::TraceKind::TurnEvent,
-                    payload: payload.clone(),
-                })
-                .map_err(|error| RuntimeError::Trace(error.to_string()))?;
+            if let Err(error) = self.trace.record(kolyan_trace::TraceRecord {
+                turn_id: key.turn_id.clone(),
+                execution_id: key.execution_id.clone(),
+                sequence: ledger_event.cursor,
+                kind: kolyan_trace::TraceKind::TurnEvent,
+                payload: payload.clone(),
+            }) {
+                trajectory.trace_errors.push(error.to_string());
+            }
             trajectory.records.push(TrajectoryRecord {
                 sequence: ledger_event.cursor,
                 kind,
@@ -251,7 +257,7 @@ impl<L> LedgerBoundaryControl<L> {
 
 impl<L: LedgerStore + Clone + 'static> TurnBoundaryControl for LedgerBoundaryControl<L> {
     fn admit(&self, boundary: TurnBoundary) -> TurnBoundaryFuture<'_> {
-        let cancelled = self.ledger.events_after(0).ok().is_some_and(|events| {
+        let cancelled = self.ledger.events_after(0).map(|events| {
             events.iter().any(|event| {
                 event.execution_id == self.key.execution_id
                     && event.kind == LedgerEventKind::ExecutionCancelled
@@ -260,7 +266,17 @@ impl<L: LedgerStore + Clone + 'static> TurnBoundaryControl for LedgerBoundaryCon
         let ledger = self.ledger.clone();
         let key = self.key.clone();
         Box::pin(async move {
-            if cancelled && !matches!(boundary.kind, TurnBoundaryKind::Terminal { .. }) {
+            let cancelled = cancelled.map_err(|error| TurnError::BoundaryControl {
+                message: error.to_string(),
+            })?;
+            if cancelled
+                && !matches!(
+                    boundary.kind,
+                    TurnBoundaryKind::Terminal {
+                        reason: kolyan_core::TurnEndReason::Cancelled
+                    }
+                )
+            {
                 return Err(TurnError::Cancelled);
             }
             let (suffix, kind, payload) = boundary_event(&boundary);
@@ -304,7 +320,14 @@ fn boundary_event(boundary: &TurnBoundary) -> (String, LedgerEventKind, Value) {
         ),
         TurnBoundaryKind::Terminal { reason } => (
             format!("terminal/{reason:?}"),
-            LedgerEventKind::TurnCompleted,
+            match reason {
+                kolyan_core::TurnEndReason::Cancelled => LedgerEventKind::TurnCancelled,
+                kolyan_core::TurnEndReason::TimedOut => LedgerEventKind::TurnTimedOut,
+                kolyan_core::TurnEndReason::Failed
+                | kolyan_core::TurnEndReason::ApprovalRejected
+                | kolyan_core::TurnEndReason::ApprovalExpired => LedgerEventKind::TurnFailed,
+                _ => LedgerEventKind::TurnCompleted,
+            },
             json!({"reason": format!("{reason:?}")}),
         ),
     }
@@ -324,6 +347,15 @@ fn append_once<L: LedgerStore>(
         .into_iter()
         .find(|event| event.event_id == event_id)
     {
+        if event.turn_id != turn_id
+            || event.execution_id != execution_id
+            || event.kind != kind
+            || event.payload != payload
+        {
+            return Err(RuntimeError::Driver(format!(
+                "conflicting event identity: {event_id}"
+            )));
+        }
         return Ok(event);
     }
     Ok(ledger.append(LedgerEvent {
@@ -336,3 +368,6 @@ fn append_once<L: LedgerStore>(
         payload,
     })?)
 }
+
+#[cfg(test)]
+mod tests;

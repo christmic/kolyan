@@ -13,6 +13,48 @@ const CASES: &str = r#"
 ]
 "#;
 
+struct BrokenTrace;
+impl TraceSink for BrokenTrace {
+    fn record(&self, _: TraceRecord) -> Result<(), kolyan_trace::TraceError> {
+        Err(kolyan_trace::TraceError {
+            message: "observability unavailable".into(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn trace_failure_does_not_turn_completed_execution_into_retryable_failure() {
+    let ledger = kolyan_ledger::InMemoryLedger::default();
+    let driver = DurableTurnDriver::new(ledger.clone(), BrokenTrace);
+    let result = driver
+        .start(
+            TurnExecutor::new(FinalProvider),
+            request("trace-failure"),
+            "session",
+            "exec",
+        )
+        .await
+        .unwrap();
+    let DurableTurnResult::Completed(_, trajectory) = result else {
+        panic!("must remain completed");
+    };
+    assert!(!trajectory.trace_errors.is_empty());
+    assert!(
+        ledger
+            .events_after(0)
+            .unwrap()
+            .iter()
+            .any(|event| event.kind == LedgerEventKind::TurnCompleted)
+    );
+    assert!(
+        !ledger
+            .events_after(0)
+            .unwrap()
+            .iter()
+            .any(|event| event.kind == LedgerEventKind::TurnFailed)
+    );
+}
+
 #[derive(Clone)]
 struct FinalProvider;
 

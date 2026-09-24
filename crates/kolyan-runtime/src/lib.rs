@@ -27,6 +27,8 @@ pub struct Trajectory {
     pub turn_id: String,
     pub execution_id: String,
     pub records: Vec<TrajectoryRecord>,
+    /// Observability failures never change the durable execution outcome.
+    pub trace_errors: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -78,6 +80,7 @@ where
             turn_id: turn_id.clone(),
             execution_id: execution_id.clone(),
             records: Vec::new(),
+            trace_errors: Vec::new(),
         };
         for (index, event) in execution.events.iter().enumerate() {
             let (kind, payload) = encode_turn_event(event);
@@ -91,15 +94,15 @@ where
                 idempotency_key: event_id,
                 payload: payload.clone(),
             })?;
-            self.trace
-                .record(TraceRecord {
-                    turn_id: turn_id.clone(),
-                    execution_id: execution_id.clone(),
-                    sequence: ledger_event.cursor,
-                    kind: TraceKind::TurnEvent,
-                    payload: payload.clone(),
-                })
-                .map_err(|error| RuntimeError::Trace(error.to_string()))?;
+            if let Err(error) = self.trace.record(TraceRecord {
+                turn_id: turn_id.clone(),
+                execution_id: execution_id.clone(),
+                sequence: ledger_event.cursor,
+                kind: TraceKind::TurnEvent,
+                payload: payload.clone(),
+            }) {
+                trajectory.trace_errors.push(error.to_string());
+            }
             trajectory.records.push(TrajectoryRecord {
                 sequence: ledger_event.cursor,
                 kind,

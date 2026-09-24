@@ -590,6 +590,9 @@ where
             .into_iter()
             .filter(|event| event.execution_id == execution_id)
         {
+            if is_terminal(state) {
+                break;
+            }
             state = match event.kind {
                 LedgerEventKind::ExecutionStarted => ExecutionState::Running,
                 LedgerEventKind::ExecutionSuspended => ExecutionState::Suspended,
@@ -654,7 +657,10 @@ where
         }
         self.append_once(
             &execution,
-            "execution-resumed",
+            &format!(
+                "execution-resumed/{}",
+                self.latest_cursor(&execution.execution_id)?
+            ),
             LedgerEventKind::ExecutionStarted,
             Value::Null,
         )?;
@@ -671,7 +677,10 @@ where
         }
         self.append_once(
             &execution,
-            "execution-recovered",
+            &format!(
+                "execution-recovered/{}",
+                self.latest_cursor(&execution.execution_id)?
+            ),
             LedgerEventKind::ExecutionStarted,
             Value::Null,
         )?;
@@ -733,12 +742,18 @@ where
         payload: Value,
     ) -> Result<(), CoordinatorError> {
         let event_id = format!("{}/{}", execution.execution_id, suffix);
-        if self
+        if let Some(existing) = self
             .ledger
             .events_after(0)?
-            .iter()
-            .any(|event| event.event_id == event_id)
+            .into_iter()
+            .find(|event| event.event_id == event_id)
         {
+            if existing.turn_id != execution.turn_id
+                || existing.kind != kind
+                || existing.payload != payload
+            {
+                return Err(LedgerError::Conflict(event_id).into());
+            }
             return Ok(());
         }
         self.ledger.append(LedgerEvent {
@@ -751,6 +766,16 @@ where
             payload,
         })?;
         Ok(())
+    }
+
+    fn latest_cursor(&self, execution_id: &str) -> Result<u64, CoordinatorError> {
+        Ok(self
+            .ledger
+            .events_after(0)?
+            .iter()
+            .rev()
+            .find(|event| event.execution_id == execution_id)
+            .map_or(0, |event| event.cursor))
     }
 }
 

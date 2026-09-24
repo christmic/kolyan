@@ -189,3 +189,19 @@ Qwen 重复调用的根因仍未确定：已有转储证明部分请求包含工
   误分类成传输错误；Provider 保留底层错误链。新增每协议两项无网络回归通过。
 - 新矩阵框架的“首行失败后继续执行，未开始项保持 NotRun”确定性回归通过。
   旧全套真实测试仍独立运行，不能用此矩阵替代 Turn/Session/Server 全套验收。
+
+## R2 第一批：失败关闭与终态保护
+
+- 账本控制读取失败返回 BoundaryControl 错误；取消已提交时不能再准入成功终态。
+  取消/超时落成对应账本终态，不再统一写 TurnFailed。
+- Runtime/Coordinator 的重复事件 ID 必须绑定同样的 turn、事件类型和 payload。
+- EffectPrepared 先校验输入再复用终态；Started 无终态时返回 Uncertain，禁止重放。
+  EffectStarted 的唯一追加决定执行权；收据状态必须与实际 outcome 一致。
+- 每个审批挂起/恢复使用独立标识；新增三次审批恢复回归。Coordinator 投影保留
+  首个终态，防止取消被后来的完成事实覆盖。
+- Trace 失败进入 Trajectory.trace_errors，账本已提交的成功执行不变成可重试失败。
+- 模块回归：Runtime 8 项、Server 6 项通过；Runtime 边界集成 4 项通过。
+  测试位于模块独立 tests.rs；本批新增，不删改旧验收断言。
+- **R2 尚未完成**：实际 ToolExecutor 与 Effect 收据路径的统一、逐事件账本写入、
+  挂起时的完整轨迹、原子取消/准入事务、真实子进程崩溃恢复仍需实施与验证。
+  当前 Started 恢复测试为实例重建，不能声称已完成真实进程崩溃验收。

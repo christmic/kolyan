@@ -175,15 +175,23 @@ where
         if self.status(key)? == Some(ExecutionStatus::Cancelled) {
             return Ok(EffectDisposition::Cancelled);
         }
-        if let Some(existing) = self.terminal_effect(key, effect)? {
-            return Ok(existing);
-        }
         self.append_once(
             key,
             &format!("effect/{}/prepared", effect.effect_id),
             LedgerEventKind::EffectPrepared,
             json!(effect),
         )?;
+        if let Some(existing) = self.terminal_effect(key, effect)? {
+            return Ok(existing);
+        }
+        if self.ledger.events_after(0)?.iter().any(|event| {
+            event.event_id == format!("{}/effect/{}/started", key.execution_id, effect.effect_id)
+        }) {
+            return Ok(EffectDisposition::Uncertain {
+                evidence: "effect started without a terminal result; reconciliation required"
+                    .into(),
+            });
+        }
         match self.admission.decide(key, effect)? {
             AdmissionDecision::Deny { code } => {
                 self.append_once(
@@ -203,7 +211,7 @@ where
                 )?;
                 self.append_once(
                     key,
-                    "execution-suspended",
+                    &format!("execution-suspended/{}", effect.effect_id),
                     LedgerEventKind::ExecutionSuspended,
                     json!({"effect_id": effect.effect_id}),
                 )?;
@@ -223,6 +231,9 @@ where
             .into_iter()
             .filter(|event| event.execution_id == key.execution_id)
         {
+            if status == Some(ExecutionStatus::Cancelled) {
+                break;
+            }
             status = match event.kind {
                 LedgerEventKind::ExecutionCancelled => Some(ExecutionStatus::Cancelled),
                 LedgerEventKind::ExecutionSuspended => Some(ExecutionStatus::Suspended),
@@ -253,14 +264,30 @@ where
             LedgerEventKind::EffectAuthorized,
             json!(grant),
         )?;
-        self.append_once(
-            key,
-            &format!("effect/{}/started", effect.effect_id),
-            LedgerEventKind::EffectStarted,
-            json!({"effect_id": effect.effect_id}),
-        )?;
+        // Only the caller that appends the start record may dispatch the effect.
+        let event_id = format!("{}/effect/{}/started", key.execution_id, effect.effect_id);
+        match self.ledger.append(LedgerEvent {
+            event_id: event_id.clone(),
+            turn_id: key.turn_id.clone(),
+            execution_id: key.execution_id.clone(),
+            cursor: 0,
+            kind: LedgerEventKind::EffectStarted,
+            idempotency_key: event_id,
+            payload: json!({"effect_id": effect.effect_id}),
+        }) {
+            Ok(_) => {}
+            Err(LedgerError::Conflict(_)) => {
+                return Ok(self.terminal_effect(key, effect)?.unwrap_or(
+                    EffectDisposition::Uncertain {
+                        evidence: "another dispatcher owns the started effect".into(),
+                    },
+                ));
+            }
+            Err(error) => return Err(error.into()),
+        }
         match self.executor.execute(key, effect, &grant)? {
             EffectOutcome::Completed { receipt, output } => {
+                validate_receipt_status(&receipt, ReceiptStatus::Completed)?;
                 validate_receipt(effect, &grant, &receipt)?;
                 self.append_receipt(key, effect, &receipt)?;
                 self.append_once(
@@ -272,6 +299,7 @@ where
                 Ok(EffectDisposition::Completed { output })
             }
             EffectOutcome::Failed { receipt, code } => {
+                validate_receipt_status(&receipt, ReceiptStatus::Failed)?;
                 validate_receipt(effect, &grant, &receipt)?;
                 self.append_receipt(key, effect, &receipt)?;
                 self.append_once(
@@ -283,6 +311,7 @@ where
                 Ok(EffectDisposition::Failed { code })
             }
             EffectOutcome::Uncertain { receipt, evidence } => {
+                validate_receipt_status(&receipt, ReceiptStatus::Uncertain)?;
                 validate_receipt(effect, &grant, &receipt)?;
                 self.append_receipt(key, effect, &receipt)?;
                 self.append_once(
@@ -366,6 +395,14 @@ where
             .into_iter()
             .find(|event| event.event_id == event_id)
         {
+            if existing.turn_id != key.turn_id
+                || existing.kind != kind
+                || existing.payload != payload
+            {
+                return Err(RuntimeExecutionError::Invalid(format!(
+                    "conflicting event identity: {event_id}"
+                )));
+            }
             return Ok(existing);
         }
         Ok(self.ledger.append(LedgerEvent {
@@ -411,3 +448,18 @@ fn validate_receipt(
     }
     Ok(())
 }
+
+fn validate_receipt_status(
+    receipt: &EffectReceipt,
+    expected: ReceiptStatus,
+) -> Result<(), RuntimeExecutionError> {
+    if receipt.status != expected {
+        return Err(RuntimeExecutionError::Invalid(
+            "receipt status disagrees with effect outcome".into(),
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;
