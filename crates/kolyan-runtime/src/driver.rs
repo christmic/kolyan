@@ -257,6 +257,13 @@ impl<L> LedgerBoundaryControl<L> {
 
 impl<L: LedgerStore + Clone + 'static> TurnBoundaryControl for LedgerBoundaryControl<L> {
     fn admit(&self, boundary: TurnBoundary) -> TurnBoundaryFuture<'_> {
+        if boundary.turn_id != self.key.turn_id {
+            return Box::pin(async {
+                Err(TurnError::BoundaryControl {
+                    message: "boundary belongs to a different turn".into(),
+                })
+            });
+        }
         let cancelled = self.ledger.events_after(0).map(|events| {
             events.iter().any(|event| {
                 event.execution_id == self.key.execution_id

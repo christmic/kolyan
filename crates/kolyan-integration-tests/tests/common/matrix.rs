@@ -87,8 +87,13 @@ impl Matrix {
 
     fn save(&self) {
         std::fs::write(
-            self.directory.join("report.json"),
+            self.directory.join("report.next.json"),
             serde_json::to_vec_pretty(&self.rows).unwrap(),
+        )
+        .unwrap();
+        std::fs::rename(
+            self.directory.join("report.next.json"),
+            self.directory.join("report.json"),
         )
         .unwrap();
     }

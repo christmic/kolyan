@@ -24,6 +24,24 @@ fn key() -> RuntimeTurnKey {
 }
 
 #[tokio::test]
+async fn admission_rejects_a_boundary_from_another_turn() {
+    let ledger = InMemoryLedger::default();
+    let control = LedgerBoundaryControl::new(ledger.clone(), key());
+    assert!(matches!(
+        control
+            .admit(TurnBoundary {
+                turn_id: "other".into(),
+                kind: TurnBoundaryKind::Step {
+                    step_id: "step".into()
+                }
+            })
+            .await,
+        Err(TurnError::BoundaryControl { .. })
+    ));
+    assert!(ledger.events_after(0).unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn unreadable_ledger_cannot_admit_a_step() {
     let control = LedgerBoundaryControl::new(UnreadableLedger, key());
     assert!(matches!(

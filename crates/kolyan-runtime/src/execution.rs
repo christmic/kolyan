@@ -396,6 +396,7 @@ where
             .find(|event| event.event_id == event_id)
         {
             if existing.turn_id != key.turn_id
+                || existing.execution_id != key.execution_id
                 || existing.kind != kind
                 || existing.payload != payload
             {
