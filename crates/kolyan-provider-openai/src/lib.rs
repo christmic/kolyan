@@ -443,7 +443,13 @@ fn map_response(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
-    let content = output.iter().flat_map(map_output).collect::<Vec<_>>();
+    let content = output
+        .iter()
+        .map(map_output)
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
     let stop_reason = if content
         .iter()
         .any(|block| matches!(block, ContentBlock::ToolCall { .. }))
@@ -465,8 +471,8 @@ fn map_response(
 
 /// Like [`map_response`] but for `response.incomplete` frames. Forces
 /// `stop_reason = MaxOutputTokens` when the body carries
-/// `incomplete_details.reason = "max_output_tokens"`; otherwise falls back
-/// to `EndTurn`. Output content (text / reasoning / tool calls) is
+/// `incomplete_details.reason = "max_output_tokens"`; unknown or missing
+/// reasons fail closed. Output content (text / reasoning / tool calls) is
 /// preserved from the partial response.
 fn map_incomplete_response(
     value: &Value,
@@ -480,7 +486,11 @@ fn map_incomplete_response(
     response.stop_reason = match stop {
         Some("max_output_tokens") => StopReason::MaxOutputTokens,
         Some("content_filter") => StopReason::Refusal,
-        _ => response.stop_reason,
+        _ => {
+            return Err(provider_error(
+                "incomplete response has no supported stop reason",
+            ));
+        }
     };
     Ok(response)
 }
@@ -580,11 +590,11 @@ fn strip_markdown_fence(text: &str) -> &str {
     let stripped = stripped.unwrap_or(trimmed);
     stripped.strip_suffix("```").unwrap_or(stripped)
 }
-fn map_output(item: &Value) -> Vec<ContentBlock> {
-    match item.get("type").and_then(Value::as_str) {
-        Some("function_call") => map_tool_call(item)
-            .map(|call| vec![ContentBlock::ToolCall { call }])
-            .unwrap_or_default(),
+fn map_output(item: &Value) -> Result<Vec<ContentBlock>, ProviderError> {
+    Ok(match item.get("type").and_then(Value::as_str) {
+        Some("function_call") => vec![ContentBlock::ToolCall {
+            call: map_tool_call(item)?,
+        }],
         Some("reasoning") => vec![ContentBlock::Reasoning {
             text: item
                 .get("summary")
@@ -610,22 +620,18 @@ fn map_output(item: &Value) -> Vec<ContentBlock> {
                     .collect()
             })
             .unwrap_or_default(),
-    }
+    })
 }
 fn map_tool_call(value: &Value) -> Result<ToolCall, ProviderError> {
     let raw_arguments = value
         .get("arguments")
         .and_then(Value::as_str)
-        .unwrap_or("{}");
-    let arguments = if raw_arguments.trim().is_empty() {
-        json!({})
-    } else {
-        serde_json::from_str(raw_arguments).map_err(|error| {
-            provider_error(format!(
-                "invalid function arguments ({error}); raw={raw_arguments:?}"
-            ))
-        })?
-    };
+        .ok_or_else(|| provider_error("missing function arguments"))?;
+    let arguments: Value = serde_json::from_str(raw_arguments)
+        .map_err(|error| provider_error(format!("invalid function arguments: {error}")))?;
+    if !arguments.is_object() {
+        return Err(provider_error("function arguments must be an object"));
+    }
     Ok(ToolCall {
         id: string_value(value, "call_id"),
         name: string_value(value, "name"),
@@ -690,7 +696,8 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
             },
             ProviderErrorPhase::Open,
         ),
-        kolyan_protocol_openai::OpenAiError::Decode(_) => {
+        kolyan_protocol_openai::OpenAiError::Decode(_)
+        | kolyan_protocol_openai::OpenAiError::Framing(_) => {
             (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
         }
     };

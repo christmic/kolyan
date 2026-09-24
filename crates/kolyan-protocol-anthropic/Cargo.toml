@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+kolyan-protocol-sse = { path = "../kolyan-protocol-sse" }
 bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true

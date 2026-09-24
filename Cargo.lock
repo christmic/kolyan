@@ -566,6 +566,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "kolyan-protocol-sse",
  "reqwest",
  "serde",
  "serde_json",
@@ -579,9 +580,17 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-util",
+ "kolyan-protocol-sse",
  "reqwest",
  "serde",
  "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "kolyan-protocol-sse"
+version = "0.1.0"
+dependencies = [
  "thiserror",
 ]
 

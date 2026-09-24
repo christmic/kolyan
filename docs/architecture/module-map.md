@@ -11,6 +11,7 @@
 | `kolyan-model` | 中立 LLM trait、请求/响应、消息、工具及模型事件契约 | 具体协议适配、Turn 状态机 |
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
+| `kolyan-protocol-sse` | 两套协议共用的有界字节分帧、UTF-8 和 EOF 校验 | HTTP、模型事件、完成状态推断 |
 | `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-provider-anthropic` | Anthropic 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-tools` | Tool trait、注册、执行 | 长期记忆 |

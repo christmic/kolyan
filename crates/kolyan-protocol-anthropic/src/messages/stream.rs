@@ -1,4 +1,5 @@
-use crate::{AnthropicError, MessageStreamEvent, ResponseDiagnostics, sse::parse_sse_data};
+use crate::{AnthropicError, MessageStreamEvent, ResponseDiagnostics, sse::Decoder};
+
 use futures_core::Stream;
 use std::{
     collections::VecDeque,
@@ -8,7 +9,7 @@ use std::{
 
 pub struct MessageStream {
     body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
-    buffer: String,
+    decoder: Decoder,
     pending: VecDeque<(String, String)>,
     done: bool,
     diagnostics: ResponseDiagnostics,
@@ -35,7 +36,7 @@ impl MessageStream {
         };
         Self {
             body: Box::pin(response.bytes_stream()),
-            buffer: String::new(),
+            decoder: Decoder::default(),
             pending: VecDeque::new(),
             done: false,
             diagnostics,
@@ -72,9 +73,12 @@ impl Stream for MessageStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some((_event, data)) = self.pending.pop_front() {
-                return Poll::Ready(Some(
-                    serde_json::from_str(&data).map_err(AnthropicError::Decode),
-                ));
+                let result = serde_json::from_str(&data).map_err(AnthropicError::Decode);
+                if result.is_err() {
+                    self.done = true;
+                    self.pending.clear();
+                }
+                return Poll::Ready(Some(result));
             }
             if self.done {
                 return Poll::Ready(None);
@@ -82,17 +86,24 @@ impl Stream for MessageStream {
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {
                     self.record_bytes(&bytes);
-                    let events = parse_sse_data(&mut self.buffer, &bytes);
-                    self.pending.extend(events);
+                    match self.decoder.push(&bytes) {
+                        Ok(events) => self
+                            .pending
+                            .extend(events.into_iter().map(|event| (event.kind, event.data))),
+                        Err(error) => {
+                            self.done = true;
+                            return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
+                        }
+                    }
                 }
                 Poll::Ready(Some(Err(error))) => {
+                    self.done = true;
                     return Poll::Ready(Some(Err(self.transport_error(error))));
                 }
                 Poll::Ready(None) => {
                     self.done = true;
-                    if !self.buffer.is_empty() {
-                        let events = parse_sse_data(&mut self.buffer, b"\n\n");
-                        self.pending.extend(events);
+                    if let Err(error) = self.decoder.finish() {
+                        return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
                     }
                 }
                 Poll::Pending => return Poll::Pending,
@@ -100,3 +111,6 @@ impl Stream for MessageStream {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

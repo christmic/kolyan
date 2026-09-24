@@ -311,7 +311,8 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
             },
             ProviderErrorPhase::Open,
         ),
-        kolyan_protocol_anthropic::AnthropicError::Decode(_) => {
+        kolyan_protocol_anthropic::AnthropicError::Decode(_)
+        | kolyan_protocol_anthropic::AnthropicError::Framing(_) => {
             (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
         }
     };

@@ -1,6 +1,34 @@
 use super::*;
 use futures_util::{StreamExt, stream};
 
+#[test]
+fn malformed_terminal_tool_arguments_are_not_silently_dropped() {
+    let response = json!({"output": [{"type":"function_call", "call_id":"call", "name":"write", "arguments":"{\"path\":"}]});
+    assert!(map_response(&response, &kolyan_model::ModelRef::new("test", "model")).is_err());
+}
+
+#[test]
+fn incomplete_response_without_known_reason_cannot_succeed() {
+    assert!(
+        map_incomplete_response(
+            &json!({"output":[]}),
+            &kolyan_model::ModelRef::new("test", "model")
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn missing_or_empty_tool_arguments_cannot_become_empty_object() {
+    for arguments in [Value::Null, json!(""), json!(" "), json!("[]")] {
+        assert!(
+            map_tool_call(&json!({"call_id":"call", "name":"write", "arguments":arguments}))
+                .is_err()
+        );
+    }
+    assert!(map_tool_call(&json!({"call_id":"call", "name":"write", "arguments":"{}"})).is_ok());
+}
+
 #[tokio::test]
 async fn synthetic_completion_preserves_text_and_structured_output() {
     let state = Arc::new(Mutex::new(CompletionState::default()));

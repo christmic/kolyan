@@ -11,6 +11,8 @@ pub struct ResponseDiagnostics {
 
 #[derive(Debug, Error)]
 pub enum OpenAiError {
+    #[error("OpenAI SSE framing error: {0}")]
+    Framing(#[from] kolyan_protocol_sse::DecodeError),
     #[error("OpenAI transport error: {source}; diagnostics: {diagnostics:?}")]
     Transport {
         source: reqwest::Error,

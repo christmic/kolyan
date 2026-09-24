@@ -1,4 +1,5 @@
-use crate::{OpenAiError, ResponseDiagnostics, ResponseStreamEvent, sse::parse_sse_data};
+use crate::{OpenAiError, ResponseDiagnostics, ResponseStreamEvent, sse::Decoder};
+
 use futures_core::Stream;
 use std::{
     collections::VecDeque,
@@ -8,7 +9,7 @@ use std::{
 
 pub struct ResponseStream {
     body: Pin<Box<dyn Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send>>,
-    buffer: String,
+    decoder: Decoder,
     pending: VecDeque<String>,
     done: bool,
     diagnostics: ResponseDiagnostics,
@@ -35,7 +36,7 @@ impl ResponseStream {
         };
         Self {
             body: Box::pin(response.bytes_stream()),
-            buffer: String::new(),
+            decoder: Decoder::default(),
             pending: VecDeque::new(),
             done: false,
             diagnostics,
@@ -74,11 +75,15 @@ impl Stream for ResponseStream {
             if let Some(data) = self.pending.pop_front() {
                 if data == "[DONE]" {
                     self.done = true;
+                    self.pending.clear();
                     continue;
                 }
-                return Poll::Ready(Some(
-                    serde_json::from_str(&data).map_err(OpenAiError::Decode),
-                ));
+                let result = serde_json::from_str(&data).map_err(OpenAiError::Decode);
+                if result.is_err() {
+                    self.done = true;
+                    self.pending.clear();
+                }
+                return Poll::Ready(Some(result));
             }
             if self.done {
                 return Poll::Ready(None);
@@ -86,17 +91,24 @@ impl Stream for ResponseStream {
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {
                     self.record_bytes(&bytes);
-                    let events = parse_sse_data(&mut self.buffer, &bytes);
-                    self.pending.extend(events);
+                    match self.decoder.push(&bytes) {
+                        Ok(events) => self
+                            .pending
+                            .extend(events.into_iter().map(|event| event.data)),
+                        Err(error) => {
+                            self.done = true;
+                            return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
+                        }
+                    }
                 }
                 Poll::Ready(Some(Err(error))) => {
+                    self.done = true;
                     return Poll::Ready(Some(Err(self.transport_error(error))));
                 }
                 Poll::Ready(None) => {
                     self.done = true;
-                    if !self.buffer.is_empty() {
-                        let events = parse_sse_data(&mut self.buffer, b"\n\n");
-                        self.pending.extend(events);
+                    if let Err(error) = self.decoder.finish() {
+                        return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
                     }
                 }
                 Poll::Pending => return Poll::Pending,
@@ -104,3 +116,6 @@ impl Stream for ResponseStream {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
