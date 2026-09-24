@@ -5,6 +5,7 @@ mod capability;
 mod error;
 mod event;
 mod message;
+mod planning;
 mod provider;
 mod structured;
 mod tool;
@@ -16,6 +17,10 @@ pub use capability::{ModelDescriptor, ModelFeature, ModelFeatures, ModelRef};
 pub use error::{ProviderError, ProviderErrorKind, ProviderErrorPhase};
 pub use event::{ModelEvent, ProviderMetadata};
 pub use message::{ContentBlock, ImageSource, Message, MessageRole, SystemInstruction};
+pub use planning::{
+    ModelParameterOverrides, ParameterAction, ParameterDecision, ParameterRule, ParameterSupport,
+    ParameterTable, PlannedRequest, RequestPlanner,
+};
 pub use provider::{ModelEventStream, ModelProvider, ProviderFuture, aggregate_stream};
 pub use structured::OutputValidator;
 pub use tool::{ToolCall, ToolChoice, ToolDefinition, ToolResult};

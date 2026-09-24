@@ -10,6 +10,7 @@ pub enum ProviderErrorKind {
     Unavailable,
     Transport,
     Protocol,
+    InvalidOutput,
     Unsupported,
     Other,
 }
@@ -20,6 +21,7 @@ pub enum ProviderErrorPhase {
     Open,
     Stream,
     Decode,
+    Validate,
 }
 
 #[derive(Debug, Error)]

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Provider model parameter table",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["provider", "protocol", "models"],
+  "properties": {
+    "provider": {"type":"string","minLength":1},
+    "protocol": {"enum":["openai_responses","anthropic_messages"]},
+    "features": {"$ref":"#/$defs/features"},
+    "defaults": {"$ref":"#/$defs/parameters"},
+    "models": {
+      "type":"object", "minProperties":1, "propertyNames":{"minLength":1},
+      "additionalProperties": {
+        "type":"object", "additionalProperties":false,
+        "properties": {
+          "features":{"anyOf":[{"$ref":"#/$defs/features"},{"type":"null"}]},
+          "parameters":{"$ref":"#/$defs/parameters"}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "features": {
+      "type":"array", "uniqueItems":true,
+      "items":{"enum":["text_input","text_output","image_input","document_input","tool_use","parallel_tool_use","structured_output","reasoning","prompt_caching","streaming"]}
+    },
+    "parameters": {"type":"object", "additionalProperties":{"$ref":"#/$defs/rule"}},
+    "rule": {
+      "type":"object", "additionalProperties":false, "required":["support"],
+      "properties": {
+        "support":{"enum":["supported","unsupported","unknown"]},
+        "schema":{"type":["object","boolean"],"default":{}},
+        "default":true,
+        "omittable":{"type":"boolean","default":true},
+        "wire_name":{"type":["string","null"]}
+      }
+    }
+  }
+}

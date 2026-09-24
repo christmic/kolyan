@@ -49,8 +49,8 @@ impl OutputValidator {
 
     fn error(message: &str) -> ProviderError {
         ProviderError::new(
-            ProviderErrorKind::Protocol,
-            ProviderErrorPhase::Decode,
+            ProviderErrorKind::InvalidOutput,
+            ProviderErrorPhase::Validate,
             message,
         )
     }

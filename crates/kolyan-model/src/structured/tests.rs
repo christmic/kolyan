@@ -28,7 +28,9 @@ fn validates_output_without_repairing_or_discarding_invalid_values() {
         Some(json!({"ok":true,"extra":1})),
     ] {
         response.structured_output = output;
-        assert!(validator.validate(&response).is_err());
+        let error = validator.validate(&response).unwrap_err();
+        assert_eq!(error.kind, ProviderErrorKind::InvalidOutput);
+        assert_eq!(error.phase, ProviderErrorPhase::Validate);
     }
     response.structured_output = Some(json!({"ok":true}));
     assert!(validator.validate(&response).is_ok());
