@@ -73,6 +73,10 @@ workspace = true
 name = "r1_matrix"
 path = "tests/provider/r1_matrix.rs"
 
+[[test]]
+name = "sdk_replay"
+path = "tests/provider/sdk_replay.rs"
+
 [dev-dependencies]
 tempfile = "3"
 
