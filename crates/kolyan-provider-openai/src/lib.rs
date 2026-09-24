@@ -17,11 +17,30 @@ use serde_json::{Value, json};
 #[derive(Clone)]
 pub struct OpenAiProvider {
     client: OpenAiClient,
+    completion_policy: CompletionPolicy,
+}
+
+/// Compatibility is opt-in and still requires a completed text item.
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub enum CompletionPolicy {
+    #[default]
+    RequireResponseCompleted,
+    AllowCompletedTextItemAtEof,
 }
 
 impl OpenAiProvider {
     pub fn new(client: OpenAiClient) -> Self {
-        Self { client }
+        Self {
+            client,
+            completion_policy: CompletionPolicy::default(),
+        }
+    }
+
+    /// Enable only for servers known to omit the response terminal event.
+    /// Bare EOF, unfinished tools and upstream errors never count as success.
+    pub fn with_completion_policy(mut self, policy: CompletionPolicy) -> Self {
+        self.completion_policy = policy;
+        self
     }
     fn request(request: &ModelRequest) -> ResponseCreateRequest {
         ResponseCreateRequest {
@@ -41,7 +60,9 @@ impl OpenAiProvider {
 impl ModelProvider for OpenAiProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
+        let completion_policy = self.completion_policy;
         Box::pin(async move {
+            let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
             let response = client
                 .stream_response(&Self::request(&request))
                 .await
@@ -53,13 +74,10 @@ impl ModelProvider for OpenAiProvider {
                     .map_err(openai_error)
                     .and_then(|event| map_event(event, &model_for_map))
             });
-            // Some compatible servers (notably MiniMax on the structured
-            // output path) end the stream without ever emitting
-            // `response.completed`. `aggregate_stream` then errors out
-            // waiting for a terminal event. We compensate by tracking
-            // whether Completed has been emitted and synthesizing one at
-            // stream end from whatever we accumulated.
-            let state = Arc::new(Mutex::new(CompletionState::default()));
+            let state = Arc::new(Mutex::new(CompletionState {
+                completion_policy,
+                ..CompletionState::default()
+            }));
             let tracked =
                 tracked_completion(mapped, Arc::clone(&state), request.output_format.is_some());
             let stream = synthesize_completion_if_missing(
@@ -68,6 +86,14 @@ impl ModelProvider for OpenAiProvider {
                 model,
                 request.output_format.is_some(),
             );
+            let stream = stream.map(move |event| {
+                event.and_then(|event| {
+                    if let ModelEvent::Completed(response) = &event {
+                        validator.validate(response)?;
+                    }
+                    Ok(event)
+                })
+            });
             Ok(Box::pin(stream) as _)
         })
     }
@@ -75,6 +101,9 @@ impl ModelProvider for OpenAiProvider {
 
 #[derive(Default)]
 struct CompletionState {
+    completion_policy: CompletionPolicy,
+    completed_text_item: bool,
+    failed: bool,
     completed_emitted: bool,
     text: String,
     reasoning: String,
@@ -94,7 +123,10 @@ fn tracked_completion<S>(
 where
     S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
 {
-    upstream.map(move |event_result| {
+    upstream.scan(false, move |failed, event_result| {
+        if *failed {
+            return futures_util::future::ready(None);
+        }
         let event_result = if structured {
             match event_result {
                 Ok(ModelEvent::Completed(mut response)) if response.structured_output.is_none() => {
@@ -110,12 +142,14 @@ where
         } else {
             event_result
         };
-        if let Ok(event) = &event_result
-            && let Ok(mut s) = state.lock()
-        {
-            remember_event(&mut s, event);
+        if let Ok(mut s) = state.lock() {
+            match &event_result {
+                Ok(event) => remember_event(&mut s, event),
+                Err(_) => s.failed = true,
+            }
         }
-        event_result
+        *failed = event_result.is_err();
+        futures_util::future::ready(Some(event_result))
     })
 }
 
@@ -155,14 +189,20 @@ fn remember_event(state: &mut CompletionState, event: &ModelEvent) {
         }
         ModelEvent::Usage(usage) => state.usage = usage.clone(),
         ModelEvent::Completed(_) => state.completed_emitted = true,
-        ModelEvent::Started | ModelEvent::Provider(_) => {}
+        ModelEvent::Provider(metadata) => {
+            if metadata
+                .raw
+                .as_ref()
+                .is_some_and(|raw| raw.get("completed_text_item") == Some(&Value::Bool(true)))
+            {
+                state.completed_text_item = true;
+            }
+        }
+        ModelEvent::Started => {}
     }
 }
 
-/// After the upstream stream finishes, append a synthetic `Completed`
-/// event if the server never sent one. This keeps `aggregate_stream` from
-/// erroring on MiniMax-style providers that close the connection
-/// without emitting `response.completed`.
+/// Strict EOF validation; opt-in compatibility requires explicit item evidence.
 fn synthesize_completion_if_missing<S>(
     upstream: S,
     state: Arc<Mutex<CompletionState>>,
@@ -177,10 +217,17 @@ where
     let tail = stream::once(async move {
         let snapshot = state.lock().map(|s| CompletionSnapshot::from(&*s)).ok();
         let snapshot = snapshot?;
-        if snapshot.completed_emitted {
-            // Either Completed was emitted upstream, or the lock is
-            // poisoned (treat as already-emitted to avoid double-firing).
+        if snapshot.completed_emitted || snapshot.failed {
             return None;
+        }
+        if snapshot.completion_policy != CompletionPolicy::AllowCompletedTextItemAtEof
+            || !snapshot.completed_text_item
+            || !snapshot.tool_builders.is_empty()
+            || !snapshot.tool_calls.is_empty()
+        {
+            return Some(Err(provider_error(
+                "stream ended without a response terminal event",
+            )));
         }
         let mut content = Vec::new();
         if !snapshot.text.is_empty() {
@@ -194,15 +241,7 @@ where
                 opaque: None,
             });
         }
-        let mut tool_calls = snapshot.tool_calls;
-        for (id, (name, arguments)) in snapshot.tool_builders {
-            let arguments = serde_json::from_str(&arguments).unwrap_or_else(|_| json!({}));
-            tool_calls.push(ToolCall {
-                id,
-                name,
-                arguments,
-            });
-        }
+        let tool_calls = snapshot.tool_calls;
         content.extend(
             tool_calls
                 .iter()
@@ -236,6 +275,9 @@ where
 
 #[derive(Clone)]
 struct CompletionSnapshot {
+    completion_policy: CompletionPolicy,
+    completed_text_item: bool,
+    failed: bool,
     completed_emitted: bool,
     text: String,
     reasoning: String,
@@ -247,6 +289,9 @@ struct CompletionSnapshot {
 impl From<&CompletionState> for CompletionSnapshot {
     fn from(state: &CompletionState) -> Self {
         Self {
+            completion_policy: state.completion_policy,
+            completed_text_item: state.completed_text_item,
+            failed: state.failed,
             completed_emitted: state.completed_emitted,
             text: state.text.clone(),
             reasoning: state.reasoning.clone(),
@@ -382,9 +427,15 @@ fn map_event(
                     .map(ModelEvent::ToolCallCompleted)
                     .ok_or_else(|| provider_error("missing function call item"))
             } else {
+                let completed_text_item = item.is_some_and(|item| {
+                    item.get("type").and_then(Value::as_str) == Some("message")
+                        && item.get("status").and_then(Value::as_str) == Some("completed")
+                });
                 Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
                     provider: "openai".into(),
-                    raw: Some(Value::Object(event.fields.into_iter().collect())),
+                    raw: Some(
+                        json!({"completed_text_item": completed_text_item, "fields": event.fields}),
+                    ),
                 }))
             }
         }
@@ -569,7 +620,9 @@ fn parse_json_relaxed(text: &str) -> Option<Value> {
     }
     // Last-ditch: find the first {...} or [...] block and parse it.
     if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('[')) {
-        if let Some(end_rel) = trimmed.rfind(['}', ']']) {
+        if let Some(end_rel) = trimmed.rfind(['}', ']'])
+            && start <= end_rel
+        {
             let candidate = &trimmed[start..=end_rel];
             if let Ok(v) = serde_json::from_str::<Value>(candidate)
                 && (v.is_object() || v.is_array())

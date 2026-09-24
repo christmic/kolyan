@@ -8,9 +8,13 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+cap-std = "4.0.3"
 futures-util.workspace = true
 kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-policy = { path = "../kolyan-policy" }
 kolyan-types = { path = "../kolyan-types" }
 serde_json.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,12 +1,14 @@
 //! Tool registration and execution boundaries.
 
+mod workspace;
+
 use kolyan_core::{ToolError, ToolExecutor, ToolFuture};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
 use kolyan_policy::{ExecutionGrant, PolicyError, PolicyResolver, ToolManifest};
 use serde_json::Value;
-use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+use workspace::Workspace;
 
 /// A deliberately small, non-shell command tool for V0 Turn integration.
 ///
@@ -14,12 +16,14 @@ use std::sync::Arc;
 /// interprets arbitrary command strings.
 #[derive(Debug, Clone)]
 pub struct RestrictedShellTool {
-    root: PathBuf,
+    root: Workspace,
 }
 
 impl RestrictedShellTool {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: Workspace::new(root),
+        }
     }
 
     pub fn tool_definition() -> ToolDefinition {
@@ -84,7 +88,7 @@ impl RestrictedShellTool {
         let path = object.get("path").and_then(Value::as_str).unwrap_or(".");
 
         match command {
-            "pwd" => Ok(self.root.display().to_string()),
+            "pwd" => Ok(self.root.path.display().to_string()),
             "list" => self.list(path),
             "count_lines" => self.count_lines(path),
             "count_entries" => self.count_entries(path),
@@ -92,21 +96,12 @@ impl RestrictedShellTool {
         }
     }
 
-    fn resolve(&self, relative: &str) -> Result<PathBuf, String> {
-        let path = Path::new(relative);
-        if path.is_absolute()
-            || path
-                .components()
-                .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
-        {
-            return Err("path must stay below the configured tool root".into());
-        }
-        Ok(self.root.join(path))
-    }
-
     fn list(&self, relative: &str) -> Result<String, String> {
-        let path = self.resolve(relative)?;
-        let mut names = fs::read_dir(path)
+        let path = Workspace::relative(relative)?;
+        let mut names = self
+            .root
+            .directory()?
+            .read_dir(path)
             .map_err(|error| error.to_string())?
             .map(|entry| entry.map(|entry| entry.file_name().to_string_lossy().into_owned()))
             .collect::<Result<Vec<_>, _>>()
@@ -116,14 +111,21 @@ impl RestrictedShellTool {
     }
 
     fn count_lines(&self, relative: &str) -> Result<String, String> {
-        let path = self.resolve(relative)?;
-        let content = fs::read_to_string(path).map_err(|error| error.to_string())?;
+        let path = Workspace::relative(relative)?;
+        let content = self
+            .root
+            .directory()?
+            .read_to_string(path)
+            .map_err(|error| error.to_string())?;
         Ok(content.lines().count().to_string())
     }
 
     fn count_entries(&self, relative: &str) -> Result<String, String> {
-        let path = self.resolve(relative)?;
-        let count = fs::read_dir(path)
+        let path = Workspace::relative(relative)?;
+        let count = self
+            .root
+            .directory()?
+            .read_dir(path)
             .map_err(|error| error.to_string())?
             .count();
         Ok(count.to_string())
@@ -142,12 +144,14 @@ impl ToolExecutor for RestrictedShellTool {
 /// not create directories, execute commands, or resolve paths outside root.
 #[derive(Debug, Clone)]
 pub struct RestrictedFileTool {
-    root: PathBuf,
+    root: Workspace,
 }
 
 impl RestrictedFileTool {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self {
+            root: Workspace::new(root),
+        }
     }
 
     pub fn tool_definitions() -> Vec<ToolDefinition> {
@@ -232,32 +236,25 @@ impl RestrictedFileTool {
             .get("path")
             .and_then(Value::as_str)
             .ok_or_else(|| "path must be a string".to_string())?;
-        let path = self.resolve(path)?;
+        let path = Workspace::relative(path)?;
+        let directory = self.root.directory()?;
 
         match name {
-            "file.read" => fs::read_to_string(path).map_err(|error| error.to_string()),
+            "file.read" => directory
+                .read_to_string(path)
+                .map_err(|error| error.to_string()),
             "file.write" => {
                 let content = object
                     .get("content")
                     .and_then(Value::as_str)
                     .ok_or_else(|| "content must be a string".to_string())?;
-                fs::write(&path, content).map_err(|error| error.to_string())?;
+                directory
+                    .write(path, content)
+                    .map_err(|error| error.to_string())?;
                 Ok(format!("wrote {} bytes", content.len()))
             }
             _ => unreachable!(),
         }
-    }
-
-    fn resolve(&self, relative: &str) -> Result<PathBuf, String> {
-        let path = Path::new(relative);
-        if path.is_absolute()
-            || path
-                .components()
-                .any(|component| matches!(component, Component::ParentDir | Component::RootDir))
-        {
-            return Err("path must stay below the configured tool root".into());
-        }
-        Ok(self.root.join(path))
     }
 }
 

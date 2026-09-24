@@ -55,6 +55,7 @@ impl ModelProvider for AnthropicProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
         Box::pin(async move {
+            let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
             let response = client
                 .stream_message(&Self::request(&request))
                 .await
@@ -67,9 +68,19 @@ impl ModelProvider for AnthropicProvider {
                     ..AnthropicState::default()
                 },
                 move |state, event| {
+                    if state.failed {
+                        return futures_util::future::ready(None);
+                    }
                     let result = event
                         .map_err(anthropic_error)
-                        .and_then(|event| state.event(event, &model));
+                        .and_then(|event| state.event(event, &model))
+                        .and_then(|event| {
+                            if let ModelEvent::Completed(response) = &event {
+                                validator.validate(response)?;
+                            }
+                            Ok(event)
+                        });
+                    state.failed = result.is_err();
                     futures_util::future::ready(Some(result))
                 },
             );
@@ -80,11 +91,12 @@ impl ModelProvider for AnthropicProvider {
 
 #[derive(Default)]
 struct AnthropicState {
+    failed: bool,
     id: String,
     text: String,
     blocks: Vec<ContentBlock>,
     usage: TokenUsage,
-    active_tool: Option<(String, String, String)>,
+    active_tool: Option<(String, String, String, Value)>,
     stop_reason: Option<String>,
     structured: bool,
 }
@@ -111,6 +123,7 @@ impl AnthropicState {
                         string_value(b, "id"),
                         string_value(b, "name"),
                         String::new(),
+                        b.get("input").cloned().unwrap_or(Value::Null),
                     ));
                     Ok(ModelEvent::ToolCallStarted {
                         id: string_value(b, "id"),
@@ -131,14 +144,14 @@ impl AnthropicState {
                     }
                     Some("input_json_delta") => {
                         let partial = string_value(&delta, "partial_json");
-                        if let Some((_, _, arguments)) = self.active_tool.as_mut() {
+                        if let Some((_, _, arguments, _)) = self.active_tool.as_mut() {
                             arguments.push_str(&partial);
                         }
                         Ok(ModelEvent::ToolCallArgumentsDelta {
                             id: self
                                 .active_tool
                                 .as_ref()
-                                .map(|(id, _, _)| id.clone())
+                                .map(|(id, _, _, _)| id.clone())
                                 .unwrap_or_default(),
                             delta: partial,
                         })
@@ -149,11 +162,21 @@ impl AnthropicState {
             "content_block_stop" => self
                 .active_tool
                 .take()
-                .map(|(id, name, arguments)| {
+                .map(|(id, name, arguments, initial_input)| {
+                    let arguments: Value = if arguments.is_empty() {
+                        initial_input
+                    } else {
+                        serde_json::from_str(&arguments).map_err(|error| {
+                            protocol_error(format!("invalid tool arguments: {error}"))
+                        })?
+                    };
+                    if !arguments.is_object() {
+                        return Err(protocol_error("tool arguments must be an object"));
+                    }
                     let call = ToolCall {
                         id,
                         name,
-                        arguments: serde_json::from_str(&arguments).unwrap_or_else(|_| json!({})),
+                        arguments,
                     };
                     self.blocks
                         .push(ContentBlock::ToolCall { call: call.clone() });
@@ -175,6 +198,11 @@ impl AnthropicState {
                 Ok(ModelEvent::Usage(self.usage.clone()))
             }
             "message_stop" => {
+                if self.active_tool.is_some() || self.stop_reason.is_none() {
+                    return Err(protocol_error(
+                        "message stopped without a reason or with an unfinished tool",
+                    ));
+                }
                 if !self.text.is_empty() {
                     self.blocks.insert(
                         0,
@@ -205,6 +233,10 @@ impl AnthropicState {
                     metadata: json!({"provider":"anthropic"}),
                 }))
             }
+            "error" => Err(protocol_error(format!(
+                "Anthropic error event: {:?}",
+                event.fields.get("error")
+            ))),
             _ => Ok(ModelEvent::Provider(metadata(event.fields))),
         }
     }
@@ -296,6 +328,14 @@ fn metadata(fields: std::collections::BTreeMap<String, Value>) -> kolyan_model::
         raw: Some(Value::Object(fields.into_iter().collect())),
     }
 }
+fn protocol_error(message: impl Into<String>) -> ProviderError {
+    ProviderError::new(
+        ProviderErrorKind::Protocol,
+        ProviderErrorPhase::Decode,
+        message,
+    )
+}
+
 fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> ProviderError {
     let message = error.to_string();
     let (kind, phase) = match error {
@@ -350,6 +390,7 @@ fn parse_json_relaxed(text: &str) -> Option<Value> {
     }
     if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('['))
         && let Some(end_rel) = trimmed.rfind(['}', ']'])
+        && start <= end_rel
     {
         let candidate = &trimmed[start..=end_rel];
         if let Ok(v) = serde_json::from_str::<Value>(candidate)

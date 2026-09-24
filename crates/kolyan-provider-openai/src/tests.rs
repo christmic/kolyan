@@ -1,4 +1,11 @@
 use super::*;
+
+#[test]
+fn malformed_bracket_order_never_panics() {
+    for text in ["] {", "} [", "中文] 🦀{"] {
+        assert_eq!(parse_json_relaxed(text), None);
+    }
+}
 use futures_util::{StreamExt, stream};
 
 #[test]
@@ -31,7 +38,12 @@ fn missing_or_empty_tool_arguments_cannot_become_empty_object() {
 
 #[tokio::test]
 async fn synthetic_completion_preserves_text_and_structured_output() {
-    let state = Arc::new(Mutex::new(CompletionState::default()));
+    // Compatibility now requires explicit opt-in and a completed item witness.
+    let state = Arc::new(Mutex::new(CompletionState {
+        completion_policy: CompletionPolicy::AllowCompletedTextItemAtEof,
+        completed_text_item: true,
+        ..CompletionState::default()
+    }));
     let events = stream::iter(vec![Ok(ModelEvent::TextDelta(
         "```json\n{\"ok\":true}\n```".into(),
     ))]);
@@ -51,6 +63,40 @@ async fn synthetic_completion_preserves_text_and_structured_output() {
     };
     assert_eq!(response.content.len(), 1);
     assert_eq!(response.structured_output, Some(json!({"ok": true})));
+}
+
+#[tokio::test]
+async fn eof_never_synthesizes_success_after_error_or_without_evidence() {
+    for policy in [
+        CompletionPolicy::RequireResponseCompleted,
+        CompletionPolicy::AllowCompletedTextItemAtEof,
+    ] {
+        for fail in [false, true] {
+            let state = Arc::new(Mutex::new(CompletionState {
+                completion_policy: policy,
+                ..CompletionState::default()
+            }));
+            let mut events = vec![Ok(ModelEvent::TextDelta("partial".into()))];
+            if fail {
+                events.push(Err(provider_error("transport failed")));
+            }
+            let tracked = tracked_completion(stream::iter(events), state.clone(), false);
+            let events = synthesize_completion_if_missing(
+                tracked,
+                state,
+                kolyan_model::ModelRef::new("test", "model"),
+                false,
+            )
+            .collect::<Vec<_>>()
+            .await;
+            assert_eq!(events.iter().filter(|event| event.is_err()).count(), 1);
+            assert!(
+                !events
+                    .iter()
+                    .any(|event| matches!(event, Ok(ModelEvent::Completed(_))))
+            );
+        }
+    }
 }
 
 #[tokio::test]

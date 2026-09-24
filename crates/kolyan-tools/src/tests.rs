@@ -3,6 +3,79 @@ use futures_util::FutureExt;
 use std::fs;
 use std::sync::Arc;
 
+#[cfg(unix)]
+#[test]
+fn rejects_symlink_escape_for_reads_writes_and_queries() {
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    fs::write(outside.path().join("protected"), "unchanged").unwrap();
+    symlink(outside.path(), root.path().join("escape")).unwrap();
+    symlink(outside.path().join("protected"), root.path().join("file")).unwrap();
+    let file = RestrictedFileTool::new(root.path());
+    for path in ["file", "escape/protected", "escape/new-file"] {
+        assert!(
+            file.run_file("file.read", &serde_json::json!({"path":path}))
+                .is_err()
+        );
+        assert!(
+            file.run_file(
+                "file.write",
+                &serde_json::json!({"path":path,"content":"bad"})
+            )
+            .is_err()
+        );
+    }
+    let shell = RestrictedShellTool::new(root.path());
+    for command in ["list", "count_entries", "count_lines"] {
+        assert!(
+            shell
+                .run_query(&serde_json::json!({"command":command,"path":"escape"}))
+                .is_err()
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(outside.path().join("protected")).unwrap(),
+        "unchanged"
+    );
+    assert!(!outside.path().join("new-file").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn retained_root_handle_does_not_follow_replaced_root_path() {
+    use std::os::unix::fs::symlink;
+    let parent = tempfile::tempdir().unwrap();
+    let original = parent.path().join("root");
+    let moved = parent.path().join("moved");
+    let outside = tempfile::tempdir().unwrap();
+    fs::create_dir(&original).unwrap();
+    let tool = RestrictedFileTool::new(&original);
+    fs::rename(&original, &moved).unwrap();
+    symlink(outside.path(), &original).unwrap();
+    tool.run_file(
+        "file.write",
+        &serde_json::json!({"path":"note","content":"inside"}),
+    )
+    .unwrap();
+    assert_eq!(fs::read_to_string(moved.join("note")).unwrap(), "inside");
+    assert!(!outside.path().join("note").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn relative_symlink_inside_workspace_remains_usable() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("note"), "inside").unwrap();
+    std::os::unix::fs::symlink("note", root.path().join("alias")).unwrap();
+    assert_eq!(
+        RestrictedFileTool::new(root.path())
+            .run_file("file.read", &serde_json::json!({"path":"alias"}))
+            .unwrap(),
+        "inside"
+    );
+}
+
 #[test]
 fn exposes_only_restricted_query_commands() {
     let definition = RestrictedShellTool::tool_definition();
