@@ -284,6 +284,9 @@ pub fn build_openai_provider(cfg: &ProviderConfig, api_key: &str) -> OpenAiProvi
         api_key: api_key.to_string(),
         timeout: Duration::from_secs(cfg.timeout_secs),
         transport_retries: 1,
+        diagnostics: std::env::var("KOLYAN_PROTOCOL_DIAGNOSTICS")
+            .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+            .unwrap_or(false),
     };
     let client = OpenAiClient::new(protocol_cfg)
         .expect("OpenAiClient::new should succeed with a valid base_url and timeout");

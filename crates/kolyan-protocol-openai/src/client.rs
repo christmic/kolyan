@@ -28,7 +28,10 @@ impl OpenAiClient {
         let mut attempts = 0;
         loop {
             match self.request("/v1/responses").json(request).send().await {
-                Ok(response) => return Ok(ResponseStream::new(response.error_for_status()?)),
+                Ok(response) => {
+                    let response = response.error_for_status()?;
+                    return Ok(ResponseStream::new(response, self.config.diagnostics));
+                }
                 Err(error)
                     if attempts < self.config.transport_retries
                         && (error.is_timeout() || error.is_connect() || error.is_request()) =>

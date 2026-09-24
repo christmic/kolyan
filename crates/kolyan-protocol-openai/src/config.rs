@@ -7,6 +7,7 @@ pub struct OpenAiConfig {
     pub timeout: Duration,
     /// Number of retries for transport failures before an HTTP response.
     pub transport_retries: u8,
+    pub diagnostics: bool,
 }
 
 impl OpenAiConfig {
@@ -16,6 +17,7 @@ impl OpenAiConfig {
             api_key: api_key.into(),
             timeout: Duration::from_secs(120),
             transport_retries: 1,
+            diagnostics: false,
         }
     }
 }

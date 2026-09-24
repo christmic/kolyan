@@ -678,7 +678,7 @@ fn provider_error(message: impl Into<String>) -> ProviderError {
 fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
     let message = error.to_string();
     let (kind, phase) = match error {
-        kolyan_protocol_openai::OpenAiError::Transport(_) => {
+        kolyan_protocol_openai::OpenAiError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
         }
         kolyan_protocol_openai::OpenAiError::Http { status, .. } => (
