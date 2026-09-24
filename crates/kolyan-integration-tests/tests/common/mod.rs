@@ -726,8 +726,9 @@ pub fn assert_expectations(response: &ModelResponse, expectations: &Expectations
     if let Some(so_exp) = &expectations.structured_output {
         let structured = response.structured_output.as_ref().unwrap_or_else(|| {
             panic!(
-                "[{label}] expected Some(structured_output); got None. StopReason={:?}",
-                response.stop_reason
+                "[{label}] expected Some(structured_output); got None. StopReason={:?}; metadata={}",
+                response.stop_reason,
+                response.metadata
             )
         });
         let structured = unwrap_single_key_object(structured);
