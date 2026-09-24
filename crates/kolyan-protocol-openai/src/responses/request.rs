@@ -20,7 +20,7 @@ pub struct ResponseCreateRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub prompt_cache_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub prompt_cache_options: Option<Value>,
+    pub prompt_cache_retention: Option<String>,
     pub stream: bool,
 }
 

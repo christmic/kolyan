@@ -49,9 +49,9 @@ impl OpenAiProvider {
             tools: request.tools.iter().map(|tool| FunctionTool { kind: "function".into(), name: tool.name.clone(), description: tool.description.clone(), parameters: tool.input_schema.clone(), strict: false }).collect(),
             tool_choice: tool_choice(&request.tool_choice),
             text: request.output_format.as_ref().map(|format| ResponseTextConfig { format: json!({"type":"json_schema","name":format.name,"schema":format.schema,"strict":format.strict}) }),
-            reasoning: request.reasoning.as_ref().map(|r| json!({"effort":r.effort,"budget_tokens":r.budget_tokens})),
+            reasoning: request.reasoning.as_ref().and_then(|r| r.effort.as_ref().map(|effort| json!({"effort":effort}))),
             prompt_cache_key: request.prompt_cache.as_ref().and_then(|cache| cache.key.clone()),
-            prompt_cache_options: request.prompt_cache.as_ref().and_then(|cache| cache.retention.map(|retention| json!({"ttl": match retention { kolyan_model::CacheRetention::InMemory => "in_memory", kolyan_model::CacheRetention::TwentyFourHours => "24h" }}))),
+            prompt_cache_retention: request.prompt_cache.as_ref().and_then(|cache| cache.retention.map(|retention| match retention { kolyan_model::CacheRetention::InMemory => "in_memory".into(), kolyan_model::CacheRetention::TwentyFourHours => "24h".into() })),
             stream: true,
         }
     }
@@ -62,6 +62,7 @@ impl ModelProvider for OpenAiProvider {
         let client = self.client.clone();
         let completion_policy = self.completion_policy;
         Box::pin(async move {
+            validate_request(&request)?;
             let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
             let response = client
                 .stream_response(&Self::request(&request))
@@ -69,10 +70,11 @@ impl ModelProvider for OpenAiProvider {
                 .map_err(openai_error)?;
             let model = request.model.clone();
             let model_for_map = model.clone();
+            let mut call_ids = BTreeMap::new();
             let mapped = response.map(move |event| {
                 event
                     .map_err(openai_error)
-                    .and_then(|event| map_event(event, &model_for_map))
+                    .and_then(|event| map_stream_event(event, &model_for_map, &mut call_ids))
             });
             let state = Arc::new(Mutex::new(CompletionState {
                 completion_policy,
@@ -148,7 +150,7 @@ where
                 Err(_) => s.failed = true,
             }
         }
-        *failed = event_result.is_err();
+        *failed = event_result.is_err() || matches!(event_result, Ok(ModelEvent::Completed(_)));
         futures_util::future::ready(Some(event_result))
     })
 }
@@ -306,7 +308,7 @@ fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
     message.content.iter().map(|block| match block {
         ContentBlock::Text { text } => json!({"role": role(message), "content":[{"type": if message.role == kolyan_model::MessageRole::User {"input_text"} else {"output_text"},"text":text}]}),
         ContentBlock::Image { source } => json!({"role":"user","content":[{"type":"input_image","image_url":image_url(source)}]}),
-        ContentBlock::Document { source, title } => json!({"role":"user","content":[{"type":"input_file","file_data":image_data(source),"filename":title}]}),
+        ContentBlock::Document { source, title } => json!({"role":"user","content":[file_input(source, title.as_deref())]}),
         ContentBlock::ToolCall { call } => json!({"type":"function_call","call_id":call.id,"name":call.name,"arguments":call.arguments.to_string()}),
         ContentBlock::ToolResult { result } => json!({"type":"function_call_output","call_id":result.call_id,"output":result.content}),
         ContentBlock::Reasoning {
@@ -328,11 +330,68 @@ fn openai_input(request: &ModelRequest) -> Value {
         cache
             .breakpoints
             .contains(&kolyan_model::CacheBreakpoint::Messages)
-    }) && let Some(Value::Object(item)) = input.last_mut()
+    }) && let Some(Value::Object(block)) = input
+        .last_mut()
+        .and_then(|item| item.get_mut("content"))
+        .and_then(Value::as_array_mut)
+        .and_then(|blocks| blocks.last_mut())
     {
-        item.insert("prompt_cache_breakpoint".into(), json!({"enabled": true}));
+        block.insert(
+            "prompt_cache_breakpoint".into(),
+            json!({"mode": "explicit"}),
+        );
     }
     json!(input)
+}
+
+fn validate_request(request: &ModelRequest) -> Result<(), ProviderError> {
+    if request
+        .reasoning
+        .as_ref()
+        .is_some_and(|r| r.budget_tokens.is_some())
+    {
+        return Err(ProviderError::new(
+            ProviderErrorKind::Unsupported,
+            ProviderErrorPhase::Open,
+            "OpenAI Responses reasoning supports effort, not budget_tokens",
+        ));
+    }
+    if request.prompt_cache.as_ref().is_some_and(|cache| {
+        cache
+            .breakpoints
+            .iter()
+            .any(|point| *point != kolyan_model::CacheBreakpoint::Messages)
+    }) {
+        return Err(ProviderError::new(
+            ProviderErrorKind::Unsupported,
+            ProviderErrorPhase::Open,
+            "OpenAI adapter supports explicit message-content cache breakpoints only",
+        ));
+    }
+    if request.prompt_cache.as_ref().is_some_and(|cache| {
+        cache
+            .breakpoints
+            .contains(&kolyan_model::CacheBreakpoint::Messages)
+    }) && request
+        .messages
+        .last()
+        .and_then(|message| message.content.last())
+        .is_none_or(|block| {
+            !matches!(
+                block,
+                ContentBlock::Text { .. }
+                    | ContentBlock::Image { .. }
+                    | ContentBlock::Document { .. }
+            )
+        })
+    {
+        return Err(ProviderError::new(
+            ProviderErrorKind::InvalidRequest,
+            ProviderErrorPhase::Open,
+            "message cache breakpoint requires a final text, image or document block",
+        ));
+    }
+    Ok(())
 }
 
 fn role(message: &kolyan_model::Message) -> &'static str {
@@ -348,8 +407,16 @@ fn image_url(source: &ImageSource) -> String {
         ImageSource::Base64 { media_type, data } => format!("data:{media_type};base64,{data}"),
     }
 }
-fn image_data(source: &ImageSource) -> String {
-    image_url(source)
+fn file_input(source: &ImageSource, title: Option<&str>) -> Value {
+    let mut block = json!({"type":"input_file"});
+    match source {
+        ImageSource::Url { url } => block["file_url"] = json!(url),
+        ImageSource::Base64 { .. } => block["file_data"] = json!(image_url(source)),
+    }
+    if let Some(title) = title {
+        block["filename"] = json!(title);
+    }
+    block
 }
 fn join_system(request: &ModelRequest) -> Option<String> {
     let text = request
@@ -368,6 +435,35 @@ fn tool_choice(choice: &kolyan_model::ToolChoice) -> Option<Value> {
         kolyan_model::ToolChoice::Required => Some(json!("required")),
         kolyan_model::ToolChoice::Tool(name) => Some(json!({"type":"function","name":name})),
     }
+}
+
+/// Responses deltas carry item_id, whereas neutral tool events use call_id.
+fn map_stream_event(
+    mut event: ResponseStreamEvent,
+    model: &kolyan_model::ModelRef,
+    call_ids: &mut BTreeMap<String, String>,
+) -> Result<ModelEvent, ProviderError> {
+    if event.kind == "response.output_item.added"
+        && let Some(item) = event.fields.get("item")
+        && item["type"] == "function_call"
+        && let (Some(item_id), Some(call_id)) = (item["id"].as_str(), item["call_id"].as_str())
+    {
+        call_ids.insert(item_id.into(), call_id.into());
+    }
+    if event.kind == "response.function_call_arguments.delta"
+        && !event.fields.contains_key("call_id")
+    {
+        let item_id = event
+            .fields
+            .get("item_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| provider_error("tool delta has no item_id or call_id"))?;
+        let call_id = call_ids
+            .get(item_id)
+            .ok_or_else(|| provider_error("tool delta refers to an unknown item"))?;
+        event.fields.insert("call_id".into(), json!(call_id));
+    }
+    map_event(event, model)
 }
 
 fn map_event(
@@ -652,11 +748,14 @@ fn map_output(item: &Value) -> Result<Vec<ContentBlock>, ProviderError> {
             text: item
                 .get("summary")
                 .and_then(Value::as_array)
-                .and_then(|a| a.first())
-                .and_then(|v| v.get("text"))
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .into(),
+                .map(|items| {
+                    items
+                        .iter()
+                        .filter_map(|v| v.get("text").and_then(Value::as_str))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                })
+                .unwrap_or_default(),
             opaque: Some(item.clone()),
         }],
         _ => item
@@ -741,6 +840,9 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
         _ => None,
     };
     let (kind, phase) = match error {
+        kolyan_protocol_openai::OpenAiError::Transport {
+            diagnostics: None, ..
+        } => (ProviderErrorKind::Transport, ProviderErrorPhase::Open),
         kolyan_protocol_openai::OpenAiError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
         }

@@ -27,6 +27,7 @@ pub struct Decoder {
     event_bytes: usize,
     kind: String,
     data: Vec<String>,
+    after_cr: bool,
 }
 
 impl Decoder {
@@ -34,17 +35,20 @@ impl Decoder {
     pub fn push(&mut self, bytes: &[u8]) -> Result<Vec<Event>, DecodeError> {
         let mut events = Vec::new();
         for &byte in bytes {
+            if std::mem::take(&mut self.after_cr) && byte == b'\n' {
+                continue;
+            }
             self.event_bytes += 1;
             if self.event_bytes > MAX_EVENT_BYTES {
                 return Err(DecodeError::TooLarge);
             }
-            if byte != b'\n' {
+            if byte != b'\n' && byte != b'\r' {
                 self.line.push(byte);
                 continue;
             }
+            self.after_cr = byte == b'\r';
             let line = std::mem::take(&mut self.line);
-            let line = line.strip_suffix(b"\r").unwrap_or(&line);
-            let text = std::str::from_utf8(line)?;
+            let text = std::str::from_utf8(&line)?;
             if text.is_empty() {
                 if !self.data.is_empty() {
                     events.push(Event {
