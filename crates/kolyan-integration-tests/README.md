@@ -342,3 +342,25 @@ the full provider/model/fixture label.
 Edit `tests/config/live-tests.toml`. The file is embedded into each test
 binary at compile time via `include_str!`, so a rebuild is required for
 changes to take effect.
+
+## R1 fail-collecting matrix
+
+```bash
+cargo test -p kolyan-integration-tests --test r1_matrix -- --ignored --nocapture
+```
+
+This additional matrix keeps the existing tests and assertions intact. Its plan
+comes from `tests/fixtures/r1_matrix.json` and every configured provider/model.
+Each row exercises Step → Provider → Protocol. A failing row does not prevent
+later rows from running; any Failed or NotRun row fails the final test.
+
+The printed temporary directory contains `report.json`, the configuration,
+revision, and per-row neutral requests and actual event JSONL. No credentials
+or authorization headers are written. Raw events include generated text,
+reasoning and errors; they are test artifacts, not production Step I/O.
+Missing credentials are NotRun, not Passed. Declared unsupported capabilities
+are Skipped with a reason. Cache warm/cold requests belong to one scenario;
+there is no automatic retry of a failed model contract.
+
+This matrix does not replace Turn, Runtime, Session or Server tests. A green
+offline suite does not imply that these live tests have run or passed.
