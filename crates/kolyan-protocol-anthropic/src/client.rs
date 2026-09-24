@@ -26,10 +26,24 @@ impl AnthropicClient {
         &self,
         request: &MessageCreateRequest,
     ) -> Result<MessageStream, AnthropicError> {
+        self.stream_message_with_extensions(request, &serde_json::Map::new())
+            .await
+    }
+
+    /// Explicit SDK-style extra body fields; the Provider validates its configured bindings.
+    pub async fn stream_message_with_extensions(
+        &self,
+        request: &MessageCreateRequest,
+        extensions: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<MessageStream, AnthropicError> {
+        let mut body = serde_json::to_value(request)?;
+        body.as_object_mut()
+            .expect("typed request serializes as an object")
+            .extend(extensions.clone());
         let mut attempts = 0;
         let response = loop {
-            dump_request("anthropic", request);
-            match self.request("/v1/messages").json(request).send().await {
+            dump_request("anthropic", &body);
+            match self.request("/v1/messages").json(&body).send().await {
                 Ok(response) => {
                     break check_status(response).await?;
                 }
@@ -59,7 +73,7 @@ impl AnthropicClient {
     }
 }
 
-fn dump_request(label: &str, request: &MessageCreateRequest) {
+fn dump_request(label: &str, request: &impl serde::Serialize) {
     if std::env::var("KOLYAN_DUMP_MODEL_REQUESTS")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)

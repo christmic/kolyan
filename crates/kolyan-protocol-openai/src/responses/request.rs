@@ -24,6 +24,23 @@ pub struct ResponseCreateRequest {
     pub stream: bool,
 }
 
+impl ResponseCreateRequest {
+    /// Typed fields cannot be overwritten by configured Provider extensions.
+    pub const RESERVED_FIELDS: &[&str] = &[
+        "model",
+        "input",
+        "instructions",
+        "max_output_tokens",
+        "tools",
+        "tool_choice",
+        "text",
+        "reasoning",
+        "prompt_cache_key",
+        "prompt_cache_retention",
+        "stream",
+    ];
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct FunctionTool {
     #[serde(rename = "type")]

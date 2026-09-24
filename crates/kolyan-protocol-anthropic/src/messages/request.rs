@@ -19,6 +19,21 @@ pub struct MessageCreateRequest {
     pub stream: bool,
 }
 
+impl MessageCreateRequest {
+    /// Typed fields cannot be overwritten by configured Provider extensions.
+    pub const RESERVED_FIELDS: &[&str] = &[
+        "model",
+        "max_tokens",
+        "messages",
+        "system",
+        "tools",
+        "tool_choice",
+        "thinking",
+        "output_config",
+        "stream",
+    ];
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Tool {
     pub name: String,

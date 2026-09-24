@@ -26,10 +26,24 @@ impl OpenAiClient {
         &self,
         request: &ResponseCreateRequest,
     ) -> Result<ResponseStream, OpenAiError> {
+        self.stream_response_with_extensions(request, &serde_json::Map::new())
+            .await
+    }
+
+    /// Explicit SDK-style extra body fields; the Provider validates its configured bindings.
+    pub async fn stream_response_with_extensions(
+        &self,
+        request: &ResponseCreateRequest,
+        extensions: &serde_json::Map<String, serde_json::Value>,
+    ) -> Result<ResponseStream, OpenAiError> {
+        let mut body = serde_json::to_value(request)?;
+        body.as_object_mut()
+            .expect("typed request serializes as an object")
+            .extend(extensions.clone());
         let mut attempts = 0;
         loop {
-            dump_request("openai", request);
-            match self.request("/v1/responses").json(request).send().await {
+            dump_request("openai", &body);
+            match self.request("/v1/responses").json(&body).send().await {
                 Ok(response) => {
                     let response = check_status(response).await?;
                     return Ok(ResponseStream::new(response, self.config.diagnostics));
@@ -53,7 +67,7 @@ impl OpenAiClient {
     }
 }
 
-fn dump_request(label: &str, request: &ResponseCreateRequest) {
+fn dump_request(label: &str, request: &impl serde::Serialize) {
     if std::env::var("KOLYAN_DUMP_MODEL_REQUESTS")
         .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
