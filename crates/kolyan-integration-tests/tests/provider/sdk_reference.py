@@ -15,8 +15,9 @@ import tempfile
 import tomllib
 
 import anthropic
-import httpx
 import httpx2
+import importlib.metadata
+import time
 import openai
 import jsonschema
 
@@ -33,19 +34,35 @@ def run_case(family, protocol, config, model, fixture, strict_schema, root):
         }, indent=2))
 
     def capture_response(response):
-        response.read()
-        (directory / "response.bin").write_bytes(response.content)
         (directory / "http.json").write_text(json.dumps({
+            "capture_format": 2,
             "status": response.status_code,
             "headers": {key: response.headers.get(key) for key in
                         ("content-type", "content-encoding", "x-request-id")},
         }, indent=2))
+        original = response.stream
+
+        class RecordingStream(httpx2.SyncByteStream):
+            def __iter__(self):
+                start = time.monotonic()
+                with (directory / "response.bin").open("wb") as body, (directory / "chunks.jsonl").open("w") as chunks:
+                    for chunk in original:
+                        body.write(chunk)
+                        body.flush()
+                        chunks.write(json.dumps({"length": len(chunk), "elapsed_ms": (time.monotonic() - start) * 1000}) + "\n")
+                        chunks.flush()
+                        yield chunk
+
+            def close(self):
+                original.close()
+
+        response.stream = RecordingStream()
 
     schema = copy.deepcopy(fixture["output_format"]["schema"])
     if strict_schema:
         schema["additionalProperties"] = False
-    transport = httpx if protocol == "openai" else httpx2
-    with transport.Client(timeout=180, event_hooks={
+    client_type = openai.DefaultHttpxClient if protocol == "openai" else anthropic.DefaultHttpxClient
+    with client_type(timeout=180, event_hooks={
         "request": [capture_request], "response": [capture_response],
     }) as http:
         try:
@@ -102,7 +119,9 @@ def main():
     root = Path(tempfile.mkdtemp(prefix="kolyan-sdk-reference-"))
     (root / "sdk-versions.json").write_text(json.dumps({
         "openai": openai.__version__, "anthropic": anthropic.__version__,
-        "max_retries": 0,
+        "max_retries": 0, "capture_format": 2,
+        "installed_sources": {name: json.loads(importlib.metadata.distribution(name).read_text("direct_url.json"))
+                              for name in ("openai", "anthropic")},
     }, indent=2))
     print(root, flush=True)
     jobs = []

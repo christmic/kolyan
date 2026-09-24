@@ -50,11 +50,9 @@ output_tokens_reporting  = true
 # MiniMax-M3 has automatic (server-side passive) prompt caching and does not
 # report cache_read_tokens / cache_creation_input_tokens.
 cache_control_ephemeral  = false
-# MiniMax Responses API on the structured-output path emits `response.completed`
-# unreliably; the provider layer synthesizes a terminal event when missing.
+# Historical observation only; missing completion is an error, never synthesized.
 server_emits_completed   = false
-# MiniMax streams JSON wrapped in a markdown fence on json_schema requests —
-# the provider layer strips it.
+# Historical observation only; fences are rejected, never stripped by the provider.
 structured_output_fenced = true
 
 [[provider.minimax.openai_compat.model_matrix]]

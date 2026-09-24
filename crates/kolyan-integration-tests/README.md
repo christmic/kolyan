@@ -247,8 +247,8 @@ block. The runner uses these to choose how strictly to assert on the
 | `input_tokens_reporting`   | `usage.input_tokens` is not asserted; `None` or `Some(0)` accepted (logged as `WARN`). |
 | `output_tokens_reporting`  | Same semantics for `usage.output_tokens`.                                               |
 | `cache_control_ephemeral`  | `prompt_cache` fixture is skipped (server doesn't report cache hit tokens).             |
-| `server_emits_completed`   | Informational — the OpenAI provider layer already synthesizes a terminal `Completed` if missing, so this flag doesn't gate any test today. |
-| `structured_output_fenced` | Informational — the OpenAI provider layer strips markdown fences unconditionally; this flag documents whether a particular surface needs it. |
+| `server_emits_completed`   | Historical observation only; never gates tests or enables synthetic completion. Missing terminal events fail the Provider contract. |
+| `structured_output_fenced` | Historical observation only; never gates tests or enables JSON repair. Fenced JSON fails structured output validation. |
 | `supports_vision`          | Informational — there are no vision-only fixtures yet, so this flag is forward-looking. |
 
 Current defaults (in `tests/config/live-tests.toml`):
@@ -273,10 +273,10 @@ Notes on the defaults:
 * MiniMax's Anthropic-compatible surface on China does not populate
   `input_tokens` in `message_start.usage` — only `output_tokens`
   (filled in `message_delta.usage`).
-* MiniMax's OpenAI-compatible surface emits `response.completed`
-  unreliably on the structured-output path; the provider layer
-  compensates by synthesizing a terminal `Completed` when the stream
-  ends without one.
+* Historical capability observations are not compatibility switches. Strict
+  protocol handling never synthesizes completion or strips Markdown fences.
+  Current SDK differential evidence and known output-contract failures are in
+  [requirement 0026](../../docs/requirements/0026-provider-sdk-conformance.md).
 
 ## CI gating
 
@@ -289,6 +289,21 @@ usage, and zero cost. CI does **not** run the `--ignored` set.
 caller's shell.
 
 ## Diagnostics
+
+Official SDK conformance has three separate entry points:
+
+- `tests/provider/sdk_transport.py`: feeds the same data-driven local HTTP/SSE
+  faults to the official Python SDKs and Rust protocol clients; no credentials.
+- `tests/provider/sdk_reference.py --all-models`: captures real responses with
+  official SDKs, recording wire chunks without pre-reading the response body.
+  Transport success and extra JSON/Schema validation are reported separately.
+- `--test sdk_replay`: replays those captured bytes through Kolyan and compares
+  request fields, decoded text and output validation. Set `KOLYAN_SDK_EVIDENCE`
+  to the printed capture directory. No further external requests are made.
+
+Commands, pinned SDK source revisions and acceptance evidence are maintained in
+[requirement 0026](../../docs/requirements/0026-provider-sdk-conformance.md).
+An invalid model output is `InvalidOutput/Validate`, not a protocol decode error.
 
 When a test fails, the failure message embeds the full
 `family/surface/model/fixture` label so you can correlate with
@@ -342,6 +357,28 @@ the full provider/model/fixture label.
 Edit `tests/config/live-tests.toml`. The file is embedded into each test
 binary at compile time via `include_str!`, so a rebuild is required for
 changes to take effect.
+
+## Model request parameter policy
+
+The `request_planning` target exercises the production `RequestPlanner` through
+both Provider adapters. Configuration is `tests/config/request-parameters.json`;
+cases and expected decisions/wire fields are `tests/fixtures/request_planning.json`.
+The profile intentionally disables optional tuning to test filtering; it is not
+a claim that every configured vendor lacks those features. Endpoint addresses,
+model registries and credential environment names remain in `live-tests.toml`.
+
+```bash
+cargo test -p kolyan-integration-tests --test request_planning
+cargo test -p kolyan-integration-tests --test request_planning \
+  parameter_policy_live_matrix -- --ignored --nocapture
+```
+
+The offline matrix captures actual HTTP JSON and verifies omitted/present fields,
+including namespace extension mapping and pre-network rejections. The live matrix
+runs text and tool cases across every configured model/protocol; missing credentials
+are NotRun, not success. Tests write requests, effective parameter tables, full events,
+decisions and row outcomes to temporary directories. No credential headers are saved.
+This matrix does not replace the strict structured-output tests in R1.
 
 ## R1 fail-collecting matrix
 

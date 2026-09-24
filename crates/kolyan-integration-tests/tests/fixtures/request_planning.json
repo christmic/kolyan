@@ -1,0 +1,401 @@
+{
+  "offline": [
+    {
+      "name": "defaults",
+      "request": {
+        "max_output_tokens": null
+      },
+      "present": {
+        "openai_responses": {
+          "/max_output_tokens": 2048
+        },
+        "anthropic_messages": {
+          "/max_tokens": 2048
+        }
+      },
+      "absent": [
+        "/temperature",
+        "/reasoning",
+        "/thinking"
+      ],
+      "decisions": {
+        "max_output_tokens": "defaulted"
+      }
+    },
+    {
+      "name": "omit_unsupported",
+      "request": {
+        "reasoning": {
+          "effort": "high",
+          "budget_tokens": 1024
+        },
+        "prompt_cache": {
+          "key": "test-prefix",
+          "retention": "twenty_four_hours",
+          "breakpoints": [
+            "messages"
+          ]
+        },
+        "extensions": {
+          "test.temperature": 0.2
+        }
+      },
+      "absent": [
+        "/reasoning",
+        "/thinking",
+        "/output_config",
+        "/prompt_cache_key",
+        "/prompt_cache_retention",
+        "/temperature"
+      ],
+      "decisions": {
+        "reasoning.effort": "omitted_unsupported",
+        "reasoning.budget_tokens": "omitted_unsupported",
+        "prompt_cache.key": "omitted_unsupported",
+        "extensions.test.temperature": "omitted_unsupported"
+      }
+    },
+    {
+      "name": "registered_extension",
+      "rules": {
+        "extensions.test.temperature": {
+          "support": "supported",
+          "wire_name": "temperature",
+          "schema": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      },
+      "request": {
+        "extensions": {
+          "test.temperature": 0.25
+        }
+      },
+      "present": {
+        "all": {
+          "/temperature": 0.25
+        }
+      },
+      "decisions": {
+        "extensions.test.temperature": "sent"
+      }
+    },
+    {
+      "name": "model_override",
+      "rules": {
+        "max_output_tokens": {
+          "support": "supported",
+          "schema": {
+            "type": "integer"
+          },
+          "default": 3072
+        }
+      },
+      "request": {
+        "max_output_tokens": null
+      },
+      "present": {
+        "openai_responses": {
+          "/max_output_tokens": 3072
+        },
+        "anthropic_messages": {
+          "/max_tokens": 3072
+        }
+      },
+      "decisions": {
+        "max_output_tokens": "defaulted"
+      }
+    },
+    {
+      "name": "omit_tool_choice",
+      "rules": {
+        "tool_choice": {
+          "support": "unsupported"
+        }
+      },
+      "request": {},
+      "absent": [
+        "/tool_choice"
+      ],
+      "decisions": {
+        "tool_choice": "omitted_unsupported"
+      }
+    },
+    {
+      "name": "required_tool_choice",
+      "rules": {
+        "tool_choice": {
+          "support": "unsupported"
+        }
+      },
+      "request": {
+        "tool_choice": "required"
+      },
+      "error": "unsupported"
+    },
+    {
+      "name": "invalid_range",
+      "request": {
+        "max_output_tokens": 999999
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "unknown_extension",
+      "request": {
+        "extensions": {
+          "test.unknown": true
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "required_schema",
+      "request": {
+        "output_format": {
+          "name": "test",
+          "schema": {
+            "type": "object"
+          },
+          "strict": true
+        }
+      },
+      "error": "unsupported"
+    },
+    {
+      "name": "unknown_model",
+      "request": {
+        "model": {
+          "provider": "fixture",
+          "model": "unknown"
+        }
+      },
+      "error": "unsupported"
+    },
+    {
+      "name": "wrong_provider",
+      "request": {
+        "model": {
+          "provider": "other-endpoint",
+          "model": "fixture"
+        }
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "reserved_extension",
+      "rules": {
+        "extensions.test.temperature": {
+          "support": "supported",
+          "wire_name": "model"
+        }
+      },
+      "request": {},
+      "error": "invalid_request"
+    },
+    {
+      "name": "anthropic_required_max_tokens",
+      "protocol": "anthropic_messages",
+      "rules": {
+        "max_output_tokens": {
+          "support": "unsupported"
+        }
+      },
+      "request": {
+        "max_output_tokens": null
+      },
+      "error": "invalid_request"
+    },
+    {
+      "name": "partial_reasoning",
+      "rules": {
+        "reasoning.effort": {
+          "support": "supported",
+          "schema": {
+            "enum": [
+              "high"
+            ]
+          }
+        }
+      },
+      "request": {
+        "reasoning": {
+          "effort": "high",
+          "budget_tokens": 1024
+        }
+      },
+      "present": {
+        "openai_responses": {
+          "/reasoning/effort": "high"
+        },
+        "anthropic_messages": {
+          "/thinking/type": "adaptive",
+          "/output_config/effort": "high"
+        }
+      },
+      "absent": [
+        "/thinking/budget_tokens"
+      ],
+      "decisions": {
+        "reasoning.effort": "sent",
+        "reasoning.budget_tokens": "omitted_unsupported"
+      },
+      "features": [
+        "text_input",
+        "text_output",
+        "streaming",
+        "tool_use",
+        "reasoning"
+      ]
+    },
+    {
+      "name": "supported_cache_breakpoint",
+      "rules": {
+        "prompt_cache.breakpoints": {
+          "support": "supported",
+          "schema": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "messages"
+              ]
+            }
+          }
+        }
+      },
+      "request": {
+        "prompt_cache": {
+          "key": "discard",
+          "retention": "twenty_four_hours",
+          "breakpoints": [
+            "messages"
+          ]
+        }
+      },
+      "present": {
+        "openai_responses": {
+          "/input/0/content/0/prompt_cache_breakpoint/mode": "explicit"
+        },
+        "anthropic_messages": {
+          "/messages/0/content/0/cache_control/type": "ephemeral"
+        }
+      },
+      "absent": [
+        "/prompt_cache_key",
+        "/prompt_cache_retention"
+      ],
+      "decisions": {
+        "prompt_cache.key": "omitted_unsupported",
+        "prompt_cache.breakpoints": "sent"
+      },
+      "features": [
+        "text_input",
+        "text_output",
+        "streaming",
+        "tool_use",
+        "prompt_caching"
+      ]
+    },
+    {
+      "name": "protocol_forbids_budget",
+      "protocol": "openai_responses",
+      "rules": {
+        "reasoning.budget_tokens": {
+          "support": "supported",
+          "schema": {
+            "type": "integer"
+          }
+        }
+      },
+      "request": {
+        "reasoning": {
+          "effort": null,
+          "budget_tokens": 1024
+        }
+      },
+      "error": "unsupported",
+      "features": [
+        "text_input",
+        "text_output",
+        "streaming",
+        "tool_use",
+        "reasoning"
+      ]
+    },
+    {
+      "name": "protocol_forbids_cache_key",
+      "protocol": "anthropic_messages",
+      "rules": {
+        "prompt_cache.key": {
+          "support": "supported",
+          "schema": {
+            "type": "string"
+          }
+        }
+      },
+      "request": {
+        "prompt_cache": {
+          "key": "not-on-this-protocol",
+          "retention": null,
+          "breakpoints": []
+        }
+      },
+      "error": "unsupported",
+      "features": [
+        "text_input",
+        "text_output",
+        "streaming",
+        "tool_use",
+        "prompt_caching"
+      ]
+    }
+  ],
+  "live": [
+    {
+      "name": "text_with_disabled_tuning",
+      "fixture": "text",
+      "request": {
+        "reasoning": {
+          "effort": "high",
+          "budget_tokens": 1024
+        },
+        "prompt_cache": {
+          "key": "test-prefix",
+          "retention": "twenty_four_hours",
+          "breakpoints": [
+            "messages"
+          ]
+        },
+        "extensions": {
+          "test.temperature": 0.2
+        }
+      },
+      "decisions": {
+        "reasoning.effort": "omitted_unsupported",
+        "reasoning.budget_tokens": "omitted_unsupported",
+        "prompt_cache.key": "omitted_unsupported",
+        "extensions.test.temperature": "omitted_unsupported"
+      }
+    },
+    {
+      "name": "tools_with_disabled_tuning",
+      "fixture": "tool_call",
+      "request": {
+        "reasoning": {
+          "effort": "high",
+          "budget_tokens": 1024
+        },
+        "extensions": {
+          "test.temperature": 0.2
+        }
+      },
+      "decisions": {
+        "reasoning.effort": "omitted_unsupported",
+        "reasoning.budget_tokens": "omitted_unsupported",
+        "extensions.test.temperature": "omitted_unsupported"
+      }
+    }
+  ]
+}

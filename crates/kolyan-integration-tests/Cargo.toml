@@ -77,8 +77,16 @@ path = "tests/provider/r1_matrix.rs"
 name = "sdk_replay"
 path = "tests/provider/sdk_replay.rs"
 
+[[test]]
+name = "sdk_transport"
+path = "tests/provider/sdk_transport.rs"
+
 [dev-dependencies]
 tempfile = "3"
+
+[[test]]
+name = "request_planning"
+path = "tests/provider/request_planning.rs"
 
 [dependencies]
 # Workspace tokio only enables the "time" feature, but #[tokio::test] and the

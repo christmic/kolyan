@@ -1,0 +1,16 @@
+{
+  "provider": "fixture",
+  "protocol": "openai_responses",
+  "features": ["text_input", "text_output", "streaming", "tool_use"],
+  "defaults": {
+    "max_output_tokens": {"support":"supported", "schema":{"type":"integer","minimum":1,"maximum":80960}, "default":2048, "omittable":false},
+    "reasoning.effort": {"support":"unsupported", "default":"high"},
+    "reasoning.budget_tokens": {"support":"unsupported"},
+    "prompt_cache.key": {"support":"unsupported"},
+    "prompt_cache.retention": {"support":"unsupported"},
+    "prompt_cache.breakpoints": {"support":"unsupported"},
+    "tool_choice": {"support":"supported", "schema":{"enum":["auto","none","required"]}},
+    "extensions.test.temperature": {"support":"unsupported", "wire_name":"temperature", "schema":{"type":"number","minimum":0,"maximum":1}, "default":0.5}
+  },
+  "models": {"fixture":{}}
+}

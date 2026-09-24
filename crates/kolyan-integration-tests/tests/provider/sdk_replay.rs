@@ -161,7 +161,7 @@ async fn replay<P: ModelProvider>(
                 terminal = true;
             }
             Err(error) => {
-                assert_eq!(error.kind, ProviderErrorKind::Protocol);
+                assert_eq!(error.kind, ProviderErrorKind::InvalidOutput);
                 assert!(
                     error.message.contains("structured output"),
                     "unexpected error: {error}"
@@ -192,6 +192,21 @@ fn serve(
     request_path: std::path::PathBuf,
 ) -> (String, std::thread::JoinHandle<()>) {
     let body = fs::read(evidence.join("response.bin")).unwrap();
+    let http: Value =
+        serde_json::from_slice(&fs::read(evidence.join("http.json")).unwrap()).unwrap();
+    assert_eq!(
+        http["capture_format"], 2,
+        "regenerate evidence with streaming capture"
+    );
+    let chunks = fs::read_to_string(evidence.join("chunks.jsonl"))
+        .unwrap()
+        .lines()
+        .map(|line| {
+            serde_json::from_str::<Value>(line).unwrap()["length"]
+                .as_u64()
+                .unwrap() as usize
+        })
+        .collect::<Vec<_>>();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}", listener.local_addr().unwrap());
     let server = std::thread::spawn(move || {
@@ -222,8 +237,17 @@ fn serve(
         socket.read_exact(&mut input[boundary..]).unwrap();
         // Deliberately never persist request headers (including even dummy authorization).
         fs::write(request_path, &input[boundary..]).unwrap();
-        write!(socket, "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len()).unwrap();
-        socket.write_all(&body).unwrap();
+        write!(socket, "HTTP/1.1 {} Recorded\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n", http["status"].as_u64().unwrap(), http["headers"]["content-type"].as_str().unwrap_or("application/octet-stream"), body.len()).unwrap();
+        if let Some(encoding) = http["headers"]["content-encoding"].as_str() {
+            write!(socket, "Content-Encoding: {encoding}\r\n").unwrap();
+        }
+        write!(socket, "\r\n").unwrap();
+        let mut offset = 0;
+        for length in chunks {
+            socket.write_all(&body[offset..offset + length]).unwrap();
+            offset += length;
+        }
+        assert_eq!(offset, body.len());
     });
     (url, server)
 }

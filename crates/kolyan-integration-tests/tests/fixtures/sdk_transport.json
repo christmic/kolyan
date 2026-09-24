@@ -1,0 +1,16 @@
+{
+  "encodings": ["identity", "gzip", "deflate"],
+  "transfers": ["length", "chunked"],
+  "cases": [
+    {"name":"unicode","openai":"data: {\"type\":\"response.output_text.delta\",\"delta\":\"中文🦀\"}\n\n","anthropic":"event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"中文🦀\"}}\n\n"},
+    {"name":"multiline_cr","openai":": comment\revent: delta\rdata: {\"type\":\"response.output_text.delta\",\rdata: \"delta\":\"ok\"}\r\r","anthropic":": comment\revent: content_block_delta\rdata: {\"index\":0,\rdata: \"delta\":{\"type\":\"text_delta\",\"text\":\"ok\"}}\r\r"},
+    {"name":"malformed_json","openai":"data: {\"type\":\"response.output_text.delta\",\"delta\":\"prefix\"}\n\ndata: invalid\n\n","anthropic":"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{}}\n\nevent: message_delta\ndata: invalid\n\n"},
+    {"name":"invalid_utf8","openai":"data: ","anthropic":"event: message_delta\ndata: ","invalid_utf8":true},
+    {"name":"unfinished","openai":"data: {\"type\":\"response.output_text.delta\",\"delta\":\"not committed\"}\n","anthropic":"event: message_delta\ndata: {\"type\":\"message_delta\"}\n"},
+    {"name":"api_error","openai":"data: {\"error\":{\"message\":\"fixture error\"}}\n\n","anthropic":"event: error\ndata: fixture error\n\n"},
+    {"name":"ignore_and_done","openai":"data: [DONE]suffix\n\ndata: invalid\n\n","anthropic":"event: ping\ndata: not JSON\n\nevent: unknown\ndata: not JSON\n\n"},
+    {"name":"disconnect","openai":"data: {\"type\":\"response.output_text.delta\",\"delta\":\"prefix\"}\n\n","anthropic":"event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{}}\n\n","disconnect":true},
+    {"name":"timeout","openai":"","anthropic":"","delay":0.25},
+    {"name":"rate_limit","openai":"{\"error\":{\"message\":\"limited\"}}","anthropic":"{\"error\":{\"type\":\"rate_limit_error\",\"message\":\"limited\"}}","status":429}
+  ]
+}
