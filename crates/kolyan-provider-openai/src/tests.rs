@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn terminal_does_not_poll_or_wait_for_the_next_network_event() {
+    use futures_util::FutureExt;
+    let response = map_response(
+        &json!({"id":"done","output":[]}),
+        &kolyan_model::ModelRef::new("test", "model"),
+    )
+    .unwrap();
+    for event in [
+        Ok(ModelEvent::Completed(response)),
+        Err(provider_error("fatal")),
+    ] {
+        let input = stream::iter(vec![event]).chain(stream::pending());
+        let results = require_terminal(input)
+            .collect::<Vec<_>>()
+            .now_or_never()
+            .expect("terminal must not wait for the server to close the connection");
+        assert_eq!(results.len(), 1);
+    }
+}
+
+#[test]
 fn tool_calls_require_identity_and_name() {
     for value in [
         json!({"arguments":"{}"}),
@@ -143,7 +164,7 @@ fn cache_retention_matches_official_responses_wire_format() {
 #[test]
 fn malformed_bracket_order_never_panics() {
     for text in ["] {", "} [", "中文] 🦀{"] {
-        assert_eq!(parse_json_relaxed(text), None);
+        assert_eq!(parse_json(text), None);
     }
 }
 use futures_util::{StreamExt, stream};
@@ -177,89 +198,72 @@ fn missing_or_empty_tool_arguments_cannot_become_empty_object() {
 }
 
 #[tokio::test]
-async fn synthetic_completion_preserves_text_and_structured_output() {
-    // Compatibility now requires explicit opt-in and a completed item witness.
-    let state = Arc::new(Mutex::new(CompletionState {
-        completion_policy: CompletionPolicy::AllowCompletedTextItemAtEof,
-        completed_text_item: true,
-        ..CompletionState::default()
-    }));
-    let events = stream::iter(vec![Ok(ModelEvent::TextDelta(
-        "```json\n{\"ok\":true}\n```".into(),
-    ))]);
-    let tracked = tracked_completion(events, Arc::clone(&state), true);
-    let mut stream = synthesize_completion_if_missing(
-        tracked,
-        state,
-        kolyan_model::ModelRef::new("test", "model"),
-        true,
-    );
-    assert!(matches!(
-        stream.next().await,
-        Some(Ok(ModelEvent::TextDelta(_)))
-    ));
-    let Some(Ok(ModelEvent::Completed(response))) = stream.next().await else {
-        panic!("expected synthetic completion");
-    };
-    assert_eq!(response.content.len(), 1);
-    assert_eq!(response.structured_output, Some(json!({"ok": true})));
-}
-
-#[tokio::test]
-async fn eof_never_synthesizes_success_after_error_or_without_evidence() {
-    for policy in [
-        CompletionPolicy::RequireResponseCompleted,
-        CompletionPolicy::AllowCompletedTextItemAtEof,
-    ] {
-        for fail in [false, true] {
-            let state = Arc::new(Mutex::new(CompletionState {
-                completion_policy: policy,
-                ..CompletionState::default()
-            }));
-            let mut events = vec![Ok(ModelEvent::TextDelta("partial".into()))];
-            if fail {
-                events.push(Err(provider_error("transport failed")));
-            }
-            let tracked = tracked_completion(stream::iter(events), state.clone(), false);
-            let events = synthesize_completion_if_missing(
-                tracked,
-                state,
-                kolyan_model::ModelRef::new("test", "model"),
-                false,
-            )
+async fn eof_never_synthesizes_success_even_after_text() {
+    for upstream_error in [false, true] {
+        let mut events = vec![Ok(ModelEvent::TextDelta("{\"ok\":true}".into()))];
+        if upstream_error {
+            events.push(Err(provider_error("upstream")));
+        }
+        let results = require_terminal(stream::iter(events))
             .collect::<Vec<_>>()
             .await;
-            assert_eq!(events.iter().filter(|event| event.is_err()).count(), 1);
-            assert!(
-                !events
-                    .iter()
-                    .any(|event| matches!(event, Ok(ModelEvent::Completed(_))))
-            );
-        }
+        assert_eq!(results.iter().filter(|event| event.is_err()).count(), 1);
+        assert!(
+            !results
+                .iter()
+                .any(|event| matches!(event, Ok(ModelEvent::Completed(_))))
+        );
     }
 }
 
-#[tokio::test]
-async fn completed_frame_recovers_structured_output_from_prior_text_deltas() {
-    let state = Arc::new(Mutex::new(CompletionState::default()));
-    let events = stream::iter(vec![
-        Ok(ModelEvent::TextDelta("{\"ok\":true}".into())),
-        Ok(ModelEvent::Completed(ModelResponse {
-            id: "response".into(),
-            model: kolyan_model::ModelRef::new("provider", "model"),
-            content: Vec::new(),
-            structured_output: None,
-            stop_reason: StopReason::EndTurn,
-            usage: TokenUsage::default(),
-            metadata: Value::Null,
-        })),
-    ]);
-    let mut stream = tracked_completion(events, Arc::clone(&state), true);
-    let _ = stream.next().await;
-    let Some(Ok(ModelEvent::Completed(response))) = stream.next().await else {
-        panic!("expected completed response");
-    };
-    assert_eq!(response.structured_output, Some(json!({"ok": true})));
+#[test]
+fn completion_recovers_only_finalized_items_and_preserves_explicit_empty_output() {
+    let mut items = BTreeMap::new();
+    let item = json!({"type":"message","status":"completed","content":[{"type":"output_text","text":"{}"}]});
+    let mut done = serde_json::from_value(
+        json!({"type":"response.output_item.done","output_index":0,"item":item}),
+    )
+    .unwrap();
+    recover_finalized_output(&mut done, &mut items).unwrap();
+    for output in [None, Some(Value::Null), Some(json!([]))] {
+        let mut response = json!({"id":"response"});
+        if let Some(output) = output.clone() {
+            response["output"] = output;
+        }
+        let mut completed =
+            serde_json::from_value(json!({"type":"response.completed","response":response}))
+                .unwrap();
+        recover_finalized_output(&mut completed, &mut items).unwrap();
+        assert_eq!(
+            completed.fields["response"]["output"],
+            if output == Some(json!([])) {
+                json!([])
+            } else {
+                json!([item])
+            }
+        );
+    }
+}
+
+#[test]
+fn malformed_completed_response_is_rejected_without_fabrication_or_panic() {
+    for response in [Value::Null, json!("invalid"), json!([]), json!(1)] {
+        let mut event =
+            serde_json::from_value(json!({"type":"response.completed","response":response}))
+                .unwrap();
+        assert!(recover_finalized_output(&mut event, &mut BTreeMap::new()).is_err());
+    }
+}
+
+#[test]
+fn no_fences_prose_or_fabricated_parsed_fields_are_accepted() {
+    for text in ["```json\n{}\n```", "answer: {}", "{} trailing"] {
+        assert_eq!(parse_json(text), None);
+    }
+    assert_eq!(
+        extract_structured_output(&json!({"parsed":{},"output_text":"{}","output":[]})),
+        None
+    );
 }
 
 #[test]

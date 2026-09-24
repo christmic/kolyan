@@ -24,7 +24,7 @@ fn fixture(chunks: Vec<Vec<u8>>) -> MessageStream {
 #[test]
 fn fatal_json_error_discards_following_events() {
     let events = fixture(vec![
-        b"data: invalid\n\ndata: {\"type\":\"unused\"}\n\n".to_vec(),
+        b"event: message_start\ndata: invalid\n\ndata: {\"type\":\"unused\"}\n\n".to_vec(),
     ])
     .collect::<Vec<_>>()
     .now_or_never()
@@ -39,13 +39,14 @@ fn unfinished_event_is_not_completed_at_eof() {
         .collect::<Vec<_>>()
         .now_or_never()
         .unwrap();
-    assert_eq!(events.len(), 1);
-    assert!(matches!(events[0], Err(AnthropicError::Framing(_))));
+    assert!(events.is_empty());
 }
 
 #[test]
 fn utf8_survives_each_transport_byte_boundary() {
-    let bytes = "data: {\"type\":\"test\",\"delta\":\"中文🦀\"}\r\n\r\n".as_bytes();
+    let bytes =
+        "event: content_block_delta\r\ndata: {\"type\":\"test\",\"delta\":\"中文🦀\"}\r\n\r\n"
+            .as_bytes();
     let events = fixture(bytes.iter().map(|b| vec![*b]).collect())
         .collect::<Vec<_>>()
         .now_or_never()

@@ -11,6 +11,8 @@ pub struct ResponseDiagnostics {
 
 #[derive(Debug, Error)]
 pub enum AnthropicError {
+    #[error("Anthropic stream API error: {0}")]
+    Api(String),
     #[error("Anthropic SSE framing error: {0}")]
     Framing(#[from] kolyan_protocol_sse::DecodeError),
     #[error("Anthropic transport error: {source}; diagnostics: {diagnostics:?}")]

@@ -1,6 +1,34 @@
 use super::*;
 
 #[test]
+fn valid_prefix_is_delivered_before_a_later_utf8_error() {
+    let mut decoder = Decoder::default();
+    let events = decoder.push(b"data: valid\n\ndata: \xff\n\n").unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].data, "valid");
+    assert!(matches!(decoder.take_error(), Some(DecodeError::Utf8(_))));
+}
+
+#[test]
+fn valid_events_have_no_implicit_four_megabyte_limit() {
+    let value = "x".repeat(4 * 1024 * 1024 + 1);
+    let mut decoder = Decoder::default();
+    let events = decoder
+        .push(format!("data: {value}\n\n").as_bytes())
+        .unwrap();
+    assert_eq!(events[0].data, value);
+}
+
+#[test]
+fn event_id_persists_while_retry_resets_after_dispatch() {
+    let mut decoder = Decoder::default();
+    assert_eq!(decoder.push(b"retry: 10\n\n\n").unwrap().len(), 1);
+    assert_eq!(decoder.push(b"id: keep\n\n\n").unwrap().len(), 2);
+    assert_eq!(decoder.push(b"id: bad\0id\n\n").unwrap().len(), 1);
+    assert!(decoder.push(b"id:\n\n").unwrap().is_empty());
+}
+
+#[test]
 fn all_sdk_line_endings_work_across_every_byte_boundary() {
     for ending in ["\n", "\r\n", "\r"] {
         let input = format!("event: text{ending}data: 中文🦀{ending}{ending}");
@@ -56,7 +84,7 @@ fn handles_bytewise_chunks_and_multiple_events() {
 }
 
 #[test]
-fn rejects_truncated_invalid_and_oversized_frames() {
+fn discards_uncommitted_frames_but_rejects_invalid_utf8() {
     for input in [
         b"data: partial".as_slice(),
         b"data: partial\n",
@@ -64,14 +92,10 @@ fn rejects_truncated_invalid_and_oversized_frames() {
     ] {
         let mut decoder = Decoder::default();
         assert!(decoder.push(input).unwrap().is_empty());
-        assert!(matches!(decoder.finish(), Err(DecodeError::Truncated)));
+        assert!(decoder.finish().is_ok());
     }
     assert!(matches!(
         Decoder::default().push(b"data: \xff\n\n"),
         Err(DecodeError::Utf8(_))
-    ));
-    assert!(matches!(
-        Decoder::default().push(&vec![b'x'; MAX_EVENT_BYTES + 1]),
-        Err(DecodeError::TooLarge)
     ));
 }

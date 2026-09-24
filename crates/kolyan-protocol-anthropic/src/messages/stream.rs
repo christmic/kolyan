@@ -72,8 +72,35 @@ impl Stream for MessageStream {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let Some((_event, data)) = self.pending.pop_front() {
-                let result = serde_json::from_str(&data).map_err(AnthropicError::Decode);
+            if let Some((event, data)) = self.pending.pop_front() {
+                if event == "error" {
+                    self.done = true;
+                    self.pending.clear();
+                    return Poll::Ready(Some(Err(AnthropicError::Api(data))));
+                }
+                if !matches!(
+                    event.as_str(),
+                    "message_start"
+                        | "message_delta"
+                        | "message_stop"
+                        | "content_block_start"
+                        | "content_block_delta"
+                        | "content_block_stop"
+                        | "completion"
+                        | "message"
+                ) {
+                    continue;
+                }
+                let result = serde_json::from_str::<serde_json::Value>(&data)
+                    .map_err(AnthropicError::Decode)
+                    .and_then(|mut value| {
+                        if let Some(object) = value.as_object_mut() {
+                            object
+                                .entry("type")
+                                .or_insert(serde_json::Value::String(event));
+                        }
+                        serde_json::from_value(value).map_err(AnthropicError::Decode)
+                    });
                 if result.is_err() {
                     self.done = true;
                     self.pending.clear();
@@ -82,6 +109,10 @@ impl Stream for MessageStream {
             }
             if self.done {
                 return Poll::Ready(None);
+            }
+            if let Some(error) = self.decoder.take_error() {
+                self.done = true;
+                return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
             }
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {

@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
-};
+use std::collections::BTreeMap;
 
 use futures_util::{Stream, StreamExt};
 use kolyan_model::{
@@ -17,31 +14,30 @@ use serde_json::{Value, json};
 #[derive(Clone)]
 pub struct OpenAiProvider {
     client: OpenAiClient,
-    completion_policy: CompletionPolicy,
-}
-
-/// Compatibility is opt-in and still requires a completed text item.
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
-pub enum CompletionPolicy {
-    #[default]
-    RequireResponseCompleted,
-    AllowCompletedTextItemAtEof,
+    planner: Option<kolyan_model::RequestPlanner>,
 }
 
 impl OpenAiProvider {
     pub fn new(client: OpenAiClient) -> Self {
         Self {
             client,
-            completion_policy: CompletionPolicy::default(),
+            planner: None,
         }
     }
 
-    /// Enable only for servers known to omit the response terminal event.
-    /// Bare EOF, unfinished tools and upstream errors never count as success.
-    pub fn with_completion_policy(mut self, policy: CompletionPolicy) -> Self {
-        self.completion_policy = policy;
-        self
+    /// Bind endpoint/model policy once; every invocation is planned before HTTP I/O.
+    pub fn with_parameter_table(
+        mut self,
+        table: kolyan_model::ParameterTable,
+    ) -> Result<Self, ProviderError> {
+        self.planner = Some(kolyan_model::RequestPlanner::new(
+            table,
+            "openai_responses",
+            ResponseCreateRequest::RESERVED_FIELDS,
+        )?);
+        Ok(self)
     }
+
     fn request(request: &ModelRequest) -> ResponseCreateRequest {
         ResponseCreateRequest {
             model: request.model.model.clone(), input: openai_input(request),
@@ -60,34 +56,35 @@ impl OpenAiProvider {
 impl ModelProvider for OpenAiProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
-        let completion_policy = self.completion_policy;
+        let planner = self.planner.clone();
         Box::pin(async move {
+            let plan = match planner {
+                Some(planner) => planner.plan(&request)?,
+                None => kolyan_model::PlannedRequest::unconfigured(request)?,
+            };
+            let omit_tool_choice = plan.omitted("tool_choice");
+            let request = plan.request;
             validate_request(&request)?;
             let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
+            let mut wire = Self::request(&request);
+            if omit_tool_choice {
+                wire.tool_choice = None;
+            }
             let response = client
-                .stream_response(&Self::request(&request))
+                .stream_response_with_extensions(&wire, &plan.wire_extensions)
                 .await
                 .map_err(openai_error)?;
             let model = request.model.clone();
             let model_for_map = model.clone();
             let mut call_ids = BTreeMap::new();
+            let mut finalized = BTreeMap::new();
             let mapped = response.map(move |event| {
-                event
-                    .map_err(openai_error)
-                    .and_then(|event| map_stream_event(event, &model_for_map, &mut call_ids))
+                event.map_err(openai_error).and_then(|mut event| {
+                    recover_finalized_output(&mut event, &mut finalized)?;
+                    map_stream_event(event, &model_for_map, &mut call_ids)
+                })
             });
-            let state = Arc::new(Mutex::new(CompletionState {
-                completion_policy,
-                ..CompletionState::default()
-            }));
-            let tracked =
-                tracked_completion(mapped, Arc::clone(&state), request.output_format.is_some());
-            let stream = synthesize_completion_if_missing(
-                tracked,
-                Arc::clone(&state),
-                model,
-                request.output_format.is_some(),
-            );
+            let stream = require_terminal(mapped);
             let stream = stream.map(move |event| {
                 event.and_then(|event| {
                     if let ModelEvent::Completed(response) = &event {
@@ -96,212 +93,71 @@ impl ModelProvider for OpenAiProvider {
                     Ok(event)
                 })
             });
-            Ok(Box::pin(stream) as _)
+            let audit = plan.decisions;
+            let prefix = futures_util::stream::iter((!audit.is_empty()).then(|| {
+                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: request.model.provider,
+                    raw: Some(json!({"kind":"request_planning","decisions":audit})),
+                }))
+            }));
+            Ok(Box::pin(prefix.chain(stream)) as _)
         })
     }
 }
 
-#[derive(Default)]
-struct CompletionState {
-    completion_policy: CompletionPolicy,
-    completed_text_item: bool,
-    failed: bool,
-    completed_emitted: bool,
-    text: String,
-    reasoning: String,
-    tool_builders: BTreeMap<String, (String, String)>,
-    tool_calls: Vec<ToolCall>,
-    usage: TokenUsage,
-}
-
-/// Wrap a mapped event stream so we know whether a terminal
-/// `ModelEvent::Completed` was ever emitted, regardless of what came
-/// before it.
-fn tracked_completion<S>(
-    upstream: S,
-    state: Arc<Mutex<CompletionState>>,
-    structured: bool,
-) -> impl Stream<Item = Result<ModelEvent, ProviderError>> + Send
+/// EOF is not completion. Only a protocol terminal can finish a model invocation.
+fn require_terminal<S>(upstream: S) -> impl Stream<Item = Result<ModelEvent, ProviderError>> + Send
 where
-    S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
+    S: Stream<Item = Result<ModelEvent, ProviderError>> + Send,
 {
-    upstream.scan(false, move |failed, event_result| {
-        if *failed {
-            return futures_util::future::ready(None);
-        }
-        let event_result = if structured {
-            match event_result {
-                Ok(ModelEvent::Completed(mut response)) if response.structured_output.is_none() => {
-                    if let Ok(snapshot) = state.lock()
-                        && let Some(parsed) = parse_json_relaxed(&snapshot.text)
-                    {
-                        response.structured_output = Some(parsed);
-                    }
-                    Ok(ModelEvent::Completed(response))
-                }
-                other => other,
+    futures_util::stream::unfold(
+        (Box::pin(upstream), false),
+        |(mut upstream, finished)| async move {
+            if finished {
+                return None;
             }
-        } else {
-            event_result
-        };
-        if let Ok(mut s) = state.lock() {
-            match &event_result {
-                Ok(event) => remember_event(&mut s, event),
-                Err(_) => s.failed = true,
-            }
-        }
-        *failed = event_result.is_err() || matches!(event_result, Ok(ModelEvent::Completed(_)));
-        futures_util::future::ready(Some(event_result))
-    })
+            let event = upstream.next().await.unwrap_or_else(|| {
+                Err(provider_error(
+                    "stream ended without a response terminal event",
+                ))
+            });
+            let finished = event.is_err() || matches!(event, Ok(ModelEvent::Completed(_)));
+            Some((event, (upstream, finished)))
+        },
+    )
 }
 
-fn remember_event(state: &mut CompletionState, event: &ModelEvent) {
-    match event {
-        ModelEvent::TextDelta(text) => state.text.push_str(text),
-        ModelEvent::ReasoningDelta(text) => state.reasoning.push_str(text),
-        ModelEvent::ToolCallStarted { id, name } => {
-            state
-                .tool_builders
-                .entry(id.clone())
-                .or_insert((name.clone(), String::new()));
-        }
-        ModelEvent::ToolCallArgumentsDelta { id, delta } => {
-            state
-                .tool_builders
-                .entry(id.clone())
-                .or_insert((String::new(), String::new()))
-                .1
-                .push_str(delta);
-        }
-        ModelEvent::ToolCallCompleted(call) => {
-            let Some((name, arguments)) = state.tool_builders.remove(&call.id) else {
-                state.tool_calls.push(call.clone());
-                return;
-            };
-            let mut call = call.clone();
-            if call.name.is_empty() {
-                call.name = name;
-            }
-            if call.arguments == json!({})
-                && let Ok(arguments) = serde_json::from_str(&arguments)
-            {
-                call.arguments = arguments;
-            }
-            state.tool_calls.push(call);
-        }
-        ModelEvent::Usage(usage) => state.usage = usage.clone(),
-        ModelEvent::Completed(_) => state.completed_emitted = true,
-        ModelEvent::Provider(metadata) => {
-            if metadata
-                .raw
-                .as_ref()
-                .is_some_and(|raw| raw.get("completed_text_item") == Some(&Value::Bool(true)))
-            {
-                state.completed_text_item = true;
-            }
-        }
-        ModelEvent::Started => {}
+/// Match official ResponseStreamState: recover finalized items only when output is absent/null.
+fn recover_finalized_output(
+    event: &mut ResponseStreamEvent,
+    finalized: &mut BTreeMap<u64, Value>,
+) -> Result<(), ProviderError> {
+    if event.kind == "response.output_item.done" {
+        let index = event
+            .fields
+            .get("output_index")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| provider_error("output_item.done is missing output_index"))?;
+        let item = event
+            .fields
+            .get("item")
+            .ok_or_else(|| provider_error("output_item.done is missing item"))?;
+        finalized.insert(index, item.clone());
     }
-}
-
-/// Strict EOF validation; opt-in compatibility requires explicit item evidence.
-fn synthesize_completion_if_missing<S>(
-    upstream: S,
-    state: Arc<Mutex<CompletionState>>,
-    model: kolyan_model::ModelRef,
-    structured: bool,
-) -> std::pin::Pin<Box<dyn Stream<Item = Result<ModelEvent, ProviderError>> + Send>>
-where
-    S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
-{
-    use futures_util::stream::{self, StreamExt};
-    let model_for_synth = model.clone();
-    let tail = stream::once(async move {
-        let snapshot = state.lock().map(|s| CompletionSnapshot::from(&*s)).ok();
-        let snapshot = snapshot?;
-        if snapshot.completed_emitted || snapshot.failed {
-            return None;
-        }
-        if snapshot.completion_policy != CompletionPolicy::AllowCompletedTextItemAtEof
-            || !snapshot.completed_text_item
-            || !snapshot.tool_builders.is_empty()
-            || !snapshot.tool_calls.is_empty()
-        {
-            return Some(Err(provider_error(
-                "stream ended without a response terminal event",
-            )));
-        }
-        let mut content = Vec::new();
-        if !snapshot.text.is_empty() {
-            content.push(ContentBlock::Text {
-                text: snapshot.text.clone(),
-            });
-        }
-        if !snapshot.reasoning.is_empty() {
-            content.push(ContentBlock::Reasoning {
-                text: snapshot.reasoning.clone(),
-                opaque: None,
-            });
-        }
-        let tool_calls = snapshot.tool_calls;
-        content.extend(
-            tool_calls
-                .iter()
-                .cloned()
-                .map(|call| ContentBlock::ToolCall { call }),
-        );
-        let structured_output = structured
-            .then(|| parse_json_relaxed(&snapshot.text))
-            .flatten();
-        Some(Ok(ModelEvent::Completed(ModelResponse {
-            id: String::new(),
-            model: model_for_synth,
-            content,
-            structured_output,
-            stop_reason: if tool_calls.is_empty() {
-                StopReason::EndTurn
-            } else {
-                StopReason::ToolUse
-            },
-            usage: snapshot.usage,
-            metadata: json!({
-                "provider": "openai",
-                "synthetic_completed": true,
-                "reason": "server stream ended without response.completed",
-            }),
-        })))
-    })
-    .filter_map(|x| async move { x });
-    upstream.chain(tail).boxed()
-}
-
-#[derive(Clone)]
-struct CompletionSnapshot {
-    completion_policy: CompletionPolicy,
-    completed_text_item: bool,
-    failed: bool,
-    completed_emitted: bool,
-    text: String,
-    reasoning: String,
-    tool_builders: BTreeMap<String, (String, String)>,
-    tool_calls: Vec<ToolCall>,
-    usage: TokenUsage,
-}
-
-impl From<&CompletionState> for CompletionSnapshot {
-    fn from(state: &CompletionState) -> Self {
-        Self {
-            completion_policy: state.completion_policy,
-            completed_text_item: state.completed_text_item,
-            failed: state.failed,
-            completed_emitted: state.completed_emitted,
-            text: state.text.clone(),
-            reasoning: state.reasoning.clone(),
-            tool_builders: state.tool_builders.clone(),
-            tool_calls: state.tool_calls.clone(),
-            usage: state.usage.clone(),
+    if event.kind == "response.completed"
+        && let Some(response) = event.fields.get_mut("response")
+    {
+        let response = response
+            .as_object_mut()
+            .ok_or_else(|| provider_error("completed response must be an object"))?;
+        if response.get("output").is_none_or(Value::is_null) {
+            response.insert(
+                "output".into(),
+                Value::Array(finalized.values().cloned().collect()),
+            );
         }
     }
+    Ok(())
 }
 
 fn openai_message(message: &kolyan_model::Message) -> Vec<Value> {
@@ -654,103 +510,25 @@ fn map_incomplete_response(
     Ok(response)
 }
 
-/// Try, in order, to obtain a parsed JSON object from a Responses API
-/// terminal frame:
-///
-/// 1. `output[].parsed` (official path when `text.format=json_schema`).
-/// 2. `parsed` at top level.
-/// 3. `output_text` at top level — strip a leading/trailing markdown
-///    ```json fence (some compatible servers wrap their JSON that way)
-///    before parsing.
-/// 4. Concatenate `output[].content[].text` and parse — last-resort for
-///    servers that only stream text deltas and never populate
-///    `output_text`/`parsed`.
-#[allow(clippy::collapsible_if)]
+/// Parse the actual output_text content, never SDK convenience fields or surrounding prose.
 fn extract_structured_output(value: &Value) -> Option<Value> {
-    if let Some(parsed) = value.get("parsed") {
-        if parsed.is_object() || parsed.is_array() {
-            return Some(parsed.clone());
-        }
-    }
-    if let Some(Value::Array(items)) = value.get("output") {
-        for item in items {
-            if let Some(parsed) = item.get("parsed") {
-                if parsed.is_object() || parsed.is_array() {
-                    return Some(parsed.clone());
-                }
-            }
-        }
-    }
-    if let Some(text) = value.get("output_text").and_then(Value::as_str) {
-        if let Some(parsed) = parse_json_relaxed(text) {
-            return Some(parsed);
-        }
-    }
-    if let Some(Value::Array(items)) = value.get("output") {
-        let joined: String = items
-            .iter()
-            .filter(|item| item.get("type").and_then(Value::as_str) != Some("reasoning"))
-            .flat_map(|item| item.get("content").and_then(Value::as_array).cloned())
-            .flatten()
-            .filter(|block| block.get("type").and_then(Value::as_str) != Some("reasoning_text"))
-            .filter_map(|block| block.get("text").and_then(Value::as_str).map(String::from))
-            .collect::<Vec<_>>()
-            .join("");
-        if let Some(parsed) = parse_json_relaxed(&joined) {
-            return Some(parsed);
-        }
-    }
-    None
+    let texts = value
+        .get("output")?
+        .as_array()?
+        .iter()
+        .filter(|item| item["type"] == "message")
+        .filter_map(|item| item.get("content").and_then(Value::as_array))
+        .flatten()
+        .filter(|block| block["type"] == "output_text")
+        .filter_map(|block| block.get("text").and_then(Value::as_str))
+        .collect::<String>();
+    parse_json(&texts)
 }
 
-/// Parse JSON from a string that may or may not be wrapped in a markdown
-/// ```json ... ``` fence. Returns `None` on parse failure (not an error —
-/// the caller decides what to do with a non-JSON response).
-#[allow(clippy::collapsible_if)]
-fn parse_json_relaxed(text: &str) -> Option<Value> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
-        if v.is_object() || v.is_array() {
-            return Some(v);
-        }
-    }
-    // Strip ```json ... ``` (with or without language tag) and retry.
-    let stripped = strip_markdown_fence(trimmed);
-    if stripped != trimmed {
-        if let Ok(v) = serde_json::from_str::<Value>(stripped.trim()) {
-            if v.is_object() || v.is_array() {
-                return Some(v);
-            }
-        }
-    }
-    // Last-ditch: find the first {...} or [...] block and parse it.
-    if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('[')) {
-        if let Some(end_rel) = trimmed.rfind(['}', ']'])
-            && start <= end_rel
-        {
-            let candidate = &trimmed[start..=end_rel];
-            if let Ok(v) = serde_json::from_str::<Value>(candidate)
-                && (v.is_object() || v.is_array())
-            {
-                return Some(v);
-            }
-        }
-    }
-    None
+fn parse_json(text: &str) -> Option<Value> {
+    serde_json::from_str(text).ok()
 }
 
-fn strip_markdown_fence(text: &str) -> &str {
-    let trimmed = text.trim();
-    let stripped = trimmed
-        .strip_prefix("```json")
-        .or_else(|| trimmed.strip_prefix("```JSON"))
-        .or_else(|| trimmed.strip_prefix("```"));
-    let stripped = stripped.unwrap_or(trimmed);
-    stripped.strip_suffix("```").unwrap_or(stripped)
-}
 fn map_output(item: &Value) -> Result<Vec<ContentBlock>, ProviderError> {
     Ok(match item.get("type").and_then(Value::as_str) {
         Some("function_call") => vec![ContentBlock::ToolCall {
@@ -860,6 +638,9 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
         _ => None,
     };
     let (kind, phase) = match error {
+        kolyan_protocol_openai::OpenAiError::Api(_) => {
+            (ProviderErrorKind::Other, ProviderErrorPhase::Stream)
+        }
         kolyan_protocol_openai::OpenAiError::Transport {
             diagnostics: None, ..
         } => (ProviderErrorKind::Transport, ProviderErrorPhase::Open),

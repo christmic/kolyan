@@ -1,6 +1,35 @@
 use super::*;
 
 #[test]
+fn terminal_does_not_poll_or_wait_for_the_next_network_event() {
+    use futures_util::{FutureExt, stream};
+    for finish in [true, false] {
+        let events = if finish {
+            vec![
+                Ok(wire_event(
+                    "message_delta",
+                    json!({"delta":{"stop_reason":"end_turn"}}),
+                )),
+                Ok(wire_event("message_stop", json!({}))),
+            ]
+        } else {
+            vec![Err(protocol_error("fatal"))]
+        };
+        let count = events.len();
+        let results = map_stream(
+            stream::iter(events).chain(stream::pending()),
+            kolyan_model::ModelRef::new("test", "model"),
+            false,
+            kolyan_model::OutputValidator::new(None).unwrap(),
+        )
+        .collect::<Vec<_>>()
+        .now_or_never()
+        .expect("terminal must not wait for the server to close the connection");
+        assert_eq!(results.len(), count);
+    }
+}
+
+#[test]
 fn tool_use_requires_identity_and_name_before_emitting_start() {
     let model = kolyan_model::ModelRef::new("test", "model");
     for block in [
@@ -201,7 +230,7 @@ fn indexed_tool_deltas_cannot_overwrite_another_call() {
 #[test]
 fn malformed_bracket_order_never_panics() {
     for text in ["] {", "} [", "中文] 🦀{"] {
-        assert_eq!(parse_json_relaxed(text), None);
+        assert_eq!(parse_json(text), None);
     }
 }
 
@@ -291,14 +320,11 @@ fn error_event_is_not_informational_metadata() {
 }
 
 #[test]
-fn relaxed_json_parser_accepts_fenced_object() {
-    assert_eq!(
-        parse_json_relaxed("```json\n{\"city\":\"Shanghai\"}\n```"),
-        Some(json!({"city": "Shanghai"}))
-    );
+fn strict_json_parser_rejects_fenced_object() {
+    assert_eq!(parse_json("```json\n{\"city\":\"Shanghai\"}\n```"), None);
 }
 
 #[test]
-fn relaxed_json_parser_rejects_plain_text() {
-    assert_eq!(parse_json_relaxed("not json"), None);
+fn strict_json_parser_rejects_plain_text() {
+    assert_eq!(parse_json("not json"), None);
 }

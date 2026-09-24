@@ -73,12 +73,19 @@ impl Stream for ResponseStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(data) = self.pending.pop_front() {
-                if data == "[DONE]" {
+                if data.starts_with("[DONE]") {
                     self.done = true;
                     self.pending.clear();
                     continue;
                 }
-                let result = serde_json::from_str(&data).map_err(OpenAiError::Decode);
+                let result = serde_json::from_str::<serde_json::Value>(&data)
+                    .map_err(OpenAiError::Decode)
+                    .and_then(|value| {
+                        if value.get("error").is_some_and(json_is_truthy) {
+                            return Err(OpenAiError::Api(value["error"].to_string()));
+                        }
+                        serde_json::from_value(value).map_err(OpenAiError::Decode)
+                    });
                 if result.is_err() {
                     self.done = true;
                     self.pending.clear();
@@ -87,6 +94,10 @@ impl Stream for ResponseStream {
             }
             if self.done {
                 return Poll::Ready(None);
+            }
+            if let Some(error) = self.decoder.take_error() {
+                self.done = true;
+                return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
             }
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {
@@ -114,6 +125,19 @@ impl Stream for ResponseStream {
                 Poll::Pending => return Poll::Pending,
             }
         }
+    }
+}
+
+// The SDK uses Python truthiness for the optional API error payload.
+fn json_is_truthy(value: &serde_json::Value) -> bool {
+    use serde_json::Value;
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(value) => value.as_f64() != Some(0.0),
+        Value::String(value) => !value.is_empty(),
+        Value::Array(value) => !value.is_empty(),
+        Value::Object(value) => !value.is_empty(),
     }
 }
 

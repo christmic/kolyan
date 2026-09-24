@@ -1,6 +1,18 @@
 use super::*;
 use futures_util::{FutureExt, StreamExt, stream};
 
+#[test]
+fn empty_error_payloads_match_sdk_truthiness() {
+    for error in ["null", "false", "0", "\"\"", "[]", "{}"] {
+        let input = format!("data: {{\"type\":\"unused\",\"error\":{error}}}\n\n");
+        let events = fixture(vec![input.into_bytes()])
+            .collect::<Vec<_>>()
+            .now_or_never()
+            .unwrap();
+        assert!(events[0].is_ok(), "{error}");
+    }
+}
+
 fn fixture(chunks: Vec<Vec<u8>>) -> ResponseStream {
     ResponseStream {
         body: Box::pin(stream::iter(
@@ -39,8 +51,7 @@ fn unfinished_event_is_not_completed_at_eof() {
         .collect::<Vec<_>>()
         .now_or_never()
         .unwrap();
-    assert_eq!(events.len(), 1);
-    assert!(matches!(events[0], Err(OpenAiError::Framing(_))));
+    assert!(events.is_empty());
 }
 
 #[test]

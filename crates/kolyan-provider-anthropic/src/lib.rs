@@ -12,11 +12,27 @@ mod blocks;
 #[derive(Clone)]
 pub struct AnthropicProvider {
     client: AnthropicClient,
+    planner: Option<kolyan_model::RequestPlanner>,
 }
 
 impl AnthropicProvider {
     pub fn new(client: AnthropicClient) -> Self {
-        Self { client }
+        Self {
+            client,
+            planner: None,
+        }
+    }
+    /// Bind endpoint/model policy once; every invocation is planned before HTTP I/O.
+    pub fn with_parameter_table(
+        mut self,
+        table: kolyan_model::ParameterTable,
+    ) -> Result<Self, ProviderError> {
+        self.planner = Some(kolyan_model::RequestPlanner::new(
+            table,
+            "anthropic_messages",
+            MessageCreateRequest::RESERVED_FIELDS,
+        )?);
+        Ok(self)
     }
     fn request(request: &ModelRequest) -> MessageCreateRequest {
         MessageCreateRequest {
@@ -53,10 +69,40 @@ impl AnthropicProvider {
 impl ModelProvider for AnthropicProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
+        let planner = self.planner.clone();
         Box::pin(async move {
+            let configured = planner.is_some();
+            let plan = match planner {
+                Some(planner) => planner.plan(&request)?,
+                None => kolyan_model::PlannedRequest::unconfigured(request)?,
+            };
+            let omit_tool_choice = plan.omitted("tool_choice");
+            let request = plan.request;
+            if request
+                .prompt_cache
+                .as_ref()
+                .is_some_and(|cache| cache.key.is_some() || cache.retention.is_some())
+            {
+                return Err(ProviderError::new(
+                    ProviderErrorKind::Unsupported,
+                    ProviderErrorPhase::Open,
+                    "Anthropic cache mapping supports breakpoints, not key or retention",
+                ));
+            }
+            if configured && request.max_output_tokens.is_none() {
+                return Err(ProviderError::new(
+                    ProviderErrorKind::InvalidRequest,
+                    ProviderErrorPhase::Open,
+                    "Anthropic requires supported max_output_tokens from request or parameter table default",
+                ));
+            }
             let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
+            let mut wire = Self::request(&request);
+            if omit_tool_choice {
+                wire.tool_choice = None;
+            }
             let response = client
-                .stream_message(&Self::request(&request))
+                .stream_message_with_extensions(&wire, &plan.wire_extensions)
                 .await
                 .map_err(anthropic_error)?;
             let model = request.model.clone();
@@ -67,7 +113,14 @@ impl ModelProvider for AnthropicProvider {
                 structured,
                 validator,
             );
-            Ok(Box::pin(stream) as _)
+            let audit = plan.decisions;
+            let prefix = futures_util::stream::iter((!audit.is_empty()).then(|| {
+                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: request.model.provider,
+                    raw: Some(json!({"kind":"request_planning","decisions":audit})),
+                }))
+            }));
+            Ok(Box::pin(prefix.chain(stream)) as _)
         })
     }
 }
@@ -81,31 +134,36 @@ fn map_stream<S>(
 where
     S: futures_core::Stream<Item = Result<MessageStreamEvent, ProviderError>>,
 {
-    response
-        .chain(futures_util::stream::once(async {
-            Err(protocol_error("stream ended before message_stop"))
-        }))
-        .scan(
+    futures_util::stream::unfold(
+        (
+            Box::pin(response),
             AnthropicState {
                 structured,
                 ..Default::default()
             },
-            move |state, event| {
-                if state.failed {
-                    return futures_util::future::ready(None);
-                }
-                let result = event
-                    .and_then(|event| state.event(event, &model))
-                    .and_then(|event| {
-                        if let ModelEvent::Completed(response) = &event {
-                            validator.validate(response)?;
-                        }
-                        Ok(event)
-                    });
-                state.failed = result.is_err() || matches!(result, Ok(ModelEvent::Completed(_)));
-                futures_util::future::ready(Some(result))
-            },
-        )
+            model,
+            validator,
+        ),
+        |(mut response, mut state, model, validator)| async move {
+            if state.failed {
+                return None;
+            }
+            let event = response
+                .next()
+                .await
+                .unwrap_or_else(|| Err(protocol_error("stream ended before message_stop")));
+            let result = event
+                .and_then(|event| state.event(event, &model))
+                .and_then(|event| {
+                    if let ModelEvent::Completed(response) = &event {
+                        validator.validate(response)?;
+                    }
+                    Ok(event)
+                });
+            state.failed = result.is_err() || matches!(result, Ok(ModelEvent::Completed(_)));
+            Some((result, (response, state, model, validator)))
+        },
+    )
 }
 
 #[derive(Default)]
@@ -187,8 +245,7 @@ impl AnthropicState {
                         _ => None,
                     })
                     .collect::<String>();
-                let structured_output =
-                    self.structured.then(|| parse_json_relaxed(&text)).flatten();
+                let structured_output = self.structured.then(|| parse_json(&text)).flatten();
                 Ok(ModelEvent::Completed(ModelResponse {
                     id: self.id.clone(),
                     model: model.clone(),
@@ -347,6 +404,9 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
         _ => None,
     };
     let (kind, phase) = match error {
+        kolyan_protocol_anthropic::AnthropicError::Api(_) => {
+            (ProviderErrorKind::Other, ProviderErrorPhase::Stream)
+        }
         kolyan_protocol_anthropic::AnthropicError::Transport {
             diagnostics: None, ..
         } => (ProviderErrorKind::Transport, ProviderErrorPhase::Open),
@@ -373,47 +433,8 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
     error
 }
 
-/// Parse JSON from a string that may or may not be wrapped in a markdown
-/// ```json ... ``` fence. Mirrors the openai provider's relaxed parser
-/// because some Anthropic-compatible servers (notably MiniMax's
-/// Anthropic-compat surface) emit their JSON inside a fenced block. Returns
-/// `None` on parse failure (not an error — the caller decides what to do
-/// with a non-JSON response).
-#[allow(clippy::collapsible_if)]
-fn parse_json_relaxed(text: &str) -> Option<Value> {
-    let trimmed = text.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if let Ok(v) = serde_json::from_str::<Value>(trimmed)
-        && (v.is_object() || v.is_array())
-    {
-        return Some(v);
-    }
-    let stripped = trimmed
-        .strip_prefix("```json")
-        .or_else(|| trimmed.strip_prefix("```JSON"))
-        .or_else(|| trimmed.strip_prefix("```"));
-    let stripped = stripped.unwrap_or(trimmed);
-    let stripped = stripped.strip_suffix("```").unwrap_or(stripped);
-    if stripped != trimmed
-        && let Ok(v) = serde_json::from_str::<Value>(stripped.trim())
-        && (v.is_object() || v.is_array())
-    {
-        return Some(v);
-    }
-    if let Some(start) = trimmed.find('{').or_else(|| trimmed.find('['))
-        && let Some(end_rel) = trimmed.rfind(['}', ']'])
-        && start <= end_rel
-    {
-        let candidate = &trimmed[start..=end_rel];
-        if let Ok(v) = serde_json::from_str::<Value>(candidate)
-            && (v.is_object() || v.is_array())
-        {
-            return Some(v);
-        }
-    }
-    None
+fn parse_json(text: &str) -> Option<Value> {
+    serde_json::from_str(text).ok()
 }
 
 #[cfg(test)]
