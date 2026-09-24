@@ -26,7 +26,8 @@ Session
 ## 仓库分区
 
 - `crates/`：Rust Kernel、Runtime 和适配器
-- `apps/`：个人 Agent、CLI、TUI 等应用
+- `apps/`：通过 Server 通信的个人 Agent、TUI 和未来桌面客户端
+- `services/`：常驻 Server 进程；一次性 CLI 本进程执行，无需启动服务
 - `protocols/`、`schemas/`：跨语言和跨进程契约
 - `bindings/`：Python、TypeScript 等语言接入
 - `examples/`、`evals/`：可运行示例和行为回归
@@ -36,6 +37,8 @@ Session
 
 ## 设计文档
 
+- [架构整改需求（待实施）](docs/requirements/0025-architecture-hardening.md)
+- [源码组织、测试分离与注释规范](docs/architecture/code-conventions.md)
 - [Agent 执行模型](docs/architecture/agent-execution-model.md)
 - [Turn 边界控制与恢复收尾](docs/requirements/0016-turn-boundary-and-resume.md)
 - [Runtime 执行边界](docs/requirements/0017-runtime-execution-boundary.md)

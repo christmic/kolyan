@@ -4,7 +4,7 @@
 
 ```text
 模块单测
-  → 各 crate 的 src/**/*.rs
+  → 各 crate 的 src/tests.rs、src/<模块>/tests.rs 等独立测试文件
   → MockProvider / 纯函数 / 状态和映射逻辑
 
 跨模块集成测试
@@ -32,7 +32,7 @@ kolyan-integration-tests/
 
 ## 命名和职责
 
-- `kolyan-model`、`kolyan-core` 等模块的局部逻辑测试放在模块内部；
+- `kolyan-model`、`kolyan-core` 等模块的局部逻辑测试放在模块所属的独立测试文件，禁止与生产实现同文件；具体遵循 [代码规范](code-conventions.md)；
 - Provider 真实兼容测试放在 `tests/provider/`；
 - Step 真实调用测试放在 `tests/core/step.rs`；
 - 所有真实网络用例必须显式 `#[ignore]`，普通 workspace 测试不能访问网络；

@@ -10,6 +10,7 @@
 4. 优先提交小批次、可验证的变化；每次修改说明影响范围和验证方式。
 5. 不把实验性实现直接当成稳定协议；跨语言对象必须先更新 `protocols/` 或 `schemas/`。
 6. 不引入秘密、真实凭据或用户数据。
+7. 源码结构、声明顺序、测试分文件和注释遵循 [代码规范](docs/architecture/code-conventions.md)。生产文件仅允许声明测试子模块，测试实现必须放独立文件。
 
 ## 工具链
 
@@ -37,7 +38,9 @@ Git hooks 位于 `.githooks/`，首次初始化或 clone 后运行：
 | 执行轨迹、观测 | `crates/kolyan-trace` |
 | Session、Ledger、持久化 | `crates/kolyan-storage` |
 | 个人 Agent 行为 | `apps/kolyan-agent` |
-| CLI / TUI / 服务接口 | 对应 `apps/` 或 `crates/kolyan-cli` |
+| 一次性 CLI | `crates/kolyan-cli`，本进程执行，无需启动 Server |
+| 交互式客户端 | `apps/`，通过 Server 通信 |
+| Server 核心 / 服务进程 | `crates/kolyan-server` / `services/kolyan-server` |
 
 ## 完成标准
 

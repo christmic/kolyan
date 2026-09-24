@@ -4,11 +4,11 @@
 
 | 模块 | 职责 | 明确不负责 |
 | --- | --- | --- |
-| `kolyan-types` | 消息、Tool、事件和结果类型 | 执行流程、存储 |
-| `kolyan-core` | Step、最小 Agent Loop | Turn、Session、供应商、数据库、UI |
+| `kolyan-types` | 预留的跨模块基础类型，避免重复定义已有领域契约 | 执行流程、存储 |
+| `kolyan-core` | Step、Turn、工具循环及执行边界 | Session 存储、供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
 | `crates/kolyan-server` | Server 门面、ExecutionCoordinator、ExecutionService 和 Server 核心适配器 | Turn/Step 逻辑、模型、租约实现 |
-| `kolyan-model` | LLM trait 和模型适配器 | Turn 状态机 |
+| `kolyan-model` | 中立 LLM trait、请求/响应、消息、工具及模型事件契约 | 具体协议适配、Turn 状态机 |
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
 | `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
@@ -17,15 +17,15 @@
 | `kolyan-policy` | 权限、审批、治理策略 | 模型推理 |
 | `kolyan-trace` | 执行轨迹和观测 | 作为 Ledger 权威存储 |
 | `kolyan-storage` | Session、Ledger、持久化 | Agent Loop |
-| `kolyan-cli` | 命令行入口 | 核心业务规则 |
+| `kolyan-cli` | 一次性命令，本进程复用执行能力，无需常驻 Server | 复制核心业务规则 |
 | `kolyan-integration-tests` | 跨模块、Provider 和真实网络集成测试 | 业务实现、生产运行时 |
 
 ## 应用和其他语言
 
 | 目录 | 职责 |
 | --- | --- |
-| `apps/kolyan-agent` | 个人 Agent 产品行为和默认配置 |
-| `apps/kolyan-tui` | 终端交互界面 |
+| `apps/kolyan-agent` | 个人 Agent 客户端，目标通过 Server 通信；当前入口占位 |
+| `apps/kolyan-tui` | 终端客户端，目标通过 Server 通信；当前入口占位 |
 | `services/kolyan-server` | 常驻 Server 进程、JSON-RPC 入口；未来承载 HTTP / WebSocket 适配 |
 | `bindings/` | Python、TypeScript 等绑定 |
 | `protocols/` | 跨语言事件、消息和 Tool 契约 |
