@@ -37,10 +37,12 @@ impl OutputValidator {
             .structured_output
             .as_ref()
             .ok_or_else(|| Self::error("missing or invalid structured output"))?;
-        if !validator.is_valid(output) {
-            return Err(Self::error(
-                "structured output does not satisfy the requested schema",
-            ));
+        if let Err(error) = validator.validate(output) {
+            // Paths identify the broken contract without exposing user values.
+            return Err(Self::error(&format!(
+                "structured output does not satisfy the requested schema: instance={}, schema={}",
+                error.instance_path, error.schema_path,
+            )));
         }
         Ok(())
     }
