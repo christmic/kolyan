@@ -735,7 +735,11 @@ fn provider_error(message: impl Into<String>) -> ProviderError {
     )
 }
 fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
-    let message = error.to_string();
+    let message = ProviderError::describe(&error);
+    let status = match &error {
+        kolyan_protocol_openai::OpenAiError::Http { status, .. } => Some(*status),
+        _ => None,
+    };
     let (kind, phase) = match error {
         kolyan_protocol_openai::OpenAiError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
@@ -754,7 +758,10 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
             (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
         }
     };
-    ProviderError::new(kind, phase, message)
+    let mut error = ProviderError::new(kind, phase, message);
+    error.status = status;
+    error.provider = Some("openai".into());
+    error
 }
 
 #[cfg(test)]

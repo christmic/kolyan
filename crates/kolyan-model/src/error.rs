@@ -33,6 +33,18 @@ pub struct ProviderError {
 }
 
 impl ProviderError {
+    /// Preserve the causal chain without requiring callers to retain transport types.
+    pub fn describe(error: &(dyn std::error::Error + 'static)) -> String {
+        let mut message = error.to_string();
+        let mut source = error.source();
+        while let Some(cause) = source {
+            message.push_str("; caused by: ");
+            message.push_str(&cause.to_string());
+            source = cause.source();
+        }
+        message
+    }
+
     pub fn new(
         kind: ProviderErrorKind,
         phase: ProviderErrorPhase,

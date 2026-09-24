@@ -1,6 +1,6 @@
 # 0025 架构整改与工程可读性
 
-状态：R0 实施中，已迁移测试文件并接入结构检查；其余工作待实施。日期：2026-09-24。
+状态：R0 基线已落地（大模块拆分未完成）；R1 已有修复及完整新增矩阵，真实契约验收未通过；R2 第一批实施中；R3–R5 未实施。日期：2026-09-24。
 
 本文件记录当前代码审查后的整改范围、阶段与验收标准，不代表问题已修复。
 工程结构和注释规则的唯一来源是 [代码规范](../architecture/code-conventions.md)。
@@ -169,3 +169,23 @@ Qwen 重复调用的根因仍未确定：已有转储证明部分请求包含工
   引号的中文数值；这是实际响应证据，不归类为网络波动，不通过传输重试掩盖。
   此轮日志 `/tmp/kolyan-r1-live.log`；该运行启动于 schema 校验和工具修复之前，
   不作为这些后续改动的验收证据。完整矩阵仍待收尾。
+
+## R1 矩阵与诊断记录
+
+- 新增独立 `r1_matrix` 测试，不删除或放宽原有真实测试断言；使用已有四类
+  fixture 和全部配置模型，覆盖 Step → Provider → Protocol。每行失败后继续，
+  最终存在 Failed / NotRun 时失败退出；缺少密钥不再被算作成功。
+- 测试框架启动时保存全部计划，逐行更新 report.json；请求、实际事件、配置、
+  Git revision 由测试代码保存到独立临时目录，生产 Step/Turn 不写这些文件。
+- 此次新增矩阵共 76 行：44 Passed、13 Failed、19 Skipped、0 NotRun；
+  Skipped 均为配置能力不支持的 prompt_cache 场景，不计入通过数。
+- 13 个失败均为 structured_output schema 不匹配：OpenAI 表面全部 10 个模型，
+  Anthropic 表面的 MiniMax-M3、deepseek-v4-flash-0731、glm-5.3。
+  未把失败转成跳过、未变更能力声明、未通过增大 token 或重试整轮掩盖。
+- 证据目录：`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-rWT9EY/`；
+  日志：`/tmp/kolyan-r1-complete-matrix.log`。该运行包含 c780420 的 Provider/schema/工具修复；
+  后续 HTTP 状态分类变更不在此运行中，应由新增无网络用例及下次矩阵验证。
+- 两套 HTTP 客户端保留错误状态码和最多 4096 字节响应体，避免把 401/429/5xx
+  误分类成传输错误；Provider 保留底层错误链。新增每协议两项无网络回归通过。
+- 新矩阵框架的“首行失败后继续执行，未开始项保持 NotRun”确定性回归通过。
+  旧全套真实测试仍独立运行，不能用此矩阵替代 Turn/Session/Server 全套验收。

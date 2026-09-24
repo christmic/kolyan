@@ -337,7 +337,11 @@ fn protocol_error(message: impl Into<String>) -> ProviderError {
 }
 
 fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> ProviderError {
-    let message = error.to_string();
+    let message = ProviderError::describe(&error);
+    let status = match &error {
+        kolyan_protocol_anthropic::AnthropicError::Http { status, .. } => Some(*status),
+        _ => None,
+    };
     let (kind, phase) = match error {
         kolyan_protocol_anthropic::AnthropicError::Transport { .. } => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
@@ -356,7 +360,10 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
             (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
         }
     };
-    ProviderError::new(kind, phase, message)
+    let mut error = ProviderError::new(kind, phase, message);
+    error.status = status;
+    error.provider = Some("anthropic".into());
+    error
 }
 
 /// Parse JSON from a string that may or may not be wrapped in a markdown

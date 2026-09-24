@@ -69,6 +69,13 @@ path = "tests/session_execution_live.rs"
 [lints]
 workspace = true
 
+[[test]]
+name = "r1_matrix"
+path = "tests/provider/r1_matrix.rs"
+
+[dev-dependencies]
+tempfile = "3"
+
 [dependencies]
 # Workspace tokio only enables the "time" feature, but #[tokio::test] and the
 # multi-thread runtime require "macros", "rt", and "rt-multi-thread". Declare a

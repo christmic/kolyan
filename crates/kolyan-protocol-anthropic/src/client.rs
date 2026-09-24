@@ -31,12 +31,7 @@ impl AnthropicClient {
             dump_request("anthropic", request);
             match self.request("/v1/messages").json(request).send().await {
                 Ok(response) => {
-                    break response.error_for_status().map_err(|source| {
-                        AnthropicError::Transport {
-                            source,
-                            diagnostics: None,
-                        }
-                    })?;
+                    break check_status(response).await?;
                 }
                 Err(source)
                     if attempts < self.config.transport_retries
@@ -77,12 +72,36 @@ fn dump_request(label: &str, request: &MessageCreateRequest) {
 }
 
 async fn decode_json(response: HttpResponse) -> Result<Message, AnthropicError> {
-    let status = response.status();
-    if !status.is_success() {
-        return Err(AnthropicError::Http {
-            status: status.as_u16(),
-            body: response.text().await?,
-        });
-    }
+    let response = check_status(response).await?;
     Ok(response.json().await?)
 }
+
+async fn check_status(mut response: HttpResponse) -> Result<HttpResponse, AnthropicError> {
+    let status = response.status().as_u16();
+    if response.status().is_success() {
+        return Ok(response);
+    }
+    const MAX_ERROR_BYTES: usize = 4096;
+    let mut body = Vec::new();
+    while body.len() < MAX_ERROR_BYTES {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                body.extend_from_slice(&chunk[..chunk.len().min(MAX_ERROR_BYTES - body.len())])
+            }
+            Ok(None) => break,
+            Err(error) => {
+                return Err(AnthropicError::Http {
+                    status,
+                    body: format!("error body could not be read: {error}"),
+                });
+            }
+        }
+    }
+    Err(AnthropicError::Http {
+        status,
+        body: String::from_utf8_lossy(&body).into_owned(),
+    })
+}
+
+#[cfg(test)]
+mod tests;

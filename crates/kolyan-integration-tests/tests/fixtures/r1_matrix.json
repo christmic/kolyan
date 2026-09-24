@@ -1,0 +1,4 @@
+{
+  "cases": ["text", "tool_call", "structured_output", "prompt_cache"],
+  "attempts": 1
+}

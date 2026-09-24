@@ -31,7 +31,7 @@ impl OpenAiClient {
             dump_request("openai", request);
             match self.request("/v1/responses").json(request).send().await {
                 Ok(response) => {
-                    let response = response.error_for_status()?;
+                    let response = check_status(response).await?;
                     return Ok(ResponseStream::new(response, self.config.diagnostics));
                 }
                 Err(error)
@@ -66,12 +66,36 @@ fn dump_request(label: &str, request: &ResponseCreateRequest) {
 }
 
 async fn decode_json(response: HttpResponse) -> Result<Response, OpenAiError> {
-    let status = response.status();
-    if !status.is_success() {
-        return Err(OpenAiError::Http {
-            status: status.as_u16(),
-            body: response.text().await?,
-        });
-    }
+    let response = check_status(response).await?;
     Ok(response.json().await?)
 }
+
+async fn check_status(mut response: HttpResponse) -> Result<HttpResponse, OpenAiError> {
+    let status = response.status().as_u16();
+    if response.status().is_success() {
+        return Ok(response);
+    }
+    const MAX_ERROR_BYTES: usize = 4096;
+    let mut body = Vec::new();
+    while body.len() < MAX_ERROR_BYTES {
+        match response.chunk().await {
+            Ok(Some(chunk)) => {
+                body.extend_from_slice(&chunk[..chunk.len().min(MAX_ERROR_BYTES - body.len())])
+            }
+            Ok(None) => break,
+            Err(error) => {
+                return Err(OpenAiError::Http {
+                    status,
+                    body: format!("error body could not be read: {error}"),
+                });
+            }
+        }
+    }
+    Err(OpenAiError::Http {
+        status,
+        body: String::from_utf8_lossy(&body).into_owned(),
+    })
+}
+
+#[cfg(test)]
+mod tests;
