@@ -74,12 +74,41 @@ uv run --python 3.12 --with httpx --with jsonschema \
 - Transport 的 Open/Stream 阶段准确区分；Schema 错误仅报告位置，不回显用户值。
 - Anthropic message_delta 的累计 input/cache/output 用量覆盖已有值，省略字段保留
   起始值；OpenAI 文件 URL 与 Base64 分别使用 file_url/file_data，思考摘要不只取首段。
+- OpenAI error SSE 为失败而非元数据；refusal 的增量、最终文本和终态均保留。
+  两套协议的工具调用缺失身份或工具名时拒绝，不能交给 Turn 执行。
 
 真实 Rust Provider 矩阵完成：44 passed、13 failed、19 skipped、0 not-run；
 13 个失败均为原生 Schema 契约，组合与官方 SDK 对照完全一致。19 个 skipped 是
 既有配置声明不支持显式缓存的测试，未新增跳过条件。
 证据：`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-YGQuJ5/`；
 日志：`/tmp/kolyan-provider-sdk-r1.log`。此轮包含流签名/工具身份修复，后续字段映射
-补充由新增无网络测试覆盖。十步工具回放尚在执行；未切换结构化模式、未放宽校验。
+补充由新增无网络测试覆盖。十步工具回放已通过，覆盖所有 19 个配置组合，耗时
+524.80 秒，日志 `/tmp/kolyan-sdk-turn-replay.log`；该运行覆盖核心流与思考回放修复，
+后续 refusal/工具身份校验由定向测试与全模型工具矩阵补验。未切换结构化模式、未放宽校验。
 原生端点不遵守 Schema 仍是外部限制。提示词辅助＋本地校验属于另一个显式
 兼容策略，不能冒充原生 constrained decoding；默认行为保持原生。
+
+### 原始响应差分回放
+
+新增 `sdk_replay` 验证捕获的 38 份真实响应，使用回环 HTTP 服务送入实际
+Kolyan protocol/provider 路径，不重新请求厂商。逐份核对：
+
+- HTTP 层实际序列化请求与官方 SDK 请求一致（仅规范化显式 auto 和 system 字符串/
+  单文本块这两种官方等价形式）；不是只检查 ModelRequest。
+- 所有文本增量拼接结果与官方 SDK 输出逐字相同。
+- Schema 校验结果一致：12 成功、26 被正确拒绝。拒绝不计为真实能力通过，
+  这里只验证两种实现处理同一证据的一致性。
+
+38/38 差分通过，最终回放目录
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-sdk-replay-G5FniO/`；
+日志 `/tmp/kolyan-provider-final-replay.log`。请求与流文件由测试代码保存，生产 Step
+不参与文件 I/O。运行时设置 KOLYAN_SDK_EVIDENCE 为 SDK 证据目录，再执行
+`cargo test -p kolyan-integration-tests --test sdk_replay -- --ignored --nocapture`。
+
+全仓库统一检查通过：145 passed / 0 failed / 27 ignored（本次检查时的快照，
+之后新增一个显式 ignored 的全模型工具回归入口，不增加离线通过数）；格式、Clippy、
+构建均通过。日志 `/tmp/kolyan-provider-acceptance.log`。ignored 不算通过。
+
+收尾版本的全模型工具身份真实矩阵：19 passed / 0 failed / 0 skipped，耗时
+28.11 秒；证据目录 `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-tr1d9Z/`，
+日志 `/tmp/kolyan-provider-tool-identity.log`。每行均有请求、完整 Step 事件流与汇总状态。

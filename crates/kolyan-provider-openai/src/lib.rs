@@ -473,6 +473,7 @@ fn map_event(
     let kind = event.kind.as_str();
     match kind {
         "response.output_text.delta" => Ok(ModelEvent::TextDelta(string(&event.fields, "delta"))),
+        "response.refusal.delta" => Ok(ModelEvent::TextDelta(string(&event.fields, "delta"))),
         "response.reasoning_summary_text.delta" | "response.reasoning_text.delta" => {
             Ok(ModelEvent::ReasoningDelta(string(&event.fields, "delta")))
         }
@@ -564,6 +565,10 @@ fn map_event(
                 raw: Some(Value::Object(event.fields.into_iter().collect())),
             }))
         }
+        "error" => Err(provider_error(format!(
+            "OpenAI error event: {}",
+            Value::Object(event.fields.into_iter().collect())
+        ))),
         "response.failed" => Err(provider_error(format!(
             "OpenAI response failed: {}",
             event
@@ -597,7 +602,14 @@ fn map_response(
         .into_iter()
         .flatten()
         .collect::<Vec<_>>();
-    let stop_reason = if content
+    let refused = output.iter().any(|item| {
+        item.get("content")
+            .and_then(Value::as_array)
+            .is_some_and(|blocks| blocks.iter().any(|block| block["type"] == "refusal"))
+    });
+    let stop_reason = if refused {
+        StopReason::Refusal
+    } else if content
         .iter()
         .any(|block| matches!(block, ContentBlock::ToolCall { .. }))
     {
@@ -766,6 +778,7 @@ fn map_output(item: &Value) -> Result<Vec<ContentBlock>, ProviderError> {
                     .iter()
                     .filter_map(|b| {
                         b.get("text")
+                            .or_else(|| b.get("refusal"))
                             .and_then(Value::as_str)
                             .map(|text| ContentBlock::Text { text: text.into() })
                     })
@@ -775,6 +788,13 @@ fn map_output(item: &Value) -> Result<Vec<ContentBlock>, ProviderError> {
     })
 }
 fn map_tool_call(value: &Value) -> Result<ToolCall, ProviderError> {
+    let id = string_value(value, "call_id");
+    let name = string_value(value, "name");
+    if id.is_empty() || name.is_empty() {
+        return Err(provider_error(
+            "function call requires nonempty call_id and name",
+        ));
+    }
     let raw_arguments = value
         .get("arguments")
         .and_then(Value::as_str)
@@ -785,8 +805,8 @@ fn map_tool_call(value: &Value) -> Result<ToolCall, ProviderError> {
         return Err(provider_error("function arguments must be an object"));
     }
     Ok(ToolCall {
-        id: string_value(value, "call_id"),
-        name: string_value(value, "name"),
+        id,
+        name,
         arguments,
     })
 }

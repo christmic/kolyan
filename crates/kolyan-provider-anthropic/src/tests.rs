@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn tool_use_requires_identity_and_name_before_emitting_start() {
+    let model = kolyan_model::ModelRef::new("test", "model");
+    for block in [
+        json!({"type":"tool_use","input":{}}),
+        json!({"type":"tool_use","id":"call","input":{}}),
+        json!({"type":"tool_use","name":"read","input":{}}),
+    ] {
+        assert!(
+            AnthropicState::default()
+                .event(
+                    wire_event(
+                        "content_block_start",
+                        json!({"index":0,"content_block":block})
+                    ),
+                    &model
+                )
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn cumulative_usage_updates_preserve_omitted_start_fields() {
     let model = kolyan_model::ModelRef::new("test", "model");
     let mut state = AnthropicState::default();

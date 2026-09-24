@@ -206,3 +206,43 @@ async fn matrix_failure_does_not_prevent_later_rows() {
     assert!(!matrix.complete());
     assert!(matrix.directory.join("report.json").exists());
 }
+
+#[tokio::test]
+#[ignore = "real providers; tool identity regression over every configured model/protocol"]
+async fn tool_identity_streams_across_all_models() {
+    let cases = plan()
+        .into_iter()
+        .filter(|case| case.fixture == "tool_call")
+        .collect::<Vec<_>>();
+    assert!(
+        !cases.is_empty(),
+        "tool_call must remain in the data-driven matrix"
+    );
+    let mut matrix = Matrix::new(cases.iter().map(|case| case.label.clone()));
+    for (index, case) in cases.into_iter().enumerate() {
+        let Some(provider) = case.provider.clone() else {
+            matrix.record(index, Status::NotRun, "missing provider credential");
+            continue;
+        };
+        let directory = matrix.directory.join(index.to_string());
+        fs::create_dir(&directory).unwrap();
+        matrix
+            .run(index, async {
+                run_step(
+                    &provider,
+                    &case,
+                    &load_fixture(&case.fixture),
+                    &directory,
+                    0,
+                )
+                .await;
+            })
+            .await;
+    }
+    assert!(
+        matrix.complete(),
+        "tool identity matrix incomplete: {}",
+        matrix.directory.display()
+    );
+    println!("PASS tool identity matrix: {}", matrix.directory.display());
+}

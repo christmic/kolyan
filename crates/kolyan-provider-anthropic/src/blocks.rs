@@ -32,6 +32,12 @@ impl Blocks {
                 if self.0.contains_key(&index) {
                     return Err(protocol_error("duplicate content block start"));
                 }
+                if block["type"] == "tool_use"
+                    && (string_value(&block, "id").is_empty()
+                        || string_value(&block, "name").is_empty())
+                {
+                    return Err(protocol_error("tool_use requires nonempty id and name"));
+                }
                 let mapped = (block["type"] == "tool_use").then(|| ModelEvent::ToolCallStarted {
                     id: string_value(&block, "id"),
                     name: string_value(&block, "name"),

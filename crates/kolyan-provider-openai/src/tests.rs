@@ -1,6 +1,40 @@
 use super::*;
 
 #[test]
+fn tool_calls_require_identity_and_name() {
+    for value in [
+        json!({"arguments":"{}"}),
+        json!({"call_id":"call","arguments":"{}"}),
+        json!({"name":"read","arguments":"{}"}),
+    ] {
+        assert!(map_tool_call(&value).is_err());
+    }
+}
+
+#[test]
+fn official_error_event_is_fatal_and_refusal_is_not_an_empty_success() {
+    let model = kolyan_model::ModelRef::new("openai", "test");
+    let error =
+        serde_json::from_value(json!({"type":"error","code":"server_error","message":"failed"}))
+            .unwrap();
+    assert!(map_event(error, &model).is_err());
+    let delta =
+        serde_json::from_value(json!({"type":"response.refusal.delta","delta":"Cannot help"}))
+            .unwrap();
+    assert!(
+        matches!(map_event(delta, &model).unwrap(), ModelEvent::TextDelta(text) if text == "Cannot help")
+    );
+    let response = map_response(&json!({"id":"refused","output":[{"type":"message","content":[{"type":"refusal","refusal":"Cannot help"}]}]}), &model).unwrap();
+    assert_eq!(response.stop_reason, StopReason::Refusal);
+    assert_eq!(
+        response.content,
+        vec![ContentBlock::Text {
+            text: "Cannot help".into()
+        }]
+    );
+}
+
+#[test]
 fn documents_use_distinct_url_and_inline_fields() {
     let url = file_input(
         &ImageSource::Url {
