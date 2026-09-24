@@ -17,6 +17,7 @@ impl OpenAiClient {
         &self,
         request: &ResponseCreateRequest,
     ) -> Result<Response, OpenAiError> {
+        dump_request("openai", request);
         let response = self.request("/v1/responses").json(request).send().await?;
         decode_json(response).await
     }
@@ -27,6 +28,7 @@ impl OpenAiClient {
     ) -> Result<ResponseStream, OpenAiError> {
         let mut attempts = 0;
         loop {
+            dump_request("openai", request);
             match self.request("/v1/responses").json(request).send().await {
                 Ok(response) => {
                     let response = response.error_for_status()?;
@@ -48,6 +50,18 @@ impl OpenAiClient {
             .post(format!("{}{}", self.config.base_url, path))
             .bearer_auth(&self.config.api_key)
             .header("content-type", "application/json")
+    }
+}
+
+fn dump_request(label: &str, request: &ResponseCreateRequest) {
+    if std::env::var("KOLYAN_DUMP_MODEL_REQUESTS")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        eprintln!(
+            "[{label} request] {}",
+            serde_json::to_string(request).expect("model request must serialize")
+        );
     }
 }
 

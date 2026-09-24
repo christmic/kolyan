@@ -80,6 +80,9 @@ Server / Coordinator
 - OpenAI 和 Anthropic 协议层支持按需诊断流响应；设置 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 后，
   传输错误会带 HTTP 状态、Content-Type、Content-Encoding、已接收字节数和长度受限
   的响应尾部片段，默认关闭以避免响应内容进入日志。
+- 设置 `KOLYAN_DUMP_MODEL_REQUESTS=1` 可在真实测试中转储每次实际发往协议端点的
+  JSON 请求，用于核对多 Step 的 Assistant 工具调用和 ToolResult 是否进入下一轮；默认关闭，
+  避免提示词和工具参数进入日志。
 - OpenAI/Anthropic 协议客户端对尚未收到 HTTP 响应的连接、请求和超时错误执行一次
   有界重试；收到 HTTP 响应后不自动重试，避免掩盖协议或模型错误。
 - OpenAI Responses 适配器兼容“文本 delta 已完整、`response.completed.output` 为空”的

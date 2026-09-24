@@ -17,6 +17,7 @@ impl AnthropicClient {
         &self,
         request: &MessageCreateRequest,
     ) -> Result<Message, AnthropicError> {
+        dump_request("anthropic", request);
         let response = self.request("/v1/messages").json(request).send().await?;
         decode_json(response).await
     }
@@ -27,6 +28,7 @@ impl AnthropicClient {
     ) -> Result<MessageStream, AnthropicError> {
         let mut attempts = 0;
         let response = loop {
+            dump_request("anthropic", request);
             match self.request("/v1/messages").json(request).send().await {
                 Ok(response) => {
                     break response.error_for_status().map_err(|source| {
@@ -59,6 +61,18 @@ impl AnthropicClient {
             .header("x-api-key", &self.config.api_key)
             .header("anthropic-version", &self.config.version)
             .header("content-type", "application/json")
+    }
+}
+
+fn dump_request(label: &str, request: &MessageCreateRequest) {
+    if std::env::var("KOLYAN_DUMP_MODEL_REQUESTS")
+        .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        eprintln!(
+            "[{label} request] {}",
+            serde_json::to_string(request).expect("model request must serialize")
+        );
     }
 }
 
