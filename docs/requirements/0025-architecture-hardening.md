@@ -216,3 +216,8 @@ Qwen 重复调用的根因仍未确定：已有转储证明部分请求包含工
   `qwen/qwen3.7-plus` 策略准入场景 Turn 超时；未把超时归因为模型或代码，
   尚需依据该场景请求/事件证据定位。该运行不是最终代码快照的完整验收。
 - 仍需按 R2 → R3 → R4 → R5 完成余项，不能将此快照描述为整改全部完成。
+- `e8d54c7`：补充 Turn 身份校验后再次运行统一检查通过，131 passed /
+  0 failed / 26 ignored；日志 `/tmp/kolyan-hardening-final-check.log`。
+- 旧结构化 fixture 的期望只写 `type: object`，不检查请求 schema 中的
+  `name/province/coastal` 必填字段。因此旧 Provider 矩阵“通过”不等于符合
+  结构化输出契约；新增 Provider 内 schema 校验暴露了这一验收缺口。
