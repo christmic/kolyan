@@ -60,7 +60,8 @@ impl ModelProvider for OpenAiProvider {
             // whether Completed has been emitted and synthesizing one at
             // stream end from whatever we accumulated.
             let state = Arc::new(Mutex::new(CompletionState::default()));
-            let tracked = tracked_completion(mapped, Arc::clone(&state));
+            let tracked =
+                tracked_completion(mapped, Arc::clone(&state), request.output_format.is_some());
             let stream = synthesize_completion_if_missing(
                 tracked,
                 Arc::clone(&state),
@@ -88,11 +89,27 @@ struct CompletionState {
 fn tracked_completion<S>(
     upstream: S,
     state: Arc<Mutex<CompletionState>>,
+    structured: bool,
 ) -> impl Stream<Item = Result<ModelEvent, ProviderError>> + Send
 where
     S: Stream<Item = Result<ModelEvent, ProviderError>> + Send + 'static,
 {
     upstream.map(move |event_result| {
+        let event_result = if structured {
+            match event_result {
+                Ok(ModelEvent::Completed(mut response)) if response.structured_output.is_none() => {
+                    if let Ok(snapshot) = state.lock()
+                        && let Some(parsed) = parse_json_relaxed(&snapshot.text)
+                    {
+                        response.structured_output = Some(parsed);
+                    }
+                    Ok(ModelEvent::Completed(response))
+                }
+                other => other,
+            }
+        } else {
+            event_result
+        };
         if let Ok(event) = &event_result
             && let Ok(mut s) = state.lock()
         {
@@ -691,7 +708,7 @@ mod tests {
         let events = stream::iter(vec![Ok(ModelEvent::TextDelta(
             "```json\n{\"ok\":true}\n```".into(),
         ))]);
-        let tracked = tracked_completion(events, Arc::clone(&state));
+        let tracked = tracked_completion(events, Arc::clone(&state), true);
         let mut stream = synthesize_completion_if_missing(
             tracked,
             state,
@@ -706,6 +723,29 @@ mod tests {
             panic!("expected synthetic completion");
         };
         assert_eq!(response.content.len(), 1);
+        assert_eq!(response.structured_output, Some(json!({"ok": true})));
+    }
+
+    #[tokio::test]
+    async fn completed_frame_recovers_structured_output_from_prior_text_deltas() {
+        let state = Arc::new(Mutex::new(CompletionState::default()));
+        let events = stream::iter(vec![
+            Ok(ModelEvent::TextDelta("{\"ok\":true}".into())),
+            Ok(ModelEvent::Completed(ModelResponse {
+                id: "response".into(),
+                model: kolyan_model::ModelRef::new("provider", "model"),
+                content: Vec::new(),
+                structured_output: None,
+                stop_reason: StopReason::EndTurn,
+                usage: TokenUsage::default(),
+                metadata: Value::Null,
+            })),
+        ]);
+        let mut stream = tracked_completion(events, Arc::clone(&state), true);
+        let _ = stream.next().await;
+        let Some(Ok(ModelEvent::Completed(response))) = stream.next().await else {
+            panic!("expected completed response");
+        };
         assert_eq!(response.structured_output, Some(json!({"ok": true})));
     }
 

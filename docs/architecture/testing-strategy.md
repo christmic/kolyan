@@ -82,6 +82,8 @@ Server / Coordinator
   的响应尾部片段，默认关闭以避免响应内容进入日志。
 - OpenAI/Anthropic 协议客户端对尚未收到 HTTP 响应的连接、请求和超时错误执行一次
   有界重试；收到 HTTP 响应后不自动重试，避免掩盖协议或模型错误。
+- OpenAI Responses 适配器兼容“文本 delta 已完整、`response.completed.output` 为空”的
+  供应商响应：结构化请求从已累计文本恢复 JSON，并由单元测试和全模型矩阵验证。
 - `kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
