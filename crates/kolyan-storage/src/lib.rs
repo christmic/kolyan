@@ -1,3 +1,5 @@
+mod session;
+
 use kolyan_core::ApprovalRequest;
 use kolyan_model::Message;
 use serde::{Deserialize, Serialize};
@@ -38,6 +40,27 @@ pub struct SessionRecord {
     pub version: u64,
     pub turns: Vec<SessionTurn>,
     pub messages: Vec<Message>,
+    /// Full model context including tool calls, results and signed thinking.
+    pub context_messages: Vec<Message>,
+    pub inputs: std::collections::BTreeMap<String, SessionTurnInput>,
+    pub commits: std::collections::BTreeMap<String, Vec<Message>>,
+    pub context_commits: std::collections::BTreeMap<String, Vec<Message>>,
+}
+
+/// Immutable input boundary, captured by the same write that registers a Turn.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SessionTurnInput {
+    pub base_version: u64,
+    pub history_len: usize,
+    pub messages: Vec<Message>,
+    pub context_policy: SessionContextPolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SessionContextPolicy {
+    ConversationOnly,
+    FullTrajectory,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,6 +81,41 @@ pub enum SessionTurnStatus {
 }
 
 pub trait SessionStore: Send + Sync {
+    fn begin_turn_with_projection(
+        &self,
+        _session_id: &str,
+        _turn: SessionTurn,
+        _expected_version: u64,
+        _messages: Vec<Message>,
+        _policy: SessionContextPolicy,
+    ) -> Result<SessionRecord, StorageError> {
+        Err(StorageError::Conflict(
+            "context projection is unsupported".into(),
+        ))
+    }
+    fn update_turn_with_context(
+        &self,
+        _session_id: &str,
+        _turn_id: &str,
+        _status: SessionTurnStatus,
+        _messages: Vec<Message>,
+        _context: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        Err(StorageError::Conflict(
+            "atomic context commit is unsupported".into(),
+        ))
+    }
+    fn begin_turn_with_input(
+        &self,
+        _session_id: &str,
+        _turn: SessionTurn,
+        _expected_version: u64,
+        _messages: Vec<Message>,
+    ) -> Result<SessionRecord, StorageError> {
+        Err(StorageError::Conflict(
+            "versioned Turn input is unsupported".into(),
+        ))
+    }
     fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
     fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError>;
     fn begin_turn(
@@ -84,136 +142,6 @@ pub trait SessionStore: Send + Sync {
 pub struct FileSessionStore {
     root: PathBuf,
     lock: Arc<Mutex<()>>,
-}
-
-impl FileSessionStore {
-    pub fn new(root: impl Into<PathBuf>) -> Result<Self, StorageError> {
-        let root = root.into();
-        fs::create_dir_all(&root)?;
-        Ok(Self {
-            root,
-            lock: Arc::new(Mutex::new(())),
-        })
-    }
-
-    fn path(&self, session_id: &str) -> Result<PathBuf, StorageError> {
-        if session_id.is_empty()
-            || session_id == "."
-            || session_id == ".."
-            || session_id.contains('/')
-            || session_id.contains('\\')
-        {
-            return Err(StorageError::InvalidId);
-        }
-        Ok(self.root.join(format!("{session_id}.json")))
-    }
-
-    fn read(path: &std::path::Path, session_id: &str) -> Result<SessionRecord, StorageError> {
-        let payload = fs::read(path).map_err(|error| {
-            if error.kind() == std::io::ErrorKind::NotFound {
-                StorageError::NotFound(session_id.to_owned())
-            } else {
-                StorageError::Io(error)
-            }
-        })?;
-        Ok(serde_json::from_slice(&payload)?)
-    }
-
-    fn write(path: &std::path::Path, record: &SessionRecord) -> Result<(), StorageError> {
-        let temp = path.with_extension("json.tmp");
-        fs::write(&temp, serde_json::to_vec_pretty(record)?)?;
-        fs::rename(temp, path)?;
-        Ok(())
-    }
-}
-
-impl SessionStore for FileSessionStore {
-    fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
-        let _guard = self.lock.lock().expect("session lock must not be poisoned");
-        let path = self.path(session_id)?;
-        if path.exists() {
-            return Err(StorageError::Conflict(session_id.to_owned()));
-        }
-        let record = SessionRecord {
-            session_id: session_id.to_owned(),
-            version: 0,
-            turns: Vec::new(),
-            messages: Vec::new(),
-        };
-        Self::write(&path, &record)?;
-        Ok(record)
-    }
-
-    fn load(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
-        let _guard = self.lock.lock().expect("session lock must not be poisoned");
-        Self::read(&self.path(session_id)?, session_id)
-    }
-
-    fn begin_turn(
-        &self,
-        session_id: &str,
-        turn: SessionTurn,
-    ) -> Result<SessionRecord, StorageError> {
-        let _guard = self.lock.lock().expect("session lock must not be poisoned");
-        let path = self.path(session_id)?;
-        let mut record = Self::read(&path, session_id)?;
-        if record
-            .turns
-            .iter()
-            .any(|item| item.turn_id == turn.turn_id || item.execution_id == turn.execution_id)
-        {
-            return Err(StorageError::Conflict(turn.turn_id));
-        }
-        record.turns.push(turn);
-        record.version += 1;
-        Self::write(&path, &record)?;
-        Ok(record)
-    }
-
-    fn update_turn(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-        status: SessionTurnStatus,
-        messages: Vec<Message>,
-    ) -> Result<SessionRecord, StorageError> {
-        let _guard = self.lock.lock().expect("session lock must not be poisoned");
-        let path = self.path(session_id)?;
-        let mut record = Self::read(&path, session_id)?;
-        let turn = record
-            .turns
-            .iter_mut()
-            .find(|item| item.turn_id == turn_id)
-            .ok_or_else(|| StorageError::NotFound(turn_id.to_owned()))?;
-        turn.status = status;
-        record.messages.extend(messages);
-        record.version += 1;
-        Self::write(&path, &record)?;
-        Ok(record)
-    }
-
-    fn append_turn(
-        &self,
-        session_id: &str,
-        turn: SessionTurn,
-        messages: Vec<Message>,
-    ) -> Result<SessionRecord, StorageError> {
-        let _guard = self.lock.lock().expect("session lock must not be poisoned");
-        let path = self.path(session_id)?;
-        let mut record = Self::read(&path, session_id)?;
-        if record
-            .turns
-            .iter()
-            .any(|item| item.turn_id == turn.turn_id || item.execution_id == turn.execution_id)
-        {
-            return Err(StorageError::Conflict(turn.turn_id));
-        }
-        record.turns.push(turn);
-        record.messages.extend(messages);
-        record.version += 1;
-        Self::write(&path, &record)?;
-        Ok(record)
-    }
 }
 
 impl FileApprovalStore {

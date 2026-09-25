@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kolyan.local/schemas/server-rpc.schema.json",
+  "title": "Kolyan Server v1 request envelope",
+  "type": "object",
+  "required": ["jsonrpc", "id", "method", "params"],
+  "properties": {
+    "jsonrpc": {"const": "2.0"},
+    "id": {"type": ["string", "number", "null"]},
+    "method": {"enum": ["server.info", "session.create", "session.load", "session.reconcile", "execution.start", "execution.approve", "execution.cancel", "execution.status", "execution.events"]},
+    "params": {
+      "type": "object",
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "turn_id": {"type": "string", "minLength": 1},
+        "execution_id": {"type": "string", "minLength": 1},
+        "approval_id": {"type": "string", "minLength": 1},
+        "input": {"type": "string", "minLength": 1},
+        "after_cursor": {"type": "integer", "minimum": 0}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"method": {"enum": ["session.create", "session.load"]}}},
+      "then": {"properties": {"params": {"required": ["session_id"]}}}
+    },
+    {
+      "if": {"properties": {"method": {"const": "session.reconcile"}}},
+      "then": {"properties": {"params": {"required": ["session_id", "execution_id"]}}}
+    },
+    {
+      "if": {"properties": {"method": {"pattern": "^execution\\."}}},
+      "then": {"properties": {"params": {"required": ["session_id", "turn_id", "execution_id"]}}}
+    },
+    {
+      "if": {"properties": {"method": {"const": "execution.start"}}},
+      "then": {"properties": {"params": {"required": ["input"]}}}
+    },
+    {
+      "if": {"properties": {"method": {"const": "execution.approve"}}},
+      "then": {"properties": {"params": {"required": ["approval_id"]}}}
+    }
+  ],
+  "additionalProperties": false
+}

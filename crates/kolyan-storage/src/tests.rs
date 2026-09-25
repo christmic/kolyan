@@ -5,6 +5,68 @@ use kolyan_model::{
 };
 use serde_json::json;
 
+#[test]
+fn versioned_turn_input_survives_reopen_and_serializes_pending_turns() {
+    let root =
+        std::env::temp_dir().join(format!("kolyan-session-versioned-{}", std::process::id()));
+    let store = FileSessionStore::new(&root).unwrap();
+    store.create("s").unwrap();
+    let turn = SessionTurn {
+        turn_id: "t".into(),
+        execution_id: "e".into(),
+        status: SessionTurnStatus::Running,
+    };
+    let input = vec![Message {
+        role: MessageRole::User,
+        content: vec![ContentBlock::Text {
+            text: "original input".into(),
+        }],
+    }];
+    assert!(
+        store
+            .begin_turn_with_input("s", turn.clone(), 1, input.clone())
+            .is_err()
+    );
+    store
+        .begin_turn_with_input("s", turn, 0, input.clone())
+        .unwrap();
+    store
+        .update_turn("s", "t", SessionTurnStatus::Suspended, vec![])
+        .unwrap();
+    let other = FileSessionStore::new(&root).unwrap();
+    assert!(
+        other
+            .begin_turn_with_input(
+                "s",
+                SessionTurn {
+                    turn_id: "next".into(),
+                    execution_id: "next-e".into(),
+                    status: SessionTurnStatus::Running
+                },
+                2,
+                vec![]
+            )
+            .is_err()
+    );
+    assert_eq!(other.load("s").unwrap().inputs["t"].messages, input);
+    let committed = other
+        .update_turn("s", "t", SessionTurnStatus::Completed, input.clone())
+        .unwrap();
+    assert_eq!(
+        other
+            .update_turn("s", "t", SessionTurnStatus::Completed, input)
+            .unwrap(),
+        committed
+    );
+    assert!(
+        other
+            .update_turn("s", "t", SessionTurnStatus::Failed, vec![])
+            .is_err()
+    );
+    assert_eq!(other.load("s").unwrap(), committed);
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn request() -> ApprovalRequest {
     ApprovalRequest {
         approval_id: "approval-1".into(),

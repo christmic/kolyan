@@ -7,6 +7,41 @@ use kolyan_model::{
 };
 use kolyan_trace::VecTraceSink;
 
+#[tokio::test]
+async fn terminal_ledger_reconciles_session_even_before_commit_intent_exists() {
+    let root =
+        std::env::temp_dir().join(format!("kolyan-session-reconcile-{}", std::process::id()));
+    let store = kolyan_storage::FileSessionStore::new(&root).unwrap();
+    store.create("s").unwrap();
+    store
+        .begin_turn_with_input(
+            "s",
+            SessionTurn {
+                turn_id: "t".into(),
+                execution_id: "e".into(),
+                status: SessionTurnStatus::Running,
+            },
+            0,
+            vec![],
+        )
+        .unwrap();
+    let execution = ExecutionService::new(InMemoryLedger::default(), VecTraceSink::default());
+    execution
+        .start(TurnExecutor::new(FinalProvider), request("t"), "s", "e")
+        .await
+        .unwrap();
+    assert_eq!(
+        store.load("s").unwrap().turns[0].status,
+        SessionTurnStatus::Running
+    );
+    let service = SessionExecutionService::new(execution, SessionService::new(store.clone()));
+    let reconciled = service.reconcile("s", "e").unwrap();
+    assert_eq!(reconciled.turns[0].status, SessionTurnStatus::Completed);
+    assert_eq!(reconciled.messages.len(), 1);
+    assert_eq!(service.reconcile("s", "e").unwrap(), reconciled);
+    std::fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn every_approval_cycle_has_a_distinct_resume_transition() {
     let ledger = InMemoryLedger::default();

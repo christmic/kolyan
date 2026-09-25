@@ -1,3 +1,8 @@
+mod coordinator;
+mod rpc_execution;
+mod session_execution;
+pub use rpc_execution::ExecutionRpc;
+
 use kolyan_core::{
     ApprovalRequest, ToolExecutor, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
 };
@@ -124,6 +129,17 @@ pub struct ExecutionService<L, S> {
     trace: S,
 }
 
+struct ExecutionGuard<L: LedgerStore + Clone> {
+    server: ExecutionServer<L>,
+    execution_id: String,
+}
+
+impl<L: LedgerStore + Clone> Drop for ExecutionGuard<L> {
+    fn drop(&mut self) {
+        self.server.release(&self.execution_id);
+    }
+}
+
 /// Server facade for the persistent multi-Turn Session boundary.
 #[derive(Clone)]
 pub struct SessionService<S> {
@@ -210,6 +226,10 @@ where
             execution_id: execution_id.clone(),
         };
         self.server.start(execution)?;
+        let _guard = ExecutionGuard {
+            server: self.server.clone(),
+            execution_id: execution_id.clone(),
+        };
         let driver = DurableTurnDriver::new(
             self.server.coordinator().ledger().clone(),
             self.trace.clone(),
@@ -245,6 +265,10 @@ where
             execution_id: execution_id.clone(),
         };
         self.server.resume(execution)?;
+        let _guard = ExecutionGuard {
+            server: self.server.clone(),
+            execution_id: execution_id.clone(),
+        };
         let result = driver
             .resume(executor, session_id, execution_id.clone(), approval_id)
             .await;
@@ -281,170 +305,7 @@ where
 pub struct SessionExecutionService<L, S, SS> {
     execution: ExecutionService<L, S>,
     sessions: SessionService<SS>,
-}
-
-impl<L, S, SS> SessionExecutionService<L, S, SS>
-where
-    L: LedgerStore + Clone + 'static,
-    S: TraceSink + Clone,
-    SS: SessionStore + Clone,
-{
-    pub fn new(execution: ExecutionService<L, S>, sessions: SessionService<SS>) -> Self {
-        Self {
-            execution,
-            sessions,
-        }
-    }
-
-    pub fn execution(&self) -> &ExecutionService<L, S> {
-        &self.execution
-    }
-
-    pub fn sessions(&self) -> &SessionService<SS> {
-        &self.sessions
-    }
-
-    pub async fn start<P, T>(
-        &self,
-        executor: TurnExecutor<P, T>,
-        mut request: TurnRequest,
-        session_id: impl Into<String>,
-        execution_id: impl Into<String>,
-    ) -> Result<DurableTurnResult, ServerError>
-    where
-        P: ModelProvider,
-        T: ToolExecutor,
-    {
-        let session_id = session_id.into();
-        let execution_id = execution_id.into();
-        let turn_id = request.turn_id.clone();
-        let current_messages = request.model_request.messages.clone();
-        let session = self.sessions.load(&session_id)?;
-        let mut contextual_messages = session.messages;
-        contextual_messages.extend(current_messages.clone());
-        request.model_request.messages = contextual_messages;
-        self.sessions.begin_turn(
-            &session_id,
-            SessionTurn {
-                turn_id: turn_id.clone(),
-                execution_id: execution_id.clone(),
-                status: SessionTurnStatus::Running,
-            },
-        )?;
-
-        let result = self
-            .execution
-            .start(executor, request, session_id.clone(), execution_id)
-            .await;
-        self.commit_result(&session_id, &turn_id, current_messages, result)
-    }
-
-    pub async fn resume<P, T>(
-        &self,
-        executor: TurnExecutor<P, T>,
-        session_id: impl Into<String>,
-        execution_id: impl Into<String>,
-        approval_id: &str,
-    ) -> Result<DurableTurnResult, ServerError>
-    where
-        P: ModelProvider,
-        T: ToolExecutor,
-    {
-        let session_id = session_id.into();
-        let execution_id = execution_id.into();
-        let approval = self.execution.load_approval(&execution_id, approval_id)?;
-        let session = self.sessions.load(&session_id)?;
-        let prefix_len = session.messages.len();
-        let pending_messages = approval
-            .continuation
-            .model_request
-            .messages
-            .get(prefix_len..)
-            .unwrap_or_default()
-            .to_vec();
-        let result = self
-            .execution
-            .resume(executor, session_id.clone(), execution_id, approval_id)
-            .await;
-        self.commit_result(&session_id, &approval.turn_id, pending_messages, result)
-    }
-
-    pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
-        self.execution.cancel(execution)?;
-        self.sessions.update_turn(
-            &execution.session_id,
-            &execution.turn_id,
-            SessionTurnStatus::Cancelled,
-            Vec::new(),
-        )?;
-        Ok(())
-    }
-
-    pub fn state(&self, execution_id: &str) -> Result<ExecutionState, ServerError> {
-        self.execution.state(execution_id)
-    }
-
-    fn commit_result(
-        &self,
-        session_id: &str,
-        turn_id: &str,
-        input_messages: Vec<Message>,
-        result: Result<DurableTurnResult, ServerError>,
-    ) -> Result<DurableTurnResult, ServerError> {
-        match result {
-            Ok(DurableTurnResult::AwaitingApproval {
-                approval,
-                trajectory,
-            }) => {
-                self.sessions.update_turn(
-                    session_id,
-                    turn_id,
-                    SessionTurnStatus::Suspended,
-                    Vec::new(),
-                )?;
-                Ok(DurableTurnResult::AwaitingApproval {
-                    approval,
-                    trajectory,
-                })
-            }
-            Ok(DurableTurnResult::Completed(execution, trajectory)) => {
-                let messages = completed_messages(&execution, input_messages);
-                self.sessions.update_turn(
-                    session_id,
-                    turn_id,
-                    SessionTurnStatus::Completed,
-                    messages,
-                )?;
-                Ok(DurableTurnResult::Completed(execution, trajectory))
-            }
-            Err(error) => {
-                self.sessions.update_turn(
-                    session_id,
-                    turn_id,
-                    SessionTurnStatus::Failed,
-                    Vec::new(),
-                )?;
-                Err(error)
-            }
-        }
-    }
-}
-
-fn completed_messages(execution: &TurnExecution, input: Vec<Message>) -> Vec<Message> {
-    let mut messages = input;
-    let response = match &execution.result.outcome {
-        TurnOutcome::FinalAnswer { response }
-        | TurnOutcome::Refused { response }
-        | TurnOutcome::Incomplete { response } => Some(response),
-        TurnOutcome::Rejected { .. } | TurnOutcome::Expired { .. } | TurnOutcome::MaxSteps => None,
-    };
-    if let Some(response) = response {
-        messages.push(Message {
-            role: MessageRole::Assistant,
-            content: response.content.clone(),
-        });
-    }
-    messages
+    context_policy: kolyan_storage::SessionContextPolicy,
 }
 
 impl<L> ExecutionServer<L>
@@ -565,226 +426,6 @@ fn rpc_error(id: Value, code: i32, message: impl Into<String>) -> RpcResponse {
             message: message.into(),
         }),
     }
-}
-
-impl<L> ExecutionCoordinator<L>
-where
-    L: LedgerStore + Clone,
-{
-    pub fn new(ledger: L) -> Self {
-        Self {
-            ledger,
-            active: Arc::new(Mutex::new(HashSet::new())),
-        }
-    }
-
-    pub fn ledger(&self) -> &L {
-        &self.ledger
-    }
-
-    pub fn state(&self, execution_id: &str) -> Result<ExecutionState, CoordinatorError> {
-        let mut state = ExecutionState::New;
-        for event in self
-            .ledger
-            .events_after(0)?
-            .into_iter()
-            .filter(|event| event.execution_id == execution_id)
-        {
-            if is_terminal(state) {
-                break;
-            }
-            state = match event.kind {
-                LedgerEventKind::ExecutionStarted => ExecutionState::Running,
-                LedgerEventKind::ExecutionSuspended => ExecutionState::Suspended,
-                LedgerEventKind::ExecutionCancelled | LedgerEventKind::TurnCancelled => {
-                    ExecutionState::Cancelled
-                }
-                LedgerEventKind::TurnCompleted => ExecutionState::Completed,
-                LedgerEventKind::TurnFailed | LedgerEventKind::EffectUncertain => {
-                    ExecutionState::Failed
-                }
-                _ => state,
-            };
-        }
-        Ok(state)
-    }
-
-    pub fn start(&self, execution: ExecutionRef) -> Result<ExecutionAdmission, CoordinatorError> {
-        let state = self.state(&execution.execution_id)?;
-        match state {
-            ExecutionState::New => {
-                self.append_once(
-                    &execution,
-                    "execution-started",
-                    LedgerEventKind::ExecutionStarted,
-                    serde_json::to_value(&execution).unwrap_or(Value::Null),
-                )?;
-                self.admit(execution, AdmissionKind::Start)
-            }
-            ExecutionState::Running if self.is_active(&execution.execution_id) => {
-                Err(CoordinatorError::AlreadyActive {
-                    execution_id: execution.execution_id,
-                })
-            }
-            ExecutionState::Running => Err(CoordinatorError::NotRecoverable {
-                execution_id: execution.execution_id,
-                state,
-            }),
-            _ if is_terminal(state) => Err(CoordinatorError::Terminal {
-                execution_id: execution.execution_id,
-                state,
-            }),
-            _ => Err(CoordinatorError::NotRecoverable {
-                execution_id: execution.execution_id,
-                state,
-            }),
-        }
-    }
-
-    pub fn resume(&self, execution: ExecutionRef) -> Result<ExecutionAdmission, CoordinatorError> {
-        let state = self.state(&execution.execution_id)?;
-        if state != ExecutionState::Suspended {
-            return if is_terminal(state) {
-                Err(CoordinatorError::Terminal {
-                    execution_id: execution.execution_id,
-                    state,
-                })
-            } else {
-                Err(CoordinatorError::NotSuspended {
-                    execution_id: execution.execution_id,
-                })
-            };
-        }
-        self.append_once(
-            &execution,
-            &format!(
-                "execution-resumed/{}",
-                self.latest_cursor(&execution.execution_id)?
-            ),
-            LedgerEventKind::ExecutionStarted,
-            Value::Null,
-        )?;
-        self.admit(execution, AdmissionKind::Resume)
-    }
-
-    pub fn recover(&self, execution: ExecutionRef) -> Result<ExecutionAdmission, CoordinatorError> {
-        let state = self.state(&execution.execution_id)?;
-        if !matches!(state, ExecutionState::Running | ExecutionState::Suspended) {
-            return Err(CoordinatorError::NotRecoverable {
-                execution_id: execution.execution_id,
-                state,
-            });
-        }
-        self.append_once(
-            &execution,
-            &format!(
-                "execution-recovered/{}",
-                self.latest_cursor(&execution.execution_id)?
-            ),
-            LedgerEventKind::ExecutionStarted,
-            Value::Null,
-        )?;
-        self.admit(execution, AdmissionKind::Recover)
-    }
-
-    pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), CoordinatorError> {
-        let state = self.state(&execution.execution_id)?;
-        if is_terminal(state) {
-            return Ok(());
-        }
-        self.append_once(
-            execution,
-            "execution-cancelled",
-            LedgerEventKind::ExecutionCancelled,
-            Value::Null,
-        )?;
-        self.release(&execution.execution_id);
-        Ok(())
-    }
-
-    pub fn release(&self, execution_id: &str) {
-        self.active
-            .lock()
-            .expect("coordinator lock must not be poisoned")
-            .remove(execution_id);
-    }
-
-    fn admit(
-        &self,
-        execution: ExecutionRef,
-        kind: AdmissionKind,
-    ) -> Result<ExecutionAdmission, CoordinatorError> {
-        let mut active = self
-            .active
-            .lock()
-            .expect("coordinator lock must not be poisoned");
-        if !active.insert(execution.execution_id.clone()) {
-            return Err(CoordinatorError::AlreadyActive {
-                execution_id: execution.execution_id,
-            });
-        }
-        drop(active);
-        Ok(ExecutionAdmission { execution, kind })
-    }
-
-    fn is_active(&self, execution_id: &str) -> bool {
-        self.active
-            .lock()
-            .expect("coordinator lock must not be poisoned")
-            .contains(execution_id)
-    }
-
-    fn append_once(
-        &self,
-        execution: &ExecutionRef,
-        suffix: &str,
-        kind: LedgerEventKind,
-        payload: Value,
-    ) -> Result<(), CoordinatorError> {
-        let event_id = format!("{}/{}", execution.execution_id, suffix);
-        if let Some(existing) = self
-            .ledger
-            .events_after(0)?
-            .into_iter()
-            .find(|event| event.event_id == event_id)
-        {
-            if existing.turn_id != execution.turn_id
-                || existing.execution_id != execution.execution_id
-                || existing.kind != kind
-                || existing.payload != payload
-            {
-                return Err(LedgerError::Conflict(event_id).into());
-            }
-            return Ok(());
-        }
-        self.ledger.append(LedgerEvent {
-            event_id: event_id.clone(),
-            turn_id: execution.turn_id.clone(),
-            execution_id: execution.execution_id.clone(),
-            cursor: 0,
-            kind,
-            idempotency_key: event_id,
-            payload,
-        })?;
-        Ok(())
-    }
-
-    fn latest_cursor(&self, execution_id: &str) -> Result<u64, CoordinatorError> {
-        Ok(self
-            .ledger
-            .events_after(0)?
-            .iter()
-            .rev()
-            .find(|event| event.execution_id == execution_id)
-            .map_or(0, |event| event.cursor))
-    }
-}
-
-fn is_terminal(state: ExecutionState) -> bool {
-    matches!(
-        state,
-        ExecutionState::Completed | ExecutionState::Cancelled | ExecutionState::Failed
-    )
 }
 
 #[cfg(test)]
