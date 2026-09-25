@@ -12,6 +12,7 @@ use thiserror::Error;
 pub enum LedgerEventKind {
     TurnStarted,
     StepStarted,
+    ModelRequested,
     StepCompleted,
     ToolCallRequested,
     ApprovalRequested,
@@ -35,6 +36,8 @@ pub enum LedgerEventKind {
     EffectUncertain,
     EffectDenied,
     EffectReceipt,
+    SessionCommitPrepared,
+    SessionCommitted,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -52,11 +55,20 @@ pub struct LedgerEvent {
 pub enum LedgerError {
     #[error("ledger conflict for idempotency key: {0}")]
     Conflict(String),
+    #[error("execution was cancelled: {0}")]
+    Cancelled(String),
     #[error("ledger storage failed: {0}")]
     Storage(String),
 }
 
 pub trait LedgerStore: Send + Sync {
+    /// Atomically reject an admission if cancellation has already been committed.
+    /// Adapters without a transactional implementation must fail closed.
+    fn append_unless_cancelled(&self, _event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        Err(LedgerError::Storage(
+            "atomic admission is unsupported".into(),
+        ))
+    }
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError>;
     fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError>;
     fn claim(&self, idempotency_key: &str) -> Result<bool, LedgerError>;
@@ -99,20 +111,39 @@ struct LedgerState {
     claims: std::collections::BTreeSet<String>,
 }
 
-impl LedgerStore for InMemoryLedger {
-    fn append(&self, mut event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+impl InMemoryLedger {
+    fn append_checked(
+        &self,
+        mut event: LedgerEvent,
+        check_cancel: bool,
+    ) -> Result<LedgerEvent, LedgerError> {
         let mut state = self.state.lock().expect("ledger lock must not be poisoned");
-        if state
-            .events
-            .iter()
-            .any(|item| item.event_id == event.event_id)
+        if check_cancel
+            && state.events.iter().any(|item| {
+                item.execution_id == event.execution_id
+                    && item.kind == LedgerEventKind::ExecutionCancelled
+            })
         {
+            return Err(LedgerError::Cancelled(event.execution_id));
+        }
+        if state.events.iter().any(|item| {
+            item.event_id == event.event_id || item.idempotency_key == event.idempotency_key
+        }) {
             return Err(LedgerError::Conflict(event.event_id));
         }
         state.next_cursor += 1;
         event.cursor = state.next_cursor;
         state.events.push(event.clone());
         Ok(event)
+    }
+}
+
+impl LedgerStore for InMemoryLedger {
+    fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, false)
+    }
+    fn append_unless_cancelled(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, true)
     }
 
     fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError> {
@@ -171,14 +202,29 @@ impl FileLedger {
     }
 }
 
-impl LedgerStore for FileLedger {
-    fn append(&self, mut event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+impl FileLedger {
+    fn append_checked(
+        &self,
+        mut event: LedgerEvent,
+        check_cancel: bool,
+    ) -> Result<LedgerEvent, LedgerError> {
         let _guard = self
             .lock
             .lock()
             .expect("file ledger lock must not be poisoned");
+        let _file_lock = self.exclusive_lock()?;
         let events = Self::read_events(&self.path)?;
-        if events.iter().any(|item| item.event_id == event.event_id) {
+        if check_cancel
+            && events.iter().any(|item| {
+                item.execution_id == event.execution_id
+                    && item.kind == LedgerEventKind::ExecutionCancelled
+            })
+        {
+            return Err(LedgerError::Cancelled(event.execution_id));
+        }
+        if events.iter().any(|item| {
+            item.event_id == event.event_id || item.idempotency_key == event.idempotency_key
+        }) {
             return Err(LedgerError::Conflict(event.event_id));
         }
         event.cursor = events.last().map_or(0, |item| item.cursor) + 1;
@@ -196,11 +242,36 @@ impl LedgerStore for FileLedger {
         Ok(event)
     }
 
+    fn exclusive_lock(&self) -> Result<std::fs::File, LedgerError> {
+        let mut path = self.path.as_os_str().to_owned();
+        path.push(".lock");
+        let file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(PathBuf::from(path))
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        file.lock()
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        Ok(file)
+    }
+}
+
+impl LedgerStore for FileLedger {
+    fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, false)
+    }
+    fn append_unless_cancelled(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, true)
+    }
+
     fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError> {
         let _guard = self
             .lock
             .lock()
             .expect("file ledger lock must not be poisoned");
+        let _file_lock = self.exclusive_lock()?;
         Ok(Self::read_events(&self.path)?
             .into_iter()
             .filter(|event| event.cursor > cursor)
@@ -212,10 +283,36 @@ impl LedgerStore for FileLedger {
             .lock
             .lock()
             .expect("file ledger lock must not be poisoned");
-        let events = Self::read_events(&self.path)?;
-        Ok(!events
-            .iter()
-            .any(|event| event.idempotency_key == idempotency_key))
+        let _file_lock = self.exclusive_lock()?;
+        let mut path = self.path.as_os_str().to_owned();
+        path.push(".claims");
+        let path = PathBuf::from(path);
+        let mut file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .append(true)
+            .open(&path)
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        let claims: Vec<String> = BufReader::new(&file)
+            .lines()
+            .map(|line| {
+                let line = line.map_err(|error| LedgerError::Storage(error.to_string()))?;
+                serde_json::from_str(&line).map_err(|error| LedgerError::Storage(error.to_string()))
+            })
+            .collect::<Result<_, _>>()?;
+        if claims.iter().any(|key| key == idempotency_key)
+            || Self::read_events(&self.path)?
+                .iter()
+                .any(|event| event.idempotency_key == idempotency_key)
+        {
+            return Ok(false);
+        }
+        let line = serde_json::to_string(idempotency_key)
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        writeln!(file, "{line}")
+            .and_then(|_| file.sync_all())
+            .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        Ok(true)
     }
 }
 
@@ -239,6 +336,7 @@ impl SqliteLedger {
         connection
             .execute_batch(
                 "PRAGMA journal_mode = WAL;
+             PRAGMA synchronous = FULL;
              CREATE TABLE IF NOT EXISTS events (
                 cursor INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_id TEXT NOT NULL UNIQUE,
@@ -265,15 +363,35 @@ impl SqliteLedger {
     }
 }
 
-impl LedgerStore for SqliteLedger {
-    fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
-        let connection = self
+impl SqliteLedger {
+    fn append_checked(
+        &self,
+        event: LedgerEvent,
+        check_cancel: bool,
+    ) -> Result<LedgerEvent, LedgerError> {
+        let mut connection = self
             .connection
             .lock()
             .expect("sqlite ledger lock must not be poisoned");
         let transaction = connection
-            .unchecked_transaction()
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
             .map_err(|error| LedgerError::Storage(error.to_string()))?;
+        if check_cancel {
+            let cancelled: bool = transaction
+                .query_row(
+                    "SELECT EXISTS(SELECT 1 FROM events WHERE execution_id = ?1 AND kind = ?2)",
+                    params![
+                        event.execution_id,
+                        serde_json::to_string(&LedgerEventKind::ExecutionCancelled)
+                            .expect("event kind")
+                    ],
+                    |row| row.get(0),
+                )
+                .map_err(|error| LedgerError::Storage(error.to_string()))?;
+            if cancelled {
+                return Err(LedgerError::Cancelled(event.execution_id));
+            }
+        }
         let kind = serde_json::to_string(&event.kind)
             .map_err(|error| LedgerError::Storage(error.to_string()))?;
         let payload = serde_json::to_string(&event.payload)
@@ -293,6 +411,15 @@ impl LedgerStore for SqliteLedger {
             .commit()
             .map_err(|error| LedgerError::Storage(error.to_string()))?;
         Ok(LedgerEvent { cursor, ..event })
+    }
+}
+
+impl LedgerStore for SqliteLedger {
+    fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, false)
+    }
+    fn append_unless_cancelled(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
+        self.append_checked(event, true)
     }
 
     fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError> {

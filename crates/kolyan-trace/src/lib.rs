@@ -31,6 +31,16 @@ pub trait TraceSink: Send + Sync {
     fn record(&self, record: TraceRecord) -> Result<(), TraceError>;
 }
 
+/// Explicitly disable optional observations without changing durable facts.
+#[derive(Clone, Copy, Default)]
+pub struct NoopTraceSink;
+
+impl TraceSink for NoopTraceSink {
+    fn record(&self, _: TraceRecord) -> Result<(), TraceError> {
+        Ok(())
+    }
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct VecTraceSink {
     records: std::sync::Arc<std::sync::Mutex<Vec<TraceRecord>>>,

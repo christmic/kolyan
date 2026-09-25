@@ -14,6 +14,34 @@ const CASES: &str = r#"
 "#;
 
 struct BrokenTrace;
+
+#[tokio::test]
+async fn duplicate_attempt_does_not_append_a_false_failed_terminal() {
+    let ledger = kolyan_ledger::InMemoryLedger::default();
+    let driver = DurableTurnDriver::new(ledger.clone(), kolyan_trace::NoopTraceSink);
+    driver
+        .start(
+            TurnExecutor::new(FinalProvider),
+            request("duplicate"),
+            "s",
+            "e",
+        )
+        .await
+        .unwrap();
+    let before = ledger.events_after(0).unwrap();
+    assert!(
+        driver
+            .start(
+                TurnExecutor::new(FinalProvider),
+                request("duplicate"),
+                "s",
+                "e"
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(ledger.events_after(0).unwrap(), before);
+}
 impl TraceSink for BrokenTrace {
     fn record(&self, _: TraceRecord) -> Result<(), kolyan_trace::TraceError> {
         Err(kolyan_trace::TraceError {

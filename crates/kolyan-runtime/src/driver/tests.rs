@@ -1,5 +1,43 @@
 use super::*;
+use kolyan_core::{TurnEvent, TurnEventRecorder};
 use kolyan_ledger::{InMemoryLedger, LedgerError};
+
+#[test]
+fn attempt_events_preserve_content_and_cursor_across_reconstruction() {
+    let ledger = InMemoryLedger::default();
+    let first = LedgerRecorder::new(ledger.clone(), key(), "start".into());
+    first
+        .record(&TurnEvent::ToolResult {
+            turn_id: "turn".into(),
+            result: kolyan_model::ToolResult {
+                call_id: "call".into(),
+                content: "actual tool output".into(),
+                is_error: false,
+            },
+        })
+        .unwrap();
+    drop(first);
+    let second = LedgerRecorder::new(ledger.clone(), key(), "resume/approval".into());
+    second
+        .record(&TurnEvent::Cancelled {
+            turn_id: "turn".into(),
+        })
+        .unwrap();
+    let events = ledger.events_after(0).unwrap();
+    assert_eq!(events.len(), 2);
+    assert!(events[0].cursor < events[1].cursor);
+    assert_ne!(events[0].event_id, events[1].event_id);
+    assert_eq!(events[0].payload["result"]["content"], "actual tool output");
+    let duplicate = LedgerRecorder::new(ledger.clone(), key(), "start".into());
+    assert!(
+        duplicate
+            .record(&TurnEvent::Started {
+                turn_id: "turn".into()
+            })
+            .is_err()
+    );
+    assert_eq!(ledger.events_after(0).unwrap().len(), 2);
+}
 
 #[derive(Clone)]
 struct UnreadableLedger;

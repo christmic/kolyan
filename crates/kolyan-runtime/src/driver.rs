@@ -1,7 +1,12 @@
-use crate::{RuntimeError, Trajectory, TrajectoryRecord, encode_turn_event};
+mod recorder;
+mod tools;
+use recorder::LedgerRecorder;
+use tools::DurableTools;
+
+use crate::{RuntimeError, Trajectory, TrajectoryRecord};
 use kolyan_core::{
     ApprovalRequest, ResumableTurn, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
-    TurnBoundaryKind, TurnError, TurnEvent, TurnExecution, TurnExecutor, TurnRequest,
+    TurnBoundaryKind, TurnError, TurnExecution, TurnExecutor, TurnRequest,
 };
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelProvider;
@@ -93,8 +98,23 @@ where
             LedgerEventKind::ExecutionStarted,
             json!(key),
         )?;
+        if !self
+            .ledger
+            .claim(&format!("{}/attempt/start", key.execution_id))?
+        {
+            return Err(RuntimeError::Driver(
+                "execution attempt is already claimed; replay is forbidden".into(),
+            ));
+        }
         let control = Arc::new(LedgerBoundaryControl::new(self.ledger.clone(), key.clone()));
-        let controlled = executor.with_boundary_control(control);
+        let controlled = executor
+            .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
+            .with_boundary_control(control)
+            .with_event_recorder(Arc::new(LedgerRecorder::new(
+                self.ledger.clone(),
+                key.clone(),
+                "start".into(),
+            )));
         match controlled.start_resumable(request).await {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
             Ok(ResumableTurn::AwaitingApproval(approval)) => self.suspended(&key, *approval),
@@ -123,8 +143,34 @@ where
             turn_id: approval.turn_id.clone(),
             execution_id,
         };
+        let identity = self
+            .ledger
+            .events_after(0)?
+            .into_iter()
+            .find(|event| event.event_id == format!("{}/execution-started", key.execution_id))
+            .ok_or_else(|| RuntimeError::Driver("missing execution identity".into()))?;
+        if identity.payload != json!(key) {
+            return Err(RuntimeError::Driver(
+                "approval execution identity mismatch".into(),
+            ));
+        }
+        if !self.ledger.claim(&format!(
+            "{}/attempt/resume/{approval_id}",
+            key.execution_id
+        ))? {
+            return Err(RuntimeError::Driver(
+                "approval attempt is already claimed; replay is forbidden".into(),
+            ));
+        }
         let control = Arc::new(LedgerBoundaryControl::new(self.ledger.clone(), key.clone()));
-        let controlled = executor.with_boundary_control(control);
+        let controlled = executor
+            .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
+            .with_boundary_control(control)
+            .with_event_recorder(Arc::new(LedgerRecorder::new(
+                self.ledger.clone(),
+                key.clone(),
+                format!("resume/{approval_id}"),
+            )));
         match controlled.resume_approval(approval, approval_id).await {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
             Ok(ResumableTurn::AwaitingApproval(next)) => self.suspended(&key, *next),
@@ -159,12 +205,7 @@ where
         )?;
         Ok(DurableTurnResult::AwaitingApproval {
             approval: Box::new(approval),
-            trajectory: Trajectory {
-                turn_id: key.turn_id.clone(),
-                execution_id: key.execution_id.clone(),
-                records: Vec::new(),
-                trace_errors: Vec::new(),
-            },
+            trajectory: self.project_events(key)?,
         })
     }
 
@@ -173,7 +214,7 @@ where
         key: &RuntimeTurnKey,
         execution: TurnExecution,
     ) -> Result<DurableTurnResult, RuntimeError> {
-        let trajectory = self.persist_events(key, &execution.events)?;
+        let trajectory = self.project_events(key)?;
         Ok(DurableTurnResult::Completed(
             Box::new(execution),
             trajectory,
@@ -181,6 +222,18 @@ where
     }
 
     fn persist_error(&self, key: &RuntimeTurnKey, error: &TurnError) -> Result<(), RuntimeError> {
+        if self.ledger.events_after(0)?.iter().any(|event| {
+            event.execution_id == key.execution_id
+                && matches!(
+                    event.kind,
+                    LedgerEventKind::TurnCompleted
+                        | LedgerEventKind::TurnCancelled
+                        | LedgerEventKind::TurnFailed
+                        | LedgerEventKind::TurnTimedOut
+                )
+        }) {
+            return Ok(());
+        }
         append_once(
             &self.ledger,
             &key.execution_id,
@@ -196,41 +249,29 @@ where
         Ok(())
     }
 
-    fn persist_events(
-        &self,
-        key: &RuntimeTurnKey,
-        events: &[TurnEvent],
-    ) -> Result<Trajectory, RuntimeError> {
+    fn project_events(&self, key: &RuntimeTurnKey) -> Result<Trajectory, RuntimeError> {
         let mut trajectory = Trajectory {
             turn_id: key.turn_id.clone(),
             execution_id: key.execution_id.clone(),
-            records: Vec::new(),
-            trace_errors: Vec::new(),
+            ..Default::default()
         };
-        for (index, event) in events.iter().enumerate() {
-            let (kind, payload) = encode_turn_event(event);
-            let suffix = format!("turn-event-{index}");
-            let ledger_event = append_once(
-                &self.ledger,
-                &key.execution_id,
-                &key.turn_id,
-                &suffix,
-                kind,
-                payload.clone(),
-            )?;
+        let prefix = format!("{}/turn-event/", key.execution_id);
+        for event in self.ledger.events_after(0)?.into_iter().filter(|event| {
+            event.execution_id == key.execution_id && event.event_id.starts_with(&prefix)
+        }) {
             if let Err(error) = self.trace.record(kolyan_trace::TraceRecord {
                 turn_id: key.turn_id.clone(),
                 execution_id: key.execution_id.clone(),
-                sequence: ledger_event.cursor,
+                sequence: event.cursor,
                 kind: kolyan_trace::TraceKind::TurnEvent,
-                payload: payload.clone(),
+                payload: event.payload.clone(),
             }) {
                 trajectory.trace_errors.push(error.to_string());
             }
             trajectory.records.push(TrajectoryRecord {
-                sequence: ledger_event.cursor,
-                kind,
-                payload,
+                sequence: event.cursor,
+                kind: event.kind,
+                payload: event.payload,
             });
         }
         Ok(trajectory)
@@ -264,39 +305,33 @@ impl<L: LedgerStore + Clone + 'static> TurnBoundaryControl for LedgerBoundaryCon
                 })
             });
         }
-        let cancelled = self.ledger.events_after(0).map(|events| {
-            events.iter().any(|event| {
-                event.execution_id == self.key.execution_id
-                    && event.kind == LedgerEventKind::ExecutionCancelled
-            })
-        });
-        let ledger = self.ledger.clone();
-        let key = self.key.clone();
         Box::pin(async move {
-            let cancelled = cancelled.map_err(|error| TurnError::BoundaryControl {
-                message: error.to_string(),
-            })?;
-            if cancelled
-                && !matches!(
-                    boundary.kind,
-                    TurnBoundaryKind::Terminal {
-                        reason: kolyan_core::TurnEndReason::Cancelled
-                    }
-                )
-            {
-                return Err(TurnError::Cancelled);
-            }
             let (suffix, kind, payload) = boundary_event(&boundary);
-            append_once(
-                &ledger,
-                &key.execution_id,
-                &key.turn_id,
-                &suffix,
+            let event_id = format!("{}/{}", self.key.execution_id, suffix);
+            let event = LedgerEvent {
+                event_id: event_id.clone(),
+                turn_id: self.key.turn_id.clone(),
+                execution_id: self.key.execution_id.clone(),
+                cursor: 0,
                 kind,
+                idempotency_key: event_id,
                 payload,
-            )
-            .map_err(|error| TurnError::BoundaryControl {
-                message: error.to_string(),
+            };
+            let result = if matches!(
+                boundary.kind,
+                TurnBoundaryKind::Terminal {
+                    reason: kolyan_core::TurnEndReason::Cancelled
+                }
+            ) {
+                self.ledger.append(event)
+            } else {
+                self.ledger.append_unless_cancelled(event)
+            };
+            result.map_err(|error| match error {
+                kolyan_ledger::LedgerError::Cancelled(_) => TurnError::Cancelled,
+                error => TurnError::BoundaryControl {
+                    message: error.to_string(),
+                },
             })?;
             Ok(())
         })

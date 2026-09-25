@@ -266,7 +266,7 @@ where
         )?;
         // Only the caller that appends the start record may dispatch the effect.
         let event_id = format!("{}/effect/{}/started", key.execution_id, effect.effect_id);
-        match self.ledger.append(LedgerEvent {
+        match self.ledger.append_unless_cancelled(LedgerEvent {
             event_id: event_id.clone(),
             turn_id: key.turn_id.clone(),
             execution_id: key.execution_id.clone(),
@@ -276,6 +276,7 @@ where
             payload: json!({"effect_id": effect.effect_id}),
         }) {
             Ok(_) => {}
+            Err(LedgerError::Cancelled(_)) => return Ok(EffectDisposition::Cancelled),
             Err(LedgerError::Conflict(_)) => {
                 return Ok(self.terminal_effect(key, effect)?.unwrap_or(
                     EffectDisposition::Uncertain {
@@ -289,7 +290,7 @@ where
             EffectOutcome::Completed { receipt, output } => {
                 validate_receipt_status(&receipt, ReceiptStatus::Completed)?;
                 validate_receipt(effect, &grant, &receipt)?;
-                self.append_receipt(key, effect, &receipt)?;
+                self.append_receipt(key, effect, json!({"receipt":receipt,"output":output}))?;
                 self.append_once(
                     key,
                     &format!("effect/{}/completed", effect.effect_id),
@@ -301,7 +302,7 @@ where
             EffectOutcome::Failed { receipt, code } => {
                 validate_receipt_status(&receipt, ReceiptStatus::Failed)?;
                 validate_receipt(effect, &grant, &receipt)?;
-                self.append_receipt(key, effect, &receipt)?;
+                self.append_receipt(key, effect, json!({"receipt":receipt,"code":code}))?;
                 self.append_once(
                     key,
                     &format!("effect/{}/failed", effect.effect_id),
@@ -313,7 +314,7 @@ where
             EffectOutcome::Uncertain { receipt, evidence } => {
                 validate_receipt_status(&receipt, ReceiptStatus::Uncertain)?;
                 validate_receipt(effect, &grant, &receipt)?;
-                self.append_receipt(key, effect, &receipt)?;
+                self.append_receipt(key, effect, json!({"receipt":receipt,"evidence":evidence}))?;
                 self.append_once(
                     key,
                     &format!("effect/{}/uncertain", effect.effect_id),
@@ -329,13 +330,13 @@ where
         &self,
         key: &ExecutionKey,
         effect: &EffectRequest,
-        receipt: &EffectReceipt,
+        payload: Value,
     ) -> Result<(), RuntimeExecutionError> {
         self.append_once(
             key,
             &format!("effect/{}/receipt", effect.effect_id),
             LedgerEventKind::EffectReceipt,
-            json!(receipt),
+            payload,
         )
         .map(|_| ())
     }
@@ -351,6 +352,45 @@ where
             .into_iter()
             .filter(|event| event.execution_id == key.execution_id)
         {
+            if event.event_id == format!("{}/effect/{}/receipt", key.execution_id, effect.effect_id)
+            {
+                let receipt: EffectReceipt =
+                    serde_json::from_value(event.payload["receipt"].clone())
+                        .map_err(|error| RuntimeExecutionError::Invalid(error.to_string()))?;
+                if receipt.input_digest != effect.input_digest
+                    || receipt.effect_id != effect.effect_id
+                {
+                    return Err(RuntimeExecutionError::Invalid(
+                        "receipt identity mismatch".into(),
+                    ));
+                }
+                return Ok(Some(match receipt.status {
+                    ReceiptStatus::Completed => EffectDisposition::Completed {
+                        output: event.payload.get("output").cloned().ok_or_else(|| {
+                            RuntimeExecutionError::Invalid("receipt has no output".into())
+                        })?,
+                    },
+                    ReceiptStatus::Failed => EffectDisposition::Failed {
+                        code: event
+                            .payload
+                            .get("code")
+                            .or_else(|| event.payload.get("error"))
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                RuntimeExecutionError::Invalid("receipt has no failure".into())
+                            })?
+                            .into(),
+                    },
+                    ReceiptStatus::Uncertain => EffectDisposition::Uncertain {
+                        evidence: event.payload["evidence"]
+                            .as_str()
+                            .ok_or_else(|| {
+                                RuntimeExecutionError::Invalid("receipt has no evidence".into())
+                            })?
+                            .into(),
+                    },
+                }));
+            }
             if event.event_id
                 == format!("{}/effect/{}/completed", key.execution_id, effect.effect_id)
             {

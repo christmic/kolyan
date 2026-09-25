@@ -127,7 +127,7 @@ fn encode_turn_event(event: &TurnEvent) -> (LedgerEventKind, Value) {
         }
         TurnEvent::StepCompleted { step, .. } => (
             LedgerEventKind::StepCompleted,
-            json!({ "step_id": step.step_id, "outcome": format!("{:?}", step.outcome) }),
+            json!({ "step_id": step.step_id, "outcome": format!("{:?}", step.outcome), "step": step }),
         ),
         TurnEvent::ToolCallRequested { call, .. } => (
             LedgerEventKind::ToolCallRequested,
@@ -143,7 +143,7 @@ fn encode_turn_event(event: &TurnEvent) -> (LedgerEventKind, Value) {
         ),
         TurnEvent::ToolResult { result, .. } => (
             LedgerEventKind::ToolExecutionCompleted,
-            json!({ "call_id": result.call_id, "is_error": result.is_error }),
+            json!({ "call_id": result.call_id, "is_error": result.is_error, "result": result }),
         ),
         TurnEvent::ToolExecutionFailed {
             call_id,

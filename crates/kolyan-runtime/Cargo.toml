@@ -11,6 +11,7 @@ workspace = true
 kolyan-core = { path = "../kolyan-core" }
 kolyan-ledger = { path = "../kolyan-ledger" }
 kolyan-model = { path = "../kolyan-model" }
+kolyan-policy = { path = "../kolyan-policy" }
 kolyan-trace = { path = "../kolyan-trace" }
 kolyan-types = { path = "../kolyan-types" }
 serde_json.workspace = true
