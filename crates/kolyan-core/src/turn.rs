@@ -264,6 +264,7 @@ pub enum TurnEndReason {
     TimedOut,
     ApprovalRejected,
     ApprovalExpired,
+    NoProgress,
 }
 
 impl TurnState {
@@ -370,20 +371,37 @@ pub type TurnEventStream<'a> =
 
 type EventQueue = Arc<Mutex<VecDeque<Result<TurnEvent, TurnError>>>>;
 
+/// Commits execution facts before the loop advances. Unlike an observer, a
+/// recording failure stops execution; implementations must not execute tools.
+pub trait TurnEventRecorder: Send + Sync {
+    fn record(&self, event: &TurnEvent) -> Result<(), TurnError>;
+
+    /// Capture the actual Step input before invoking the model. Credentials are
+    /// owned by Provider configuration and are not part of this request.
+    fn record_request(&self, _request: &ModelRequest) -> Result<(), TurnError> {
+        Ok(())
+    }
+}
+
 struct EventEmitter {
     events: Mutex<Vec<TurnEvent>>,
     queue: Option<EventQueue>,
+    recorder: Option<Arc<dyn TurnEventRecorder>>,
 }
 
 impl EventEmitter {
-    fn new(queue: Option<EventQueue>) -> Self {
+    fn new(queue: Option<EventQueue>, recorder: Option<Arc<dyn TurnEventRecorder>>) -> Self {
         Self {
             events: Mutex::new(Vec::new()),
             queue,
+            recorder,
         }
     }
 
-    fn emit(&self, event: TurnEvent) {
+    fn emit(&self, event: TurnEvent) -> Result<(), TurnError> {
+        if let Some(recorder) = &self.recorder {
+            recorder.record(&event)?;
+        }
         if let Some(queue) = &self.queue {
             queue
                 .lock()
@@ -391,6 +409,7 @@ impl EventEmitter {
                 .push_back(Ok(event.clone()));
         }
         self.events.lock().expect("turn events lock").push(event);
+        Ok(())
     }
 
     fn into_events(self) -> Vec<TurnEvent> {
@@ -426,6 +445,8 @@ pub enum TurnOutcome {
 
 #[derive(Debug, Error)]
 pub enum TurnError {
+    #[error("turn stopped for no progress: repeated tool {tool_name}")]
+    NoProgress { tool_name: String },
     #[error("turn boundary control failed: {message}")]
     BoundaryControl { message: String },
     #[error("turn request is invalid: {message}")]
@@ -449,6 +470,7 @@ pub enum TurnError {
 impl TurnError {
     pub fn end_reason(&self) -> TurnEndReason {
         match self {
+            Self::NoProgress { .. } => TurnEndReason::NoProgress,
             Self::Cancelled => TurnEndReason::Cancelled,
             Self::TimedOut => TurnEndReason::TimedOut,
             Self::MaxSteps => TurnEndReason::MaxSteps,
@@ -484,6 +506,20 @@ pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolErr
 
 pub trait ToolExecutor: Send + Sync {
     fn execute(&self, call: ToolCall) -> ToolFuture<'_>;
+
+    /// Invocation identity is stable across approval recovery. Adapters may use
+    /// it for receipts without making Core depend on storage.
+    fn execute_invocation(
+        &self,
+        _step_id: String,
+        call: ToolCall,
+        grant: Option<ExecutionGrant>,
+    ) -> ToolFuture<'_> {
+        match grant {
+            Some(grant) => self.execute_with_grant(call, grant),
+            None => self.execute(call),
+        }
+    }
 
     fn execute_with_grant(&self, call: ToolCall, _grant: ExecutionGrant) -> ToolFuture<'_> {
         self.execute(call)
@@ -624,6 +660,7 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     tool_timeout: Option<Duration>,
     policy_engine: Option<Arc<PolicyEngine>>,
     boundary_control: Option<Arc<dyn TurnBoundaryControl>>,
+    event_recorder: Option<Arc<dyn TurnEventRecorder>>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -635,11 +672,28 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             tool_timeout: None,
             policy_engine: None,
             boundary_control: None,
+            event_recorder: None,
         }
     }
 }
 
 impl<P, T: ToolExecutor> TurnExecutor<P, T> {
+    /// Wrap tool execution while retaining the configured model and policy.
+    pub fn map_tool_executor<U: ToolExecutor>(
+        self,
+        wrap: impl FnOnce(T) -> U,
+    ) -> TurnExecutor<P, U> {
+        TurnExecutor {
+            step_executor: self.step_executor,
+            tool_executor: wrap(self.tool_executor),
+            tool_dispatch: self.tool_dispatch,
+            tool_timeout: self.tool_timeout,
+            policy_engine: self.policy_engine,
+            boundary_control: self.boundary_control,
+            event_recorder: self.event_recorder,
+        }
+    }
+
     pub fn with_tools(provider: P, tool_executor: T) -> Self {
         Self {
             step_executor: StepExecutor::new(provider),
@@ -648,6 +702,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_timeout: None,
             policy_engine: None,
             boundary_control: None,
+            event_recorder: None,
         }
     }
 
@@ -659,6 +714,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             tool_timeout: None,
             policy_engine: None,
             boundary_control: None,
+            event_recorder: None,
         }
     }
 
@@ -674,6 +730,11 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 
     pub fn with_boundary_control(mut self, control: Arc<dyn TurnBoundaryControl>) -> Self {
         self.boundary_control = Some(control);
+        self
+    }
+
+    pub fn with_event_recorder(mut self, recorder: Arc<dyn TurnEventRecorder>) -> Self {
+        self.event_recorder = Some(recorder);
         self
     }
 

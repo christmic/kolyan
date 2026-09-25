@@ -13,6 +13,6 @@ pub use turn::{
     ToolDispatchMode, ToolDispatchPolicy, ToolDispatchResult, ToolError, ToolErrorPolicy,
     ToolExecutor, ToolFuture, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
     TurnBoundaryKind, TurnConfig, TurnContinuation, TurnControl, TurnEndReason, TurnError,
-    TurnEvent, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest, TurnResult,
-    TurnState,
+    TurnEvent, TurnEventRecorder, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome,
+    TurnRequest, TurnResult, TurnState,
 };

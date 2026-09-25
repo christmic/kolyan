@@ -2,6 +2,33 @@ use super::*;
 use kolyan_model::{ModelRef, ModelResponse, StopReason, TokenUsage};
 use serde_json::json;
 
+#[tokio::test]
+async fn failed_fact_recording_prevents_model_invocation() {
+    struct NeverProvider;
+    impl ModelProvider for NeverProvider {
+        fn stream(&self, _: ModelRequest) -> kolyan_model::ProviderFuture<'_> {
+            panic!("model must not run after failed fact recording")
+        }
+    }
+    struct BrokenRecorder;
+    impl TurnEventRecorder for BrokenRecorder {
+        fn record(&self, _: &TurnEvent) -> Result<(), TurnError> {
+            Err(TurnError::BoundaryControl {
+                message: "disk unavailable".into(),
+            })
+        }
+    }
+    let result = TurnExecutor::new(NeverProvider)
+        .with_event_recorder(Arc::new(BrokenRecorder))
+        .start_resumable(TurnRequest {
+            turn_id: "record-failure".into(),
+            model_request: state().model_request,
+            config: TurnConfig::default(),
+        })
+        .await;
+    assert!(matches!(result, Err(TurnError::BoundaryControl { .. })));
+}
+
 fn state() -> RunState {
     let request = TurnRequest {
         turn_id: "checkpoint".into(),

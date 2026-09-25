@@ -1,5 +1,8 @@
 //! Static tool capability ceilings and per-invocation policy decisions.
 
+mod progress;
+pub use progress::ProgressPolicy;
+
 use kolyan_model::ToolCall;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
@@ -282,6 +285,7 @@ pub struct PolicyEngine {
     manifests: HashMap<String, ToolManifest>,
     denied_tools: BTreeSet<String>,
     workspace: Option<PathScope>,
+    progress: Option<ProgressPolicy>,
 }
 
 impl PolicyEngine {

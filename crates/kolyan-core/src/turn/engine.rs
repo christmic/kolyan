@@ -9,6 +9,7 @@ pub(super) struct PendingTools {
 pub(super) struct RunState {
     pub turn_id: String,
     pub model_request: ModelRequest,
+    input_message_count: usize,
     pub steps: Vec<StepResult>,
     pub config: TurnConfig,
     pub deadline: Option<Instant>,
@@ -30,6 +31,7 @@ impl RunState {
         validate_request(&request)?;
         Ok(Self {
             turn_id: request.turn_id,
+            input_message_count: request.model_request.messages.len(),
             model_request: request.model_request,
             steps: Vec::new(),
             config: request.config,
@@ -92,6 +94,12 @@ impl RunState {
         }
         Ok(Self {
             turn_id: c.turn_id.clone(),
+            input_message_count: c.model_request.messages.len().saturating_sub(
+                c.steps[..c.steps.len() - 1]
+                    .iter()
+                    .map(|step| 1 + tool_calls(&step.response.content).len())
+                    .sum::<usize>(),
+            ),
             model_request: c.model_request.clone(),
             steps: c.steps.clone(),
             config: TurnConfig {
@@ -239,11 +247,11 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         suspend: bool,
         queue: Option<EventQueue>,
     ) -> Result<ResumableTurn, TurnError> {
-        let events = EventEmitter::new(queue);
+        let events = EventEmitter::new(queue, self.event_recorder.clone());
         if !state.resumed {
             events.emit(TurnEvent::Started {
                 turn_id: state.turn_id.clone(),
-            });
+            })?;
         }
         match self.drive(&mut state, &control, suspend, &events).await {
             Ok(DriveExit::Suspended(approval)) => Ok(ResumableTurn::AwaitingApproval(approval)),
@@ -256,7 +264,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             Err(error) => {
                 // Do not wait on the control adapter again after cancellation,
                 // timeout or adapter failure. Runtime commits this terminal result.
-                events.emit(terminal_event(&state.turn_id, &error));
+                events.emit(terminal_event(&state.turn_id, &error))?;
                 Err(error)
             }
         }
@@ -308,8 +316,11 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             events.emit(TurnEvent::StepStarted {
                 turn_id: state.turn_id.clone(),
                 step_id: step_id.clone(),
-            });
+            })?;
             let step_control = StepControl::default();
+            if let Some(recorder) = &self.event_recorder {
+                recorder.record_request(&state.model_request)?;
+            }
             let step_future = self.step_executor.execute_with_control(
                 StepRequest {
                     step_id,
@@ -335,7 +346,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             events.emit(TurnEvent::StepCompleted {
                 turn_id: state.turn_id.clone(),
                 step: step.clone(),
-            });
+            })?;
             if step.outcome != StepOutcome::ToolCalls {
                 let (outcome, reason) = outcome_from_step(&step);
                 return self.complete(state, control, events, outcome, reason).await;
@@ -362,7 +373,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         events.emit(TurnEvent::Completed {
             turn_id: state.turn_id.clone(),
             outcome: outcome.clone(),
-        });
+        })?;
         Ok(DriveExit::Completed(Box::new(TurnResult {
             turn_id: state.turn_id.clone(),
             outcome,
@@ -379,6 +390,18 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         events: &EventEmitter,
     ) -> Result<Option<ApprovalRequest>, TurnError> {
         let pending = state.pending.as_ref().expect("pending tools");
+        if let Some(policy) = &self.policy_engine
+            && let Some(call) = pending.batch.calls().iter().find(|call| {
+                policy.has_no_progress(
+                    call,
+                    &state.model_request.messages[state.input_message_count..],
+                )
+            })
+        {
+            return Err(TurnError::NoProgress {
+                tool_name: call.name.clone(),
+            });
+        }
         if state
             .config
             .max_tool_calls
@@ -413,13 +436,13 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 events.emit(TurnEvent::ToolCallRequested {
                     turn_id: state.turn_id.clone(),
                     call: call.clone(),
-                });
+                })?;
                 events.emit(TurnEvent::ToolExecutionFailed {
                     turn_id: state.turn_id.clone(),
                     call_id: call.id.clone(),
                     name: call.name.clone(),
                     error: error.clone(),
-                });
+                })?;
                 return Err(error.into());
             }
             for item in &plan.decisions {
@@ -450,12 +473,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 events.emit(TurnEvent::ToolCallRequested {
                     turn_id: state.turn_id.clone(),
                     call: call.clone(),
-                });
+                })?;
                 events.emit(TurnEvent::ApprovalRequested {
                     turn_id: state.turn_id.clone(),
                     call_id: call.id.clone(),
                     name: call.name.clone(),
-                });
+                })?;
                 if suspend {
                     return Ok(Some(checkpoint));
                 }

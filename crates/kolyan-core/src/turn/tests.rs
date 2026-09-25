@@ -6,6 +6,55 @@ use kolyan_model::{
 };
 use serde_json::Value;
 
+#[tokio::test]
+async fn no_progress_stops_repeated_tool_results_before_max_steps() {
+    use kolyan_policy::{
+        ApprovalMode, Capability, Effect, Idempotency, PathScope, ProgressPolicy, ToolManifest,
+    };
+    let mut policy = PolicyEngine::default();
+    policy.register(ToolManifest {
+        tool_name: "file.write".into(),
+        capabilities: [Capability::FilesystemWrite].into_iter().collect(),
+        effects: [Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new("safe")],
+        idempotency: Idempotency::NonIdempotent,
+        approval: ApprovalMode::Never,
+    });
+    let policy = policy
+        .with_progress_policy(ProgressPolicy {
+            repeat_limit: 2,
+            polling_tools: Default::default(),
+        })
+        .unwrap();
+    let executor = TurnExecutor::with_tools(
+        MockProvider {
+            stop_reason: StopReason::ToolUse,
+            content: vec![ContentBlock::ToolCall {
+                call: ToolCall {
+                    id: "reused-id".into(),
+                    name: "file.write".into(),
+                    arguments: serde_json::json!({"path":"safe/a","content":"x"}),
+                },
+            }],
+        },
+        MockTool,
+    )
+    .with_policy_engine(Arc::new(policy));
+    let error = executor
+        .execute(TurnRequest {
+            turn_id: "progress".into(),
+            model_request: request(),
+            config: TurnConfig {
+                max_steps: 20,
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(error, TurnError::NoProgress { .. }));
+    assert_eq!(error.end_reason(), TurnEndReason::NoProgress);
+}
+
 struct MockProvider {
     stop_reason: StopReason,
     content: Vec<ContentBlock>,

@@ -22,7 +22,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         events.emit(TurnEvent::ToolCallRequested {
                             turn_id: state.turn_id.clone(),
                             call: call.clone(),
-                        });
+                        })?;
                         let error = ToolError::PolicyDenied {
                             message: item.decision.reason.clone(),
                         };
@@ -81,7 +81,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             Ok(dispatch) => dispatch,
                             Err(error) => {
                                 for result in &stage_results {
-                                    emit_dispatch_result(state, result, events);
+                                    emit_dispatch_result(state, result, events)?;
                                 }
                                 return Err(error);
                             }
@@ -90,9 +90,9 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             && let Err(error) = &dispatch.result
                         {
                             for result in &stage_results {
-                                emit_dispatch_result(state, result, events);
+                                emit_dispatch_result(state, result, events)?;
                             }
-                            emit_dispatch_result(state, &dispatch, events);
+                            emit_dispatch_result(state, &dispatch, events)?;
                             return Err(error.clone().into());
                         }
                         stage_results.push(dispatch);
@@ -119,7 +119,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     }
                     if let Some(error) = admission_error {
                         for result in &stage_results {
-                            emit_dispatch_result(state, result, events);
+                            emit_dispatch_result(state, result, events)?;
                         }
                         return Err(error);
                     }
@@ -129,14 +129,14 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             .find_map(|result| result.result.as_ref().err())
                     {
                         for result in &stage_results {
-                            emit_dispatch_result(state, result, events);
+                            emit_dispatch_result(state, result, events)?;
                         }
                         return Err(error.clone().into());
                     }
                 }
             }
             for result in &stage_results {
-                emit_dispatch_result(state, result, events);
+                emit_dispatch_result(state, result, events)?;
             }
             results.extend(stage_results);
         }
@@ -162,7 +162,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             call_id: call.id.clone(),
                             name: call.name.clone(),
                             error: error.clone(),
-                        });
+                        })?;
                     }
                     let result = ToolResult {
                         call_id: call.id.clone(),
@@ -172,7 +172,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     events.emit(TurnEvent::ToolResult {
                         turn_id: state.turn_id.clone(),
                         result: result.clone(),
-                    });
+                    })?;
                     result
                 }
             };
@@ -209,22 +209,17 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             events.emit(TurnEvent::ToolCallRequested {
                 turn_id: state.turn_id.clone(),
                 call: call.clone(),
-            });
+            })?;
         }
         events.emit(TurnEvent::ToolExecutionStarted {
             turn_id: state.turn_id.clone(),
             call_id: call.id.clone(),
             name: call.name.clone(),
-        });
+        })?;
         let execute = async {
-            match grant {
-                Some(grant) => {
-                    self.tool_executor
-                        .execute_with_grant(call.clone(), grant)
-                        .await
-                }
-                None => self.tool_executor.execute(call.clone()).await,
-            }
+            self.tool_executor
+                .execute_invocation(state.step_id(), call.clone(), grant)
+                .await
         };
         let tool_limit = state.tool_timeout.map(|timeout| Instant::now() + timeout);
         let deadline = match (state.deadline, tool_limit) {
@@ -258,14 +253,18 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             result,
         };
         if let Err(error) = state.check(control) {
-            emit_dispatch_result(state, &dispatch, events);
+            emit_dispatch_result(state, &dispatch, events)?;
             return Err(error);
         }
         Ok(dispatch)
     }
 }
 
-fn emit_dispatch_result(state: &RunState, result: &ToolDispatchResult, events: &EventEmitter) {
+fn emit_dispatch_result(
+    state: &RunState,
+    result: &ToolDispatchResult,
+    events: &EventEmitter,
+) -> Result<(), TurnError> {
     let call = state
         .pending
         .as_ref()
