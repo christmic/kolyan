@@ -1,6 +1,48 @@
 use super::*;
 
 #[test]
+fn official_optional_incomplete_reasons_remain_incomplete() {
+    for reason in [Value::Null, json!("max_messages"), json!("steered")] {
+        let response = map_incomplete_response(
+            &json!({"id":"r", "status":"incomplete", "output":[],
+            "incomplete_details":{"reason":reason}}),
+            &kolyan_model::ModelRef::new("fixture", "model"),
+        )
+        .unwrap();
+        assert!(matches!(response.stop_reason, StopReason::Other(_)));
+    }
+}
+
+#[test]
+fn intermediate_empty_done_does_not_override_final_tool_arguments() {
+    let model = kolyan_model::ModelRef::new("fixture", "model");
+    let event = serde_json::from_value(json!({"type":"response.output_item.done", "output_index":0,
+        "item":{"type":"function_call","id":"item","call_id":"call","name":"write","arguments":""}})).unwrap();
+    assert!(matches!(
+        map_event(event, &model).unwrap(),
+        ModelEvent::Provider(_)
+    ));
+    let event = serde_json::from_value(json!({"type":"response.completed", "response":{"id":"r", "status":"completed", "output":[
+        {"type":"function_call","id":"item","call_id":"call","name":"write","arguments":"{\"path\":\"safe/a\"}"}
+    ]}})).unwrap();
+    let events = finalized_call_events(map_event(event, &model));
+    assert!(
+        matches!(&events[0], Ok(ModelEvent::ToolCallCompleted(call)) if call.arguments["path"] == "safe/a")
+    );
+    assert!(matches!(&events[1], Ok(ModelEvent::Completed(_))));
+    let invalid = serde_json::from_value(
+        json!({"type":"response.completed", "response":{"id":"r", "status":"completed", "output":[
+            {"type":"function_call","id":"item","call_id":"call","name":"write","arguments":""}
+        ]}}),
+    )
+    .unwrap();
+    assert!(
+        map_event(invalid, &model).is_err(),
+        "final validation must remain strict"
+    );
+}
+
+#[test]
 fn terminal_does_not_poll_or_wait_for_the_next_network_event() {
     use futures_util::FutureExt;
     let response = map_response(

@@ -84,6 +84,8 @@ impl ModelProvider for OpenAiProvider {
                     map_stream_event(event, &model_for_map, &mut call_ids)
                 })
             });
+            let mapped =
+                mapped.flat_map(|event| futures_util::stream::iter(finalized_call_events(event)));
             let stream = require_terminal(mapped);
             let stream = stream.map(move |event| {
                 event.and_then(|event| {
@@ -363,34 +365,17 @@ fn map_event(
                 }))
             }),
         "response.output_item.done" => {
-            // Only function_call items produce a ToolCallCompleted. Other
-            // item types (message, reasoning, ...) silently close as
-            // Provider metadata — without this guard, message items were
-            // being mapped to ToolCallCompleted with empty name/arguments,
-            // which broke `aggregate_stream`'s first-call-wins assumption.
-            let item = event.fields.get("item");
-            let is_function_call = item
-                .and_then(Value::as_object)
-                .and_then(|i| i.get("type"))
-                .and_then(Value::as_str)
-                == Some("function_call");
-            if is_function_call {
-                item.map(map_tool_call)
-                    .transpose()?
-                    .map(ModelEvent::ToolCallCompleted)
-                    .ok_or_else(|| provider_error("missing function call item"))
-            } else {
-                let completed_text_item = item.is_some_and(|item| {
-                    item.get("type").and_then(Value::as_str) == Some("message")
-                        && item.get("status").and_then(Value::as_str) == Some("completed")
-                });
-                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: "openai".into(),
-                    raw: Some(
-                        json!({"completed_text_item": completed_text_item, "fields": event.fields}),
-                    ),
-                }))
-            }
+            // Official ResponseStreamState retains this raw item and parses the
+            // response.completed output, which can supersede an earlier item.
+            // Do not expose executable calls or parse partial arguments here.
+            let completed_text_item = event
+                .fields
+                .get("item")
+                .is_some_and(|item| item["type"] == "message" && item["status"] == "completed");
+            Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                provider: "openai".into(),
+                raw: Some(json!({"completed_text_item":completed_text_item,"fields":event.fields})),
+            }))
         }
         "response.completed" => event
             .fields
@@ -442,6 +427,23 @@ fn map_event(
     }
 }
 
+/// Neutral completed calls are derived from the authoritative, validated final
+/// response, not from provider-specific intermediate item snapshots.
+fn finalized_call_events(
+    event: Result<ModelEvent, ProviderError>,
+) -> Vec<Result<ModelEvent, ProviderError>> {
+    let mut events = Vec::new();
+    if let Ok(ModelEvent::Completed(response)) = &event {
+        for block in &response.content {
+            if let ContentBlock::ToolCall { call } = block {
+                events.push(Ok(ModelEvent::ToolCallCompleted(call.clone())));
+            }
+        }
+    }
+    events.push(event);
+    events
+}
+
 fn map_response(
     value: &Value,
     model: &kolyan_model::ModelRef,
@@ -484,15 +486,22 @@ fn map_response(
     })
 }
 
-/// Like [`map_response`] but for `response.incomplete` frames. Forces
-/// `stop_reason = MaxOutputTokens` when the body carries
-/// `incomplete_details.reason = "max_output_tokens"`; unknown or missing
-/// reasons fail closed. Output content (text / reasoning / tool calls) is
-/// preserved from the partial response.
+/// The official Response.incomplete_details and its reason are optional.
+/// Preserve unknown reasons as Incomplete, never turn them into a final answer.
 fn map_incomplete_response(
     value: &Value,
     model: &kolyan_model::ModelRef,
 ) -> Result<ModelResponse, ProviderError> {
+    if value
+        .get("id")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+        || !value.get("output").is_some_and(Value::is_array)
+    {
+        return Err(provider_error(
+            "incomplete response requires an id and output array",
+        ));
+    }
     let mut response = map_response(value, model)?;
     let stop = value
         .get("incomplete_details")
@@ -501,11 +510,8 @@ fn map_incomplete_response(
     response.stop_reason = match stop {
         Some("max_output_tokens") => StopReason::MaxOutputTokens,
         Some("content_filter") => StopReason::Refusal,
-        _ => {
-            return Err(provider_error(
-                "incomplete response has no supported stop reason",
-            ));
-        }
+        Some(reason) => StopReason::Other(format!("incomplete:{reason}")),
+        None => StopReason::Other("incomplete".into()),
     };
     Ok(response)
 }

@@ -200,3 +200,32 @@ Kolyan protocol/provider 路径，不重新请求厂商。逐份核对：
 收尾版本的全模型工具身份真实矩阵：19 passed / 0 failed / 0 skipped，耗时
 28.11 秒；证据目录 `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-tr1d9Z/`，
 日志 `/tmp/kolyan-provider-tool-identity.log`。每行均有请求、完整 Step 事件流与汇总状态。
+
+## R1–R5 收尾新增的 SDK 机制对照
+
+MiniMax 的真实工具响应暴露了本地过早解析：`output_item.done.arguments`
+为空，但后续 arguments delta 和 `response.completed.output` 包含完整 JSON。
+本地官方 openai-python（69a2c1db，3.16.2）独立调用 3 次均复现该顺序。
+其 `_responses.py` 累积中间事件，并以响应级完成对象确定最终结果；未声明 strict
+的工具也不会在该中间事件强制做 JSON 参数解析。
+
+整改：中间 item.done 保留为 Provider 事件；在合法 response.completed 中严格校验
+最终工具身份和 JSON 对象，再发布 ToolCallCompleted。没有补空对象、修 JSON 或
+合成完成。新增离线回归及真实 Server 审批恢复场景覆盖此事件顺序。
+
+另外，官方 `IncompleteDetails.reason` 为 Optional，且包含 max_messages、steered。
+合法 response.incomplete 缺少原因或带其他原因时映射为中立 Incomplete，而不是
+协议解码失败或 FinalAnswer；缺少响应身份/输出数组的畸形响应仍拒绝。
+
+诊断脚本：`tests/provider/sdk_tool_reference.py`（位于 integration-tests crate），
+使用官方本地 SDK，禁用自动重试，记录脱敏 HTTP 信息、实际请求、原始响应和事件。
+三次独立诊断不是重试通过阈值。证据目录：
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-sdk-tool-s7j9b17x/`。
+首例实际 max_output_tokens 为配置的 1024，输出 42 tokens、状态 completed；
+不是 token 截断导致的空参数，不能靠增加预算解释或修复。
+
+本轮 Provider/Step 76 行复验仍为 44 Passed / 13 Failed / 19 Skipped / 0 NotRun；
+失败均为结构化输出 schema 不匹配，未静默省略所请求的结构化约束。
+证据目录：`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-wfMItV/`；
+日志 `/tmp/kolyan-r1-live-final.log`。这是包含最终工具参数修复的快照，
+不包含随后新增的 incomplete 可选原因映射；后者另有确定性回归。
