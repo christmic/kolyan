@@ -1,0 +1,30 @@
+{
+  "ledger_path": ".kolyan/ledger.sqlite",
+  "session_root": ".kolyan/sessions",
+  "workspace": ".",
+  "tool_scope": "safe",
+  "protocol": "openai_responses",
+  "base_url": "https://api.openai.com",
+  "api_key_env": "KOLYAN_PROVIDER_API_KEY",
+  "timeout_secs": 120,
+  "max_steps": 12,
+  "max_tool_calls": 12,
+  "progress": {"repeat_limit": 2, "polling_tools": ["file.read"]},
+  "parameter_table": {
+    "provider": "example",
+    "protocol": "openai_responses",
+    "features": ["text_input", "text_output", "streaming", "tool_use"],
+    "defaults": {
+      "max_output_tokens": {"support": "supported", "schema": {"type": "integer", "minimum": 1}, "default": 4096},
+      "tool_choice": {"support": "supported", "schema": {"enum": ["auto", "none", "required"]}}
+    },
+    "models": {"replace-with-verified-model": {}}
+  },
+  "request": {
+    "request_id": "template",
+    "model": {"provider": "example", "model": "replace-with-verified-model"},
+    "system": [], "messages": [], "tools": [], "tool_choice": "auto",
+    "output_format": null, "prompt_cache": null, "reasoning": null,
+    "max_output_tokens": 4096, "extensions": {}
+  }
+}

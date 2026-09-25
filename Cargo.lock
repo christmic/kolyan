@@ -892,6 +892,7 @@ dependencies = [
  "kolyan-core",
  "kolyan-ledger",
  "kolyan-model",
+ "kolyan-policy",
  "kolyan-trace",
  "kolyan-types",
  "serde",
@@ -921,8 +922,25 @@ dependencies = [
 name = "kolyan-server-service"
 version = "0.1.0"
 dependencies = [
+ "futures-util",
+ "kolyan-core",
  "kolyan-ledger",
+ "kolyan-model",
+ "kolyan-policy",
+ "kolyan-protocol-anthropic",
+ "kolyan-protocol-openai",
+ "kolyan-provider-anthropic",
+ "kolyan-provider-openai",
+ "kolyan-runtime",
  "kolyan-server",
+ "kolyan-storage",
+ "kolyan-tools",
+ "kolyan-trace",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "toml",
 ]
 
 [[package]]

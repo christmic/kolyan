@@ -1,0 +1,5 @@
+[
+  {"phase":"before_effect", "side_effect":false, "receipt":false, "outcome":"uncertain"},
+  {"phase":"before_receipt", "side_effect":true, "receipt":false, "outcome":"uncertain"},
+  {"phase":"after_receipt", "side_effect":true, "receipt":true, "outcome":"completed"}
+]

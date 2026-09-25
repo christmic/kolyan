@@ -14,3 +14,26 @@ path = "src/main.rs"
 [dependencies]
 kolyan-server = { path = "../../crates/kolyan-server" }
 kolyan-ledger = { path = "../../crates/kolyan-ledger" }
+kolyan-core = { path = "../../crates/kolyan-core" }
+kolyan-model = { path = "../../crates/kolyan-model" }
+kolyan-policy = { path = "../../crates/kolyan-policy" }
+kolyan-tools = { path = "../../crates/kolyan-tools" }
+kolyan-storage = { path = "../../crates/kolyan-storage" }
+kolyan-trace = { path = "../../crates/kolyan-trace" }
+kolyan-protocol-openai = { path = "../../crates/kolyan-protocol-openai" }
+kolyan-protocol-anthropic = { path = "../../crates/kolyan-protocol-anthropic" }
+kolyan-provider-openai = { path = "../../crates/kolyan-provider-openai" }
+kolyan-provider-anthropic = { path = "../../crates/kolyan-provider-anthropic" }
+serde.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync"] }
+
+[dev-dependencies]
+kolyan-runtime = { path = "../../crates/kolyan-runtime" }
+tempfile = "3"
+toml = "0.8"
+futures-util.workspace = true
+
+[[test]]
+name = "server_process"
+path = "../../crates/kolyan-integration-tests/tests/server/process.rs"

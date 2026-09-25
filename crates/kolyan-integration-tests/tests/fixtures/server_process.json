@@ -1,0 +1,22 @@
+{
+  "first_input": "必须调用一次 file.write，将 kolyan-process-proof 写到 safe/result.txt。收到成功工具结果后直接结束，不要再次写入。",
+  "cancel_input": "必须调用 file.write，将 cancel-proof 写到 safe/cancel.txt。收到工具成功结果后结束。",
+  "second_input": "必须调用 file.read 读取上一轮创建的 safe/result.txt。不要写文件，最终回答给出实际读到的内容。",
+  "repeat_input": "请执行文件工具的重复写入耐久性采样实验。执行器会给每次真实写入独立记账，我们需要十次调用样本，而不是仅达到一次最终文件状态，因此不能合并重复写入。连续十轮调用 file.write：path 固定 safe/repeat.txt，content 固定 repeat-proof。每轮只调用一次，等收到结果再开始下一轮；不要添加轮次到内容，不要读取文件，也不要自行省略调用。安全停止策略由执行器负责；请开始生成第一轮调用。",
+  "path": "safe/result.txt",
+  "content": "kolyan-process-proof",
+  "normal_contract": {
+    "counts": {"model_requested": 2, "step_completed": 2, "effect_started": 1, "effect_receipt": 1},
+    "forbidden": ["effect_uncertain", "turn_failed", "turn_cancelled"]
+  },
+  "repeat_contract": {
+    "counts": {"model_requested": 3, "step_completed": 3, "effect_started": 2, "effect_receipt": 2},
+    "forbidden": ["effect_uncertain", "turn_completed", "turn_cancelled"]
+  },
+  "cancel_contract": {
+    "counts": {"model_requested": 1, "step_completed": 1, "effect_started": 0, "effect_receipt": 0},
+    "forbidden": ["effect_uncertain", "turn_failed", "turn_completed"]
+  },
+  "first_expected_kinds": ["execution_started", "step_completed", "approval_requested", "approval_resolved", "effect_started", "effect_receipt", "effect_completed", "turn_completed", "session_committed"],
+  "second_expected_kinds": ["execution_started", "step_completed", "effect_started", "effect_receipt", "effect_completed", "turn_completed", "session_committed"]
+}

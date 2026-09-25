@@ -401,3 +401,35 @@ there is no automatic retry of a failed model contract.
 
 This matrix does not replace Turn, Runtime, Session or Server tests. A green
 offline suite does not imply that these live tests have run or passed.
+
+## Server process and crash matrix (R2–R5)
+
+Sources remain in `tests/server/process.rs` and `process_faults.rs`. Cargo registers
+the target in `kolyan-server-service` to supply its freshly built executable.
+The matrix pins one copy of that binary, including all restarted child processes.
+
+```sh
+cargo test -p kolyan-server-service --test server_process -- --nocapture
+cargo test -p kolyan-server-service --test server_process server_process_live_matrix -- --ignored --nocapture
+```
+
+`fixtures/server_process.json` owns the input scenarios, expected event ordering,
+exact counts and forbidden events. The real matrix runs every configured model
+and protocol against approval/restart/two-Turn context, repeated-call governance,
+and approval cancellation. Missing credentials and ordinary Provider failures fail
+the row; independent rows continue. No transparent whole-scenario retries.
+
+The repeat scenario asks the model for independent write samples; the policy must
+stop the third identical call after exactly two executions/receipts. The test does
+not inject tool calls. A model declining that task is a recorded scenario failure,
+not evidence that the governance boundary ran.
+
+Offline process tests add cancellation while HTTP is in flight and three actual
+child-process exits from `fixtures/runtime_crash.json`: before external effect,
+after effect/before receipt, and after receipt/before terminal marker. Recovery
+must return uncertainty or the saved result without repeating the operation.
+
+Artifacts include RPC requests/responses, actual ModelRequest facts, Step content,
+tool output/receipts, ledger JSONL, configuration without credentials, stderr and
+per-row report. These are durable fact-stream tests, not UI token-delta subscription
+tests. A cancelled request alone must not be reported as confirmed stopped.
