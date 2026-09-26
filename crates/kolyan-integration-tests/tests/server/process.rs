@@ -3,6 +3,8 @@
 
 #[path = "../common/mod.rs"]
 mod common;
+#[path = "process_contract.rs"]
+mod contract;
 #[path = "process_faults.rs"]
 mod faults;
 #[path = "../common/matrix.rs"]
@@ -26,6 +28,7 @@ struct Process {
     output: mpsc::Receiver<String>,
     trace: fs::File,
     next_id: u64,
+    directory: PathBuf,
 }
 
 impl Process {
@@ -64,6 +67,7 @@ impl Process {
                 .open(directory.join("rpc.jsonl"))
                 .unwrap(),
             next_id: 0,
+            directory: directory.to_owned(),
         }
     }
 
@@ -105,6 +109,14 @@ impl Drop for Process {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
+        // Preserve facts even when an assertion panics before explicit comparison.
+        // Artifact errors must not replace the original scenario failure.
+        if let Err(error) = contract::save_ledger(&self.directory) {
+            eprintln!(
+                "ledger artifact failed ({}): {error}",
+                self.directory.display()
+            );
+        }
     }
 }
 
@@ -155,6 +167,7 @@ fn compare(process: &mut Process, key: Value, expected: &Value, directory: &Path
         writeln!(file, "{event}").unwrap();
     }
     assert_fact_contract(events, "normal_contract");
+    contract::assert_effects(events, name);
     let mut offset = 0;
     for kind in expected.as_array().unwrap() {
         offset += events[offset..]
@@ -286,6 +299,7 @@ fn repeat_scenario(config: &Path, directory: &Path) {
         writeln!(file, "{event}").unwrap();
     }
     assert_fact_contract(&events, "repeat_contract");
+    contract::assert_effects(&events, "repeat");
     assert_eq!(
         events
             .iter()
