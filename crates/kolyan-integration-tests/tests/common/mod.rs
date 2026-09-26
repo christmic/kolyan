@@ -11,6 +11,10 @@
 // other's perspective. That's expected for a shared helper module.
 #![allow(dead_code)]
 
+mod parameters;
+#[allow(unused_imports)]
+pub use parameters::{parameter_profile, parameter_table};
+
 use std::time::Duration;
 
 use kolyan_model::{

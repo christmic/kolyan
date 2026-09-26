@@ -48,15 +48,57 @@ fn dataset() -> Value {
     serde_json::from_str(include_str!("../fixtures/request_planning.json")).unwrap()
 }
 
+#[test]
+fn verified_model_profiles_select_exact_tool_choice_rules() {
+    for protocol in ["openai_responses", "anthropic_messages"] {
+        for model in [
+            "qwen3.8-max",
+            "qwen3.8-flash",
+            "qwen3.7-plus",
+            "qwen3.7-max",
+        ] {
+            let profile = common::parameter_profile("qwen", protocol, model);
+            let value = common::parameter_table("qwen", protocol, model);
+            let expected = if model == "qwen3.7-max" {
+                "default"
+            } else {
+                "thinking_auto_only"
+            };
+            assert_eq!(profile, expected);
+            let table: ParameterTable = serde_json::from_value(value).unwrap();
+            let planner = kolyan_model::RequestPlanner::new(table, protocol, &[]).unwrap();
+            let mut request = build_request(
+                "qwen",
+                model,
+                &load_fixture("tool_call"),
+                "profile".into(),
+                Some(4096),
+            );
+            request.tool_choice = kolyan_model::ToolChoice::Required;
+            let plan = planner.plan(&request).unwrap();
+            assert_eq!(
+                plan.request.tool_choice,
+                if expected == "default" {
+                    kolyan_model::ToolChoice::Required
+                } else {
+                    kolyan_model::ToolChoice::Auto
+                }
+            );
+        }
+    }
+}
+
 fn table(family: &str, protocol: &str, model: &str, case: &Value) -> ParameterTable {
-    let mut value: Value =
-        serde_json::from_str(include_str!("../config/request-parameters.json")).unwrap();
-    value["provider"] = json!(family);
-    value["protocol"] = json!(protocol);
+    let mut value = common::parameter_table(family, protocol, model);
     if let Some(features) = case.get("features") {
         value["features"] = features.clone();
     }
-    value["models"] = json!({model:{"parameters":case.get("rules").cloned().unwrap_or(json!({}))}});
+    if let Some(overrides) = case["rules"].as_object() {
+        value["models"][model]["parameters"]
+            .as_object_mut()
+            .unwrap()
+            .extend(overrides.clone());
+    }
     serde_json::from_value(value).unwrap()
 }
 
@@ -302,7 +344,19 @@ async fn parameter_policy_live_matrix() {
                     )
                     .unwrap();
                     let provider = provider.configure(table).unwrap();
-                    let response = collect(&provider, request, &directory, case).await.unwrap();
+                    let mut expectations = case.clone();
+                    if let Some(by_profile) = case.get("decisions_by_profile") {
+                        expectations["decisions"] = by_profile
+                            [common::parameter_profile(family, protocol, &entry.model)]
+                        .clone();
+                        assert!(
+                            expectations["decisions"].is_object(),
+                            "missing profile expectations"
+                        );
+                    }
+                    let response = collect(&provider, request, &directory, &expectations)
+                        .await
+                        .unwrap();
                     assert_expectations(
                         &response,
                         &fixture.expectations,

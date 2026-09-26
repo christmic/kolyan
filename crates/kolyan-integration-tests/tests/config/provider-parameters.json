@@ -1,0 +1,18 @@
+{
+  "profiles": {
+    "default": {"parameters": {}},
+    "thinking_auto_only": {
+      "parameters": {
+        "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}, "fallback":"auto_or_omit"}
+      }
+    }
+  },
+  "bindings": {
+    "qwen/openai_responses/qwen3.8-max": "thinking_auto_only",
+    "qwen/openai_responses/qwen3.8-flash": "thinking_auto_only",
+    "qwen/openai_responses/qwen3.7-plus": "thinking_auto_only",
+    "qwen/anthropic_messages/qwen3.8-max": "thinking_auto_only",
+    "qwen/anthropic_messages/qwen3.8-flash": "thinking_auto_only",
+    "qwen/anthropic_messages/qwen3.7-plus": "thinking_auto_only"
+  }
+}

@@ -5,6 +5,7 @@
   "repeat_input": "请在本次任务内自动连续完成文件工具的十次重复写入耐久性采样。执行器会给每次真实写入独立记账，因此不能将十次调用合并成一次文件状态变更。每次调用 file.write，path 固定 safe/repeat.txt，content 固定 repeat-proof；一次只调用一次，收到成功工具结果后立即生成下一次调用。十次完成前不要输出最终回答、不要等待用户再次指示、不要读取文件或修改参数。外部执行器可能提前按安全策略停止测试；你只需依次产生真实调用。现在开始并持续执行。",
   "path": "safe/result.txt",
   "content": "kolyan-process-proof",
+  "request_overrides": {"no_progress": {"tool_choice": "required"}},
   "effects": {
     "turn1": {"input":{"name":"file.write","arguments":{"path":"safe/result.txt","content":"kolyan-process-proof"}},"output":"wrote 20 bytes"},
     "turn2": {"input":{"name":"file.read","arguments":{"path":"safe/result.txt"}},"output":"kolyan-process-proof"},
@@ -15,6 +16,7 @@
     "forbidden": ["effect_uncertain", "turn_failed", "turn_cancelled"]
   },
   "repeat_contract": {
+    "initial_tool_choice": "required",
     "counts": {"model_requested": 3, "step_completed": 3, "effect_started": 2, "effect_receipt": 2},
     "forbidden": ["effect_uncertain", "turn_completed", "turn_cancelled"]
   },

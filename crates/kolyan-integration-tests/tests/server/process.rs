@@ -36,6 +36,7 @@ impl Process {
         let mut child = Command::new(directory.join("server.bin"))
             .env("KOLYAN_SERVER_CONFIG", config)
             .env("KOLYAN_FIXTURE_KEY", "local-fixture-not-a-secret")
+            .env("KOLYAN_DUMP_MODEL_REQUESTS", "1")
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(
@@ -140,11 +141,7 @@ fn config(
         )
         .unwrap();
     }
-    let mut table: Value =
-        serde_json::from_str(include_str!("../config/request-parameters.json")).unwrap();
-    table["provider"] = json!(family);
-    table["protocol"] = json!(protocol);
-    table["models"] = json!({model:{}});
+    let table = common::parameter_table(family, protocol, model);
     let value = json!({
         "ledger_path":directory.join("ledger.sqlite"), "session_root":directory.join("sessions"),
         "workspace":directory.join("workspace"), "tool_scope":"safe", "protocol":protocol,
@@ -272,7 +269,20 @@ fn scenario(config: &Path, directory: &Path) {
 fn repeat_scenario(config: &Path, directory: &Path) {
     let case: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
-    let mut process = Process::start(config, directory);
+    let mut settings: Value = serde_json::from_slice(&fs::read(config).unwrap()).unwrap();
+    for (key, value) in case["request_overrides"]["no_progress"]
+        .as_object()
+        .unwrap()
+    {
+        settings["request"][key] = value.clone();
+    }
+    let scenario_config = directory.join("repeat-server.json");
+    fs::write(
+        &scenario_config,
+        serde_json::to_vec_pretty(&settings).unwrap(),
+    )
+    .unwrap();
+    let mut process = Process::start(&scenario_config, directory);
     process.rpc("session.create", json!({"session_id":"s-repeat"}));
     let key = json!({"session_id":"s-repeat","turn_id":"t3","execution_id":"e3"});
     let mut start = key.clone();
@@ -369,6 +379,13 @@ fn assert_fact_contract(events: &[Value], name: &str) {
     let fixture: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
     let contract = &fixture[name];
+    if let Some(choice) = contract.get("initial_tool_choice") {
+        let first = events
+            .iter()
+            .find(|event| event["kind"] == "model_requested")
+            .unwrap();
+        assert_eq!(&first["payload"]["request"]["tool_choice"], choice);
+    }
     for (kind, count) in contract["counts"].as_object().unwrap() {
         assert_eq!(
             events.iter().filter(|event| event["kind"] == *kind).count() as u64,
