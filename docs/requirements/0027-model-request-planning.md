@@ -34,6 +34,37 @@
 
 ## 验收
 
+### 2026-09-26：tool_choice 的表驱动兼容选择
+
+能力事实复用同一参数规则：support 表示字段是否支持，schema 表示该字段支持哪些
+中立取值；模型级规则覆盖 Provider 默认，不再增加一份厂商名单。
+规则新增显式 `fallback: "auto_or_omit"`。当调用方请求 required 时：
+
+1. 字段及 required 值均支持：保持 required（Anthropic 映射为 any）。
+2. 字段支持、required 不支持但 auto 支持：映射为 auto。
+3. 字段不支持/未知，或无可用兼容值：允许省略时不发送该字段。
+4. 不允许省略且无可用值则本地报错；不会试探性发请求后根据报错重试。
+
+显式降级策略只适用于 required；none 和指定工具不静默放宽。
+未声明 fallback 的规则保持严格约束，避免把硬性工具要求悄悄改成可选。
+处理记录区分 fallback_to_auto 与省略；原请求保留，适配器不得重新补回省略字段。
+这属于 Provider/Model 兼容，不决定每个 Step 的业务意图：Turn 既有首轮选择后
+恢复 Auto 是执行策略，不是厂商能力判断。本变更不将所有 Step 强制成 required，
+也不通过此规则把模型拒绝执行重复测试记作通过。
+
+验收新增 required 支持、仅 auto、字段不支持/未知、禁止省略、显式 none/指定工具
+不降级，以及精确模型覆盖；两套协议捕获实际 HTTP body 验证值和字段缺失。
+真实参数矩阵增加同样的兼容配置场景，不替换既有用例。
+
+项目级已验证差异保存在 integration-tests 的 `tests/config/provider-parameters.json`：
+命名 profile 只保存一次规则，绑定键包含 Provider 接入身份、协议及精确模型。
+当前默认 thinking 模式下，Qwen 的 qwen3.8-max/qwen3.8-flash/qwen3.7-plus
+在两套协议均明确拒绝 required/指定工具，而 auto 成功；qwen3.7-max 则接受 required。
+因此只为有直接响应证据的六个组合配置 auto-only，不按厂商或模型名前缀推断。
+这不是所有 reasoning 模式通用的模型属性；切换接入模式时应使用对应已验证参数表，
+不偷偷关闭 thinking。Server 进程测试和 Provider 参数矩阵共用该配置装配入口。
+场景预期仍在 fixture 中按 profile 定义，配置不保存 API Key 或测试断言。
+
 1. 独立模块单测：覆盖合并、精确身份、未知项、默认值、值域、必需能力、输入不变、
    命名空间、保留字段和扩展冲突；配置失败不得包含参数值。
 2. 数据驱动回环集成：同一场景经两套真实 Provider/HTTP 路径，捕获请求 JSON，

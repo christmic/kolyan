@@ -1,6 +1,134 @@
 use super::*;
 use serde_json::json;
 
+#[test]
+fn tool_choice_compatibility_uses_field_and_value_support_without_mutating_input() {
+    for (support, allowed, expected, action) in [
+        (
+            "supported",
+            json!(["required", "auto"]),
+            ToolChoice::Required,
+            ParameterAction::Sent,
+        ),
+        (
+            "supported",
+            json!(["auto"]),
+            ToolChoice::Auto,
+            ParameterAction::FallbackToAuto,
+        ),
+        (
+            "unsupported",
+            json!(["auto"]),
+            ToolChoice::Auto,
+            ParameterAction::OmittedUnsupported,
+        ),
+        (
+            "unknown",
+            json!(["auto"]),
+            ToolChoice::Auto,
+            ParameterAction::OmittedUnknown,
+        ),
+        (
+            "supported",
+            json!(["none"]),
+            ToolChoice::Auto,
+            ParameterAction::OmittedUnsupported,
+        ),
+    ] {
+        let mut config = table();
+        config.defaults.insert(
+            "tool_choice".into(),
+            serde_json::from_value(json!({
+                "support":support,"schema":{"enum":allowed},"fallback":"auto_or_omit"
+            }))
+            .unwrap(),
+        );
+        let mut input = request();
+        input.tool_choice = ToolChoice::Required;
+        let plan = RequestPlanner::new(config, "fixture", &[])
+            .unwrap()
+            .plan(&input)
+            .unwrap();
+        assert_eq!(input.tool_choice, ToolChoice::Required);
+        assert_eq!(plan.request.tool_choice, expected);
+        assert!(plan.decisions.contains(&ParameterDecision {
+            parameter: "tool_choice".into(),
+            action
+        }));
+        assert_eq!(
+            plan.omitted("tool_choice"),
+            matches!(
+                action,
+                ParameterAction::OmittedUnsupported | ParameterAction::OmittedUnknown
+            )
+        );
+    }
+}
+
+#[test]
+fn model_override_selects_auto_while_provider_default_accepts_required() {
+    let mut config = table();
+    config.defaults.insert(
+        "tool_choice".into(),
+        serde_json::from_value(json!({
+            "support":"supported","schema":{"enum":["auto","required"]},"fallback":"auto_or_omit"
+        }))
+        .unwrap(),
+    );
+    config.models.get_mut("b").unwrap().parameters.insert(
+        "tool_choice".into(),
+        serde_json::from_value(json!({
+            "support":"supported","schema":{"enum":["auto"]},"fallback":"auto_or_omit"
+        }))
+        .unwrap(),
+    );
+    let planner = RequestPlanner::new(config, "fixture", &[]).unwrap();
+    let mut input = request();
+    input.tool_choice = ToolChoice::Required;
+    assert_eq!(
+        planner.plan(&input).unwrap().request.tool_choice,
+        ToolChoice::Required
+    );
+    input.model.model = "b".into();
+    assert_eq!(
+        planner.plan(&input).unwrap().request.tool_choice,
+        ToolChoice::Auto
+    );
+}
+
+#[test]
+fn tool_choice_fallback_does_not_relax_none_named_tools_or_forbidden_omission() {
+    let mut config = table();
+    config.defaults.insert(
+        "tool_choice".into(),
+        serde_json::from_value(json!({
+            "support":"unsupported","fallback":"auto_or_omit","omittable":false
+        }))
+        .unwrap(),
+    );
+    let mut input = request();
+    input.tool_choice = ToolChoice::Required;
+    assert!(
+        RequestPlanner::new(config.clone(), "fixture", &[])
+            .unwrap()
+            .plan(&input)
+            .is_err()
+    );
+    config.defaults.get_mut("tool_choice").unwrap().omittable = true;
+    let planner = RequestPlanner::new(config, "fixture", &[]).unwrap();
+    for choice in [ToolChoice::None, ToolChoice::Tool("read".into())] {
+        input.tool_choice = choice;
+        assert!(planner.plan(&input).is_err());
+    }
+    let mut config = table();
+    config
+        .defaults
+        .get_mut("max_output_tokens")
+        .unwrap()
+        .fallback = ParameterFallback::AutoOrOmit;
+    assert!(RequestPlanner::new(config, "fixture", &[]).is_err());
+}
+
 fn table() -> ParameterTable {
     serde_json::from_value(json!({
         "provider":"vendor", "protocol":"fixture",

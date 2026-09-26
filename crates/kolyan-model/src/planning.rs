@@ -31,10 +31,21 @@ pub enum ParameterSupport {
     Unknown,
 }
 
+/// Explicit compatibility permission; never inferred from a failed HTTP call.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ParameterFallback {
+    #[default]
+    Reject,
+    AutoOrOmit,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ParameterRule {
     pub support: ParameterSupport,
+    #[serde(default)]
+    pub fallback: ParameterFallback,
     #[serde(default = "empty_schema")]
     pub schema: Value,
     #[serde(default)]
@@ -74,6 +85,7 @@ pub enum ParameterAction {
     Defaulted,
     OmittedUnsupported,
     OmittedUnknown,
+    FallbackToAuto,
 }
 
 /// Deliberately excludes values, schemas and defaults, which may contain sensitive data.
@@ -153,8 +165,33 @@ impl RequestPlanner {
         let mut values = BTreeMap::new();
         let mut wire_extensions = Map::new();
         let mut decisions = Vec::new();
-        for (key, input) in inputs {
+        for (key, mut input) in inputs {
             let rule = rules.get(&key);
+            let compatible_choice = key == "tool_choice"
+                && original.tool_choice == ToolChoice::Required
+                && rule.is_some_and(|r| r.fallback == ParameterFallback::AutoOrOmit);
+            let mut fallback_to_auto = false;
+            if compatible_choice
+                && let Some(rule) = rule
+                && rule.support == ParameterSupport::Supported
+                && rules::validate_value(&rule.schema, &input, &key).is_err()
+            {
+                let auto = serde_json::json!("auto");
+                if rules::validate_value(&rule.schema, &auto, &key).is_ok() {
+                    input = auto;
+                    fallback_to_auto = true;
+                } else if rule.omittable {
+                    decisions.push(ParameterDecision {
+                        parameter: key,
+                        action: ParameterAction::OmittedUnsupported,
+                    });
+                    continue;
+                } else {
+                    return Err(unsupported(
+                        "no supported tool_choice value; omission forbidden",
+                    ));
+                }
+            }
             let provided = !input.is_null()
                 || key
                     .strip_prefix("extensions.")
@@ -169,7 +206,9 @@ impl RequestPlanner {
             }
             if support != ParameterSupport::Supported {
                 if rule.is_some_and(|r| !r.omittable)
-                    || (key == "tool_choice" && original.tool_choice != ToolChoice::Auto)
+                    || (key == "tool_choice"
+                        && original.tool_choice != ToolChoice::Auto
+                        && !compatible_choice)
                 {
                     return Err(unsupported(format!(
                         "required parameter unavailable: {key}"
@@ -186,7 +225,9 @@ impl RequestPlanner {
                 continue;
             }
             let rule = rule.expect("supported status requires a rule");
-            let action = if !provided {
+            let action = if fallback_to_auto {
+                ParameterAction::FallbackToAuto
+            } else if !provided {
                 ParameterAction::Defaulted
             } else {
                 ParameterAction::Sent

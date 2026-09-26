@@ -16,7 +16,7 @@
     "features": ["text_input", "text_output", "streaming", "tool_use"],
     "defaults": {
       "max_output_tokens": {"support": "supported", "schema": {"type": "integer", "minimum": 1}, "default": 4096},
-      "tool_choice": {"support": "supported", "schema": {"enum": ["auto", "none", "required"]}}
+      "tool_choice": {"support": "supported", "schema": {"enum": ["auto", "none", "required"]}, "fallback": "auto_or_omit"}
     },
     "models": {"replace-with-verified-model": {}}
   },
