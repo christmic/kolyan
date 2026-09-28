@@ -380,6 +380,16 @@ are NotRun, not success. Tests write requests, effective parameter tables, full 
 decisions and row outcomes to temporary directories. No credential headers are saved.
 This matrix does not replace the strict structured-output tests in R1.
 
+Tool-choice compatibility uses `fallback: "auto_or_omit"` in the same parameter
+rules. Verified deployment differences are in `tests/config/provider-parameters.json`;
+bindings use exact endpoint-family/protocol/model identities and reuse named profiles.
+The three Qwen models with default-thinking restrictions use an auto-only profile
+on both protocols; this is not a claim about all reasoning modes or all Qwen models.
+Fixture expectations are separate and selected by profile. The 5-case live matrix
+also tests intentional auto-only and omitted-field configurations without declaring
+that every deployed model lacks the field. Actual request bodies are diagnostic
+artifacts, never credentials or production Step file output.
+
 ## R1 fail-collecting matrix
 
 ```bash
@@ -433,3 +443,8 @@ Artifacts include RPC requests/responses, actual ModelRequest facts, Step conten
 tool output/receipts, ledger JSONL, configuration without credentials, stderr and
 per-row report. These are durable fact-stream tests, not UI token-delta subscription
 tests. A cancelled request alone must not be reported as confirmed stopped.
+
+Assertions also bind each receipt to an actual model call, compare fixture-owned
+tool arguments and output content, and require the identical result in the next
+ModelRequest. Process cleanup exports `ledger.jsonl` even when an earlier assertion
+fails; this diagnostic output does not turn a failed case into a pass.

@@ -111,3 +111,22 @@
 
 本轮真实网络验收聚焦参数规划后的文本/工具请求，没有把厂商结构化输出问题计为
 通过，也未重跑整个 Session/Server 真实矩阵。相关外部输出契约限制仍见需求 0026。
+
+## tool_choice 补充验收（2026-09-26，归档于 09-28）
+
+- 生产规划器、模型覆盖及负例：模型模块 21/21 通过；新增 3 项测试，旧断言保留。
+- 实际 HTTP 回环矩阵从 31 行增加到 49 行，两协议全部通过；另有精确配置绑定测试。
+  原样检查 required / Anthropic any、降级 auto、字段彻底缺失及拒绝前不发网络。
+- 首轮真实矩阵 89 Passed / 6 Failed：三个 Qwen 模型 × 两协议均明确返回
+  thinking 模式不允许 required/指定工具。未改解析器，依证据补精确接入 profile。
+- 复验 19 组合 × 5 场景 = **95 Passed / 0 Failed / 0 Skipped / 0 NotRun**，
+  181.30 秒。六个组合的 required 意图在 HTTP 之前变为 auto，其余保持 required；
+  配置禁用字段的场景无 tool_choice。原始 HTTP 请求体、决策和实际输出均保存。
+- 全仓检查 **192 Passed / 0 Failed / 31 Ignored**；ignored 不计入通过。
+  生产代码提交 a9060dc，测试/配置提交 563d691；此处不代表架构真实矩阵全部通过。
+
+可打开的本地证据位于被忽略的 `target/acceptance-2026-09-26/`：
+`tool-choice/report.json` 与 `requests-and-results.log` 为复验，
+`tool-choice-initial/` 保留初始六项失败。配置仅反映所测试端点当前默认模式，
+接受参数不等于服务端永远遵守约束：MiniMax 重复写场景仍观察到发送 required 后
+返回纯文本，独立保留为未通过的响应契约证据，不把它伪装成参数规划成功的工具调用。

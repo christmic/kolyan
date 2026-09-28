@@ -1,6 +1,6 @@
 # 0025 架构整改与工程可读性
 
-状态：R0 基线已落地；R1 协议整改已有证据但厂商结构化输出验收未闭合；R2–R5 收尾实现与回归验收中。日期：2026-09-25。
+状态：R0–R5 本轮代码整改已落地；真实验收未全部通过，详见末尾结果；不能宣称 R1–R5 全部验收完成。更新：2026-09-28。
 
 本文件记录当前代码审查后的整改范围、阶段与验收标准，不代表问题已修复。
 工程结构和注释规则的唯一来源是 [代码规范](../architecture/code-conventions.md)。
@@ -258,3 +258,105 @@ Qwen 重复调用的根因仍未确定：已有转储证明部分请求包含工
 [0026 Provider 官方 SDK 对照整改](0026-provider-sdk-conformance.md)，不在这里重复维护。
 已将厂商原生结构化契约失败与本地请求/流映射缺陷区分，未静默降级或放宽验证。
 该工作不代表 R2–R5 完成；这些阶段仍按本文件各项验收要求推进。
+
+## R2–R5 收尾实现（2026-09-25）
+
+以下覆盖此前标记“尚未完成”的代码工作；前面的记录保留为历史快照。
+
+| 范围 | 实现结果 | 验证边界 |
+| --- | --- | --- |
+| R2 逐事件事实 | Core 注入可失败 Recorder；Runtime 记录实际请求、完整 Step、工具结果；审批 attempt 持久唯一 claim | 记录失败阻止继续；Trace 不决定执行是否完成 |
+| R2 工具收据 | 真实 ToolExecutor 使用共享 EffectRequest/Grant/Receipt；结果与收据同次追加 | Started 无收据为 Uncertain，不自动重复执行 |
+| R2 原子准入 | 内存锁、文件 OS 锁、SQLite immediate 事务实现取消检查与准入原子化 | SQLite FULL 同步；文件日志损坏失败关闭，不宣称可自动修复尾部 |
+| R3 会话一致性 | 输入/版本/投影边界冻结；独立文件句柄间加锁；提交 intent 和幂等对账 | 同 Session 串行；重复审批错误不覆盖原执行状态 |
+| R3 上下文 | 会话展示消息与完整模型上下文分离；服务选择 FullTrajectory | 工具调用、结果和模型提供的签名思考保留；不补造未返回内容 |
+| R4 服务闭环 | 实际进程装配 Provider/工具/Runtime/Session；RPC 执行、审批、取消、查询和 cursor 续读 | 本机可信 stdio，非 HTTP/WebSocket；查询耐久事实而非 UI token 推送 |
+| R5 治理 | 策略提供重复阈值及只读轮询豁免；用调用参数和实际结果判断 | 当前 Turn 内、下一批工具准入前检查；不是任意循环自动证明器 |
+
+新增测试未删除或降低原有断言。服务场景输入及事件精确次数、禁止事件见
+`tests/fixtures/server_process.json`；崩溃位置与恢复结果见 `runtime_crash.json`
+（均位于 integration-tests crate）。实际 JSONL 由测试写临时目录。
+
+### 关键修复证据
+
+真实 MiniMax 两轮会话曾因摘要投影遗漏上一轮工具结果而拒绝读文件；服务进程
+现在显式选择完整投影，并验证第二轮实际请求含前一轮 ToolResult。
+重复写场景曾遇到模型认为没有任务价值而不调用工具；保留该失败记录，新增输入
+明确每次调用是独立耐久性采样，执行次数断言不变，不在代码中合成工具调用。
+OpenAI 中间空工具参数及 incomplete 原因可选性的 SDK 对照见 0026，证据不重复维护。
+
+### 确定性验收
+
+- 全仓库统一检查（格式、Clippy、单元/集成测试、构建）：188 Passed / 0 Failed /
+  31 Ignored。日志 `/tmp/kolyan-closure-final-check.log`；Ignored 不计入通过数。
+- 服务进程离线 target：4 Passed / 0 Failed / 1 Ignored；其中一项为崩溃 worker
+  入口，其余测试覆盖多场景。实际三个崩溃点、审批重启双 Turn、运行中取消均执行。
+  日志 `/tmp/kolyan-closure-process-final.log`；主轨迹目录
+  `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-process-offline-VKYJjR/`。
+- 官方 SDK HTTP/SSE 差分 120/120，通过日志 `/tmp/kolyan-closure-sdk-transport.log`。
+  已捕获真实响应回放 38/38，通过日志 `/tmp/kolyan-closure-sdk-replay-v2.log`。
+  初次误选旧非流式捕获目录被测试明确拒绝；使用 capture_format=2 的完整流式证据
+  重新验证，不修改断言。回放通过不意味着原生 schema 能力全部通过。
+
+### 保留的明确边界
+
+服务不是分布式系统，无分布式租约；外部副作用不承诺 exactly-once。
+进程在任意位置被杀后不自动重新执行 claimed attempt；审批检查点可恢复，
+不确定副作用需显式对账。当前事件接口是完整耐久事实的 cursor 查询，不是
+逐 token UI 流。Session 分叉、上下文压缩、网络认证、UI 客户端不在本轮范围。
+R5 在下一批准入边界治理，批次内部的重复调用仍受批次/工具预算约束。
+真实模型的 schema 不合规不能通过删模型、伪造完成、静默重试或放宽断言闭合验收。
+
+### 2026-09-26 复验与轨迹断言补强
+
+环境重启后前一日临时证据已清理；上述路径是历史运行记录，不再作为当前可打开的
+文件引用。今日结果另行保存在被 Git 忽略的 `target/acceptance-2026-09-26/`，
+不包含凭据，不将测试生成数据提交仓库。
+
+首轮服务矩阵 56 Passed / 1 Failed / 0 Skipped / 0 NotRun，
+`server-initial/report.json` 保存原失败：MiniMax OpenAI 在一次写入后提前回答
+“等待下一轮指示”，没有触发第三次重复调用。没有将此结果算作治理通过。
+新输入明确要求本次任务内连续执行、不等待下一条用户消息；工具调用仍由模型产生。
+曾尝试 required 前置条件，但确定性断言发现 Turn 既有语义只保留首次选择，后续
+恢复 Auto；该尝试已撤回，未改变生产执行语义或提交该测试假设。
+
+新增比较逐一核对 fixture 中的工具名、参数、实际输出、收据与真实模型调用的
+call id 关联，以及同一 ToolResult 是否原样出现在下一条 ModelRequest 中。
+这里的 ModelRequest 是调用 Provider 前的中立请求；实际 HTTP 编码另由协议
+差分和回环服务捕获验证，不能将两者混称。失败提前退出时也导出 ledger.jsonl。
+当前 trace matcher 不对模型自然语言做逐字比对，但不会省略它的实际内容。
+
+用户随后确认了 tool_choice 的兼容选择要求，落在 0027 而不是协议解析器。
+重复工具场景现在只声明首 Step 的 required 意图；Provider/Model 表选择 required、
+auto 或字段省略。它不再假设后续 Step 也被强制 required，不修改 Turn 的收尾策略。
+测试子进程显式开启实际 HTTP 请求体诊断，保存到 stderr.log，不含鉴权头；
+生产默认仍关闭。厂商模型绑定、场景输入、预期结果和执行框架分别维护。
+
+### 最终结果与未闭合项（09-28 归档）
+
+全部证据放在忽略目录 `target/acceptance-2026-09-26/`，未提交生成数据或凭据。
+
+| 检查 | 结果 | 证据 |
+| --- | --- | --- |
+| 最新统一检查 | 192 Passed / 0 Failed / 31 Ignored | check.log |
+| tool_choice 真实兼容矩阵 | 95/95 Passed | tool-choice/report.json；规格 0027 |
+| R1 Provider/Step 真实矩阵 | 44 Passed / 13 Failed / 19 Skipped / 0 NotRun | r1/report.json |
+| Server 首轮及提示澄清复验 | 各 56 Passed / 1 Failed；失败为 MiniMax 重复写场景 | server-initial/、server-final/ |
+| 加首步 required 意图后的最新 Server 矩阵 | 8 Passed / 49 Failed / 0 Skipped / 0 NotRun | server-latest/report.json |
+| 原有 Turn/审批/权限/恢复真实目标 | 4 个测试函数通过、8 个失败；不是模型行数 | turn-live.log |
+
+R1 的 13 个失败仍为结构化输出不满足请求 schema，19 个 Skipped 是原配置
+声明不支持的缓存场景。最新 Server 矩阵首个失败是 MiniMax 在已发送 required 后
+返回纯文本、拒绝重复写，未触发预期治理；其余为 1 行流式 TLS EOF、47 行握手失败。
+该运行确实尝试完所有独立行，未把传输失败跳过或算作通过。
+旧 Turn 目标的一些函数仍是首个模型失败即退出，因此不能把其后未执行模型算通过。
+四个通过的函数分别验证事件流、文件读写、结束原因和多批次文件写入。
+
+当前代码与确定性验收已交付，但全面真实验收没有闭合。后续需要分别处理
+厂商原生 schema/required 契约不合规，以及 TLS 故障的端点/网络路径归因；
+不能用重复改提示词、删模型、关闭校验或重试整个有副作用的 Turn 消除红项。
+
+09-28 使用本地官方 openai-python 对同一 Qwen 接入做一次定向调用成功
+（max_retries=0，证据 `sdk-connection/`），未复现长回归当时的 TLS 故障。
+这不能证明 TLS 已修好，也不能据此认定是厂商或本地库的单方问题；保留原始
+错误链和当时的失败结果，后续需要故障时刻的同路径连接证据。

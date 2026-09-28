@@ -37,9 +37,11 @@ Session
 
 ## 设计文档
 
-- [架构整改需求与分阶段验证记录（实施中）](docs/requirements/0025-architecture-hardening.md)
+- [架构整改与验收记录（真实矩阵未全通过）](docs/requirements/0025-architecture-hardening.md)
 - [Provider 官方 SDK 对照整改与真实证据](docs/requirements/0026-provider-sdk-conformance.md)
 - [多厂商模型参数表与调用前请求规划](docs/requirements/0027-model-request-planning.md)
+- [Server 执行协议与取消/恢复边界](protocols/server-execution.md)
+- [本机服务进程装配及进程级测试](services/kolyan-server/README.md)
 - [源码组织、测试分离与注释规范](docs/architecture/code-conventions.md)
 - [Agent 执行模型](docs/architecture/agent-execution-model.md)
 - [Turn 边界控制与恢复收尾](docs/requirements/0016-turn-boundary-and-resume.md)

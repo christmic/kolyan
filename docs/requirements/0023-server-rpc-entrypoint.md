@@ -1,6 +1,8 @@
 # 0023 Server JSON-RPC Entrypoint
 
-Status: implemented as the first transport adapter.
+Status: historical first control-plane adapter, retained for its library tests.
+The running service now uses [Server execution v1](../../protocols/server-execution.md)
+and the actual execution assembly specified by [0025 R4](0025-architecture-hardening.md).
 
 ## Decision
 
@@ -18,7 +20,7 @@ JSONL / HTTP / WebSocket
    Coordinator / Session / Runtime Service
 ```
 
-## Methods
+## Original control-plane methods (not the current service API)
 
 - `execution.start`: admit a new Execution;
 - `execution.resume`: admit a suspended Execution;

@@ -1,6 +1,6 @@
 # 0018 Durable Turn Driver
 
-Status: implemented as the first durable-driver slice.
+Status: implemented; extended by [0025 R2](0025-architecture-hardening.md).
 
 ## Goal
 
@@ -19,18 +19,20 @@ Agent definitions or tool business meaning.
 4. persists an approval checkpoint before returning `AwaitingApproval`;
 5. loads the checkpoint by `execution_id + approval_id` on resume;
 6. exposes cancellation by execution identity, not process identity;
-7. records the completed Turn trajectory and Trace projection.
+7. records actual model requests and full Turn/Step/Tool facts incrementally;
+8. wraps real tools with receipt-backed effect execution and projects Trace separately.
 
 The Core executor is reconstructed for resume. The Runtime never calls the
 model again to recreate the completed pre-approval Step.
 
 ## Current implementation boundary
 
-The reference adapter uses the append-only FileLedger and a storage-neutral
-`LedgerStore` port. It verifies close/reopen recovery and idempotent persisted
-terminal effects. SQLite transactional append, cross-process lease/fencing,
-uncertain-effect reconciliation and a full durable Tool executor remain the
-next Runtime slice; this driver does not claim exactly-once external effects.
+The adapter uses the storage-neutral `LedgerStore` port; the service assembles
+SQLite. Durable attempt claims prevent accidental replay, and tool outcomes share
+the Effect receipt contract. Started without a receipt is uncertain. Cancellation
+admission is atomic in supported backends. Runtime does not own distributed leases
+and does not claim exactly-once external effects. Current guarantees, process-crash
+tests and acceptance evidence are maintained in 0025 rather than duplicated here.
 
 ## Tests
 

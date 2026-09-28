@@ -1,6 +1,6 @@
 # 0024 Session Execution Integration
 
-Status: implemented.
+Status: implemented; 一致性收尾以 [0025 R3](0025-architecture-hardening.md) 为准。
 
 ## Goal
 
@@ -24,9 +24,12 @@ SessionExecutionService
 - 恢复继续使用 Ledger 中的 Approval checkpoint，不重新请求已完成的模型 Step；
 - Completed、Refused、Incomplete 追加助手响应；Rejected、Expired、MaxSteps
   只更新 Turn 状态，不伪造助手消息；
-- Runtime 错误更新 Session 为 Failed 后原样返回；
+- 仅已落账的失败/取消终态更新对应 Session 状态；准入拒绝不覆盖原活动执行；
 - Session 更新失败不能被静默吞掉；
-- 同一 `turn_id` 或 `execution_id` 不能重复提交。
+- 同一 `turn_id` 或 `execution_id` 不重复准入；相同完成提交可幂等重放；
+- 固定原始输入、版本和投影边界；服务进程使用 FullTrajectory 保留工具上下文，
+  精简库入口可显式选择 ConversationOnly；两者均保留原始账本事实；
+- Ledger 到 Session 的部分提交通过 `session.reconcile` 补齐，不重跑模型或工具。
 
 ## Verification
 
@@ -43,7 +46,7 @@ SessionExecutionService
 - `SessionExecutionService` 位于 Server 层，负责历史消息拼接和结果提交；
 - Runtime 的 Approval checkpoint 仍由 Ledger 持有，Session 只记录 Suspended 状态，
   恢复时由 Server 根据 execution/approval id 重新装配 Runtime。
-- `session_execution_live.rs` 对 21 个配置模型/协议组合执行两轮真实 Session Turn，
+- `session_execution_live.rs` 对配置模型/协议组合执行两轮真实 Session Turn，
   并在第二轮前重建 Server、Runtime 和 SessionStore。
 
 ## Provider 诊断约定

@@ -73,9 +73,9 @@ Server / Coordinator
 - `session.rs`：两个独立 Turn 写入同一 Session，关闭并重开后验证顺序和上下文恢复。
 - `session_execution.rs`：通过真实文件 SessionStore、FileLedger 和临时轨迹，验证
   两个独立 Turn 跨重启共享上下文，以及审批挂起后 Session 状态持久为 Suspended、
-  Server 重建后恢复为 Completed；同时覆盖 Session 失败、外部取消，以及工具结果
-  不污染下一轮 Session 上下文；不需要模型 API Key。
-- `session_execution_live.rs`：对配置中的 21 个模型/协议矩阵项逐项执行两轮真实
+  Server 重建后恢复为 Completed；同时覆盖 Session 失败、外部取消，以及显式
+  ConversationOnly 投影。服务进程另用 FullTrajectory 保留工具上下文；不需要模型 API Key。
+- `session_execution_live.rs`：对配置中的模型/协议矩阵项逐项执行两轮真实
   Session Turn，重建 Server/Runtime/SessionStore 后验证第二轮收到第一轮助手上下文。
 - OpenAI 和 Anthropic 协议层支持按需诊断流响应；设置 `KOLYAN_PROTOCOL_DIAGNOSTICS=1` 后，
   传输错误会带 HTTP 状态、Content-Type、Content-Encoding、已接收字节数和长度受限
@@ -85,9 +85,12 @@ Server / Coordinator
   避免提示词和工具参数进入日志。
 - OpenAI/Anthropic 协议客户端对尚未收到 HTTP 响应的连接、请求和超时错误执行一次
   有界重试；收到 HTTP 响应后不自动重试，避免掩盖协议或模型错误。
-- OpenAI Responses 适配器兼容“文本 delta 已完整、`response.completed.output` 为空”的
-  供应商响应：结构化请求从已累计文本恢复 JSON，并由单元测试和全模型矩阵验证。
-- `services/kolyan-server` JSON-RPC：通过真实进程 stdin/stdout 验证 start→status→cancel 控制面链路。
+- Provider 严格协议行为及官方 SDK 对照以 [0026](../requirements/0026-provider-sdk-conformance.md)
+  为准；不将中间 delta 恢复或 JSON 修补当作原生结构化输出成功。
+- `server/process.rs`：真实服务进程装配 Provider/Runtime/Session/Tool，经 stdin/stdout
+  覆盖审批重启双 Turn、无进展治理和审批取消；固定同一二进制跑全部配置组合。
+  `server/process_faults.rs` 覆盖副作用前、效果后收据前、收据后三个真实子进程退出点。
+  数据集、运行命令与轨迹字段见 integration-tests README 的 Server process matrix。
 - SQLite/Lease 真实集成覆盖 SQLite 文件重开、唯一 claim、lease 过期接管和旧 owner fencing。
 
 ## 0020 Server 验证记录
@@ -157,7 +160,8 @@ cargo test -p kolyan-integration-tests --test runtime_boundary
 
 `turn_resume` 的完整 live 矩阵要求所有配置的 API key 均可用，缺失则失败，不能把部分矩阵报告为全部通过。核心取消竞态用内存控制端口验证，不要求额外引入数据库。
 
-区分执行器重建与进程崩溃：当前审批测试序列化 checkpoint 后在同一测试进程中重建执行器，验证无执行器内存依赖；不将其称为真实进程崩溃恢复。
+区分执行器重建与进程崩溃：原审批测试序列化 checkpoint 后在同一测试进程中重建执行器；
+新增 server/process 及 process_faults 才是实际启动、终止和重启子进程。两类证据分别报告。
 
 ## 0015 Turn 验证记录（收尾前基线）
 
