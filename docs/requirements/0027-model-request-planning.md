@@ -46,12 +46,18 @@
 3. 字段明确不支持，或字段支持但无 required/auto 兼容值：允许省略时不发送。
 4. 不允许省略且无可用值则本地报错；不会试探性发请求后根据报错重试。
 
+`constraints.required_max_tools` 表达 required 的请求级条件。工具数量超过该接入声明
+的上限时，required 在本次请求中视为不可用，并按同一 schema 选择 auto 或省略；
+规划器不删除工具定义，也不替调用方猜测应保留哪个工具。该约束仍属于精确的
+Provider + 协议 + Model 能力事实，不在 Provider 适配器中硬编码模型名称。
+
 未知状态不等同于明确不支持：required 遇到 unknown 必须本地报错，要求先补能力
 事实。兼容映射只适用于 required；none 和指定工具不静默放宽。
 处理记录区分 mapped_to_auto 与省略；原请求保留，适配器不得重新补回省略字段。
-这属于 Provider/Model 兼容，不决定每个 Step 的业务意图：Turn 既有首轮选择后
-恢复 Auto 是执行策略，不是厂商能力判断。本变更不将所有 Step 强制成 required，
-也不通过此规则把模型拒绝执行重复测试记作通过。
+这属于 Provider/Model 兼容，不替 Turn 猜测业务意图。Turn 必须在同一执行中保留
+调用方的中立 tool_choice，每个 Step 都重新经过同一能力表；不得在首个工具结果后
+隐式改成 Auto。希望模型可结束并输出最终回答的调用方应选择 Auto；显式 Required
+会持续到 Turn 的治理终态、上限、取消或失败。不能把模型拒绝执行记作通过。
 
 验收新增 required 支持、仅 auto、字段不支持/未知、禁止省略、显式 none/指定工具
 不降级，以及精确模型覆盖；两套协议捕获实际 HTTP body 验证值和字段缺失。
@@ -65,6 +71,20 @@
 这不是所有 reasoning 模式通用的模型属性；切换接入模式时应使用对应已验证参数表，
 不偷偷关闭 thinking。Server 进程测试和 Provider 参数矩阵共用该配置装配入口。
 场景预期仍在 fixture 中按 profile 定义，配置不保存 API Key 或测试断言。
+
+2026-09-29 的 Server 真实矩阵进一步证明，Qwen OpenAI 接入下 qwen3.7-max、
+deepseek-v4.1-flash、deepseek-v4-pro、deepseek-v4-flash-0731、glm-5.3 和 glm-5.2
+在 required 搭配两个工具时返回“Please set one tool in required mode”，而单工具参数
+矩阵接受 required；对应六个精确绑定使用 required_max_tools=1。相同模型的 Anthropic
+接入不应用该约束。
+
+结构化输出同样是精确的 Provider + 协议 + Model 特性，而不是“协议字段存在即支持”。
+2026-09-30 对每个声明支持组合固定采样 3 次；OpenAI 接入下 qwen3.7-plus、
+qwen3.7-max、deepseek-v4-pro、glm-5.2，以及 Anthropic 接入下 qwen3.8-max、
+qwen3.8-flash、qwen3.7-plus、qwen3.7-max、deepseek-v4-pro、glm-5.2 均为 3/3。
+其余实际配置组合为 0/3 或服务端明确拒绝，能力表不声明 structured_output，Planner
+在 HTTP 前返回 Unsupported。采样阈值属于真实测试规格，不会让生产 Provider 重试、
+修补非法 JSON 或降级为普通文本。
 
 1. 独立模块单测：覆盖合并、精确身份、未知项、默认值、值域、必需能力、输入不变、
    命名空间、保留字段和扩展冲突；配置失败不得包含参数值。
@@ -139,3 +159,7 @@
 回环请求捕获 2/2、全仓检查均通过；真实矩阵 19 个接入组合 × 5 个场景 = 95/95
 通过，证据目录为测试输出的 `kolyan-r1-matrix-SaAeFN`。MiniMax 的 usage 字段出现
 既有统计告警，但未影响 tool_choice 的实际请求与响应验收。
+
+09-30 在加入工具数量约束和结构化能力绑定后再次得到 95/95，证据目录
+`kolyan-r1-matrix-mgLvtn`；Provider/Step 能力矩阵为 48 Passed、28 capability
+Skipped、0 Failed，证据目录 `kolyan-r1-matrix-vPudq0`。
