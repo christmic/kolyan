@@ -4,9 +4,9 @@ mod step;
 mod turn;
 
 pub use step::{
-    NoopStepValidator, StepControl, StepError, StepEvent, StepEventStream, StepExecution,
-    StepExecutionOptions, StepExecutor, StepOutcome, StepRequest, StepResult, StepValidationError,
-    StepValidator, aggregate_step_stream,
+    NoopStepValidator, StepControl, StepError, StepEvent, StepEventRecordError, StepEventRecorder,
+    StepEventStream, StepExecution, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest,
+    StepResult, StepValidationError, StepValidator, aggregate_step_stream,
 };
 pub use turn::{
     ApprovalRequest, ApprovalState, NoopToolExecutor, ResumableTurn, ToolCallBatch,

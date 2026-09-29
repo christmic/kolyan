@@ -99,6 +99,17 @@ pub trait StepValidator: Send + Sync {
     ) -> Result<(), StepValidationError>;
 }
 
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[error("step event recording failed: {message}")]
+pub struct StepEventRecordError {
+    pub message: String,
+}
+
+/// Records neutral model-stream observations before the Step advances.
+pub trait StepEventRecorder: Send + Sync {
+    fn record(&self, event: &StepEvent) -> Result<(), StepEventRecordError>;
+}
+
 #[derive(Debug, Default)]
 pub struct NoopStepValidator;
 
@@ -170,6 +181,8 @@ pub enum StepError {
     InvalidRequest { message: String },
     #[error(transparent)]
     Validation(#[from] StepValidationError),
+    #[error(transparent)]
+    Recording(#[from] StepEventRecordError),
     #[error("step was cancelled")]
     Cancelled,
     #[error("step timed out")]
@@ -179,6 +192,7 @@ pub enum StepError {
 pub struct StepExecutor<P> {
     provider: P,
     validator: Arc<dyn StepValidator>,
+    event_recorder: Option<Arc<dyn StepEventRecorder>>,
 }
 
 impl<P> StepExecutor<P> {
@@ -186,6 +200,7 @@ impl<P> StepExecutor<P> {
         Self {
             provider,
             validator: Arc::new(NoopStepValidator),
+            event_recorder: None,
         }
     }
 
@@ -193,7 +208,13 @@ impl<P> StepExecutor<P> {
         Self {
             provider,
             validator: Arc::new(validator),
+            event_recorder: None,
         }
+    }
+
+    pub fn with_event_recorder(mut self, recorder: Arc<dyn StepEventRecorder>) -> Self {
+        self.event_recorder = Some(recorder);
+        self
     }
 }
 
@@ -218,7 +239,7 @@ impl<P: ModelProvider> StepExecutor<P> {
         let options = request.options;
         let model_request = request.model_request;
         let stream = self.provider.stream(model_request.clone()).await?;
-        let events = ControlledStepStream {
+        let events: StepEventStream = Box::pin(ControlledStepStream {
             inner: stream,
             step_id,
             model_request,
@@ -228,10 +249,18 @@ impl<P: ModelProvider> StepExecutor<P> {
             started: false,
             completed: false,
             terminal: false,
+        });
+        let events = match &self.event_recorder {
+            Some(recorder) => Box::pin(RecordingStepStream {
+                inner: events,
+                recorder: recorder.clone(),
+                terminal: false,
+            }) as StepEventStream,
+            None => events,
         };
 
         Ok(StepExecution {
-            stream: Box::pin(events),
+            stream: events,
             control,
         })
     }
@@ -252,6 +281,40 @@ impl<P: ModelProvider> StepExecutor<P> {
     ) -> Result<StepResult, StepError> {
         let execution = self.start_with_control(request, control).await?;
         aggregate_step_stream(execution.stream).await
+    }
+}
+
+struct RecordingStepStream {
+    inner: StepEventStream,
+    recorder: Arc<dyn StepEventRecorder>,
+    terminal: bool,
+}
+
+impl Stream for RecordingStepStream {
+    type Item = Result<StepEvent, StepError>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.terminal {
+            return Poll::Ready(None);
+        }
+        match self.inner.as_mut().poll_next(cx) {
+            Poll::Ready(Some(Ok(event))) => match self.recorder.record(&event) {
+                Ok(()) => Poll::Ready(Some(Ok(event))),
+                Err(error) => {
+                    self.terminal = true;
+                    Poll::Ready(Some(Err(StepError::Recording(error))))
+                }
+            },
+            Poll::Ready(Some(Err(error))) => {
+                self.terminal = true;
+                Poll::Ready(Some(Err(error)))
+            }
+            Poll::Ready(None) => {
+                self.terminal = true;
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 }
 

@@ -1,4 +1,5 @@
 use super::*;
+use crate::{StepEvent, StepEventRecordError, StepEventRecorder};
 use futures_util::{StreamExt, stream};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelRef, ProviderFuture, StopReason, TokenUsage,
@@ -104,6 +105,72 @@ impl ModelProvider for MockProvider {
             ])) as ModelEventStream)
         })
     }
+}
+
+#[tokio::test]
+async fn failed_model_stream_recording_prevents_tool_execution() {
+    struct DeltaToolProvider;
+    impl ModelProvider for DeltaToolProvider {
+        fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+            let response = kolyan_model::ModelResponse {
+                id: "recording-failure".into(),
+                model: request.model,
+                content: vec![ContentBlock::ToolCall {
+                    call: ToolCall {
+                        id: "must-not-run".into(),
+                        name: "file.write".into(),
+                        arguments: serde_json::json!({"path":"safe/a","content":"x"}),
+                    },
+                }],
+                structured_output: None,
+                stop_reason: StopReason::ToolUse,
+                usage: TokenUsage::default(),
+                metadata: Value::Null,
+            };
+            Box::pin(async move {
+                Ok(Box::pin(stream::iter(vec![
+                    Ok(ModelEvent::Started),
+                    Ok(ModelEvent::TextDelta("must persist".into())),
+                    Ok(ModelEvent::Completed(response)),
+                ])) as ModelEventStream)
+            })
+        }
+    }
+    struct BrokenStreamRecorder;
+    impl StepEventRecorder for BrokenStreamRecorder {
+        fn record(&self, event: &StepEvent) -> Result<(), StepEventRecordError> {
+            if matches!(event, StepEvent::TextDelta { .. }) {
+                Err(StepEventRecordError {
+                    message: "injected stream ledger failure".into(),
+                })
+            } else {
+                Ok(())
+            }
+        }
+    }
+
+    let executed = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let executor = TurnExecutor::with_tools(
+        DeltaToolProvider,
+        CountingTool {
+            executed: executed.clone(),
+        },
+    )
+    .with_step_event_recorder(Arc::new(BrokenStreamRecorder));
+    let error = executor
+        .execute(TurnRequest {
+            turn_id: "stream-recording-failure".into(),
+            model_request: request(),
+            config: TurnConfig {
+                max_steps: 2,
+                ..TurnConfig::default()
+            },
+        })
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, TurnError::Step(StepError::Recording(_))));
+    assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
 
 fn request() -> ModelRequest {

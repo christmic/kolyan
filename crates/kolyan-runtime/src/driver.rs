@@ -107,14 +107,16 @@ where
             ));
         }
         let control = Arc::new(LedgerBoundaryControl::new(self.ledger.clone(), key.clone()));
+        let recorder = Arc::new(LedgerRecorder::new(
+            self.ledger.clone(),
+            key.clone(),
+            "start".into(),
+        ));
         let controlled = executor
             .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
             .with_boundary_control(control)
-            .with_event_recorder(Arc::new(LedgerRecorder::new(
-                self.ledger.clone(),
-                key.clone(),
-                "start".into(),
-            )));
+            .with_event_recorder(recorder.clone())
+            .with_step_event_recorder(recorder);
         match controlled.start_resumable(request).await {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
             Ok(ResumableTurn::AwaitingApproval(approval)) => self.suspended(&key, *approval),
@@ -163,14 +165,16 @@ where
             ));
         }
         let control = Arc::new(LedgerBoundaryControl::new(self.ledger.clone(), key.clone()));
+        let recorder = Arc::new(LedgerRecorder::new(
+            self.ledger.clone(),
+            key.clone(),
+            format!("resume/{approval_id}"),
+        ));
         let controlled = executor
             .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
             .with_boundary_control(control)
-            .with_event_recorder(Arc::new(LedgerRecorder::new(
-                self.ledger.clone(),
-                key.clone(),
-                format!("resume/{approval_id}"),
-            )));
+            .with_event_recorder(recorder.clone())
+            .with_step_event_recorder(recorder);
         match controlled.resume_approval(approval, approval_id).await {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
             Ok(ResumableTurn::AwaitingApproval(next)) => self.suspended(&key, *next),
@@ -263,7 +267,11 @@ where
                 turn_id: key.turn_id.clone(),
                 execution_id: key.execution_id.clone(),
                 sequence: event.cursor,
-                kind: kolyan_trace::TraceKind::TurnEvent,
+                kind: if event.kind == LedgerEventKind::ModelStreamEvent {
+                    kolyan_trace::TraceKind::ModelDelta
+                } else {
+                    kolyan_trace::TraceKind::TurnEvent
+                },
                 payload: event.payload.clone(),
             }) {
                 trajectory.trace_errors.push(error.to_string());

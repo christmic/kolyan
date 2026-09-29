@@ -5,9 +5,58 @@ use kolyan_model::{
     ProviderFuture, StopReason, TokenUsage, ToolChoice,
 };
 use serde_json::Value;
+use std::sync::Mutex;
 
 struct MockProvider {
     fail: bool,
+}
+
+struct DeltaProvider;
+
+impl ModelProvider for DeltaProvider {
+    fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
+        let response = ModelResponse {
+            id: "response-delta".into(),
+            model: request.model,
+            content: vec![ContentBlock::Text {
+                text: "hello".into(),
+            }],
+            structured_output: None,
+            stop_reason: StopReason::EndTurn,
+            usage: TokenUsage::default(),
+            metadata: Value::Null,
+        };
+        Box::pin(async move {
+            Ok(Box::pin(stream::iter(vec![
+                Ok(ModelEvent::Started),
+                Ok(ModelEvent::TextDelta("he".into())),
+                Ok(ModelEvent::ReasoningDelta("think".into())),
+                Ok(ModelEvent::Usage(TokenUsage {
+                    output_tokens: Some(2),
+                    ..TokenUsage::default()
+                })),
+                Ok(ModelEvent::Completed(response)),
+            ])) as ModelEventStream)
+        })
+    }
+}
+
+#[derive(Default)]
+struct CapturingRecorder {
+    events: Mutex<Vec<StepEvent>>,
+    fail_on_text: bool,
+}
+
+impl StepEventRecorder for CapturingRecorder {
+    fn record(&self, event: &StepEvent) -> Result<(), StepEventRecordError> {
+        if self.fail_on_text && matches!(event, StepEvent::TextDelta { .. }) {
+            return Err(StepEventRecordError {
+                message: "injected recorder failure".into(),
+            });
+        }
+        self.events.lock().unwrap().push(event.clone());
+        Ok(())
+    }
 }
 
 impl ModelProvider for MockProvider {
@@ -95,6 +144,49 @@ async fn exposes_step_events_and_aggregates_the_same_stream_shape() {
         matches!(stream.next().await, Some(Ok(StepEvent::Completed(result))) if result.step_id == "step-stream")
     );
     assert!(stream.next().await.is_none());
+}
+
+#[tokio::test]
+async fn records_neutral_stream_events_before_returning_the_step_result() {
+    let recorder = Arc::new(CapturingRecorder::default());
+    let executor = StepExecutor::new(DeltaProvider).with_event_recorder(recorder.clone());
+    executor
+        .execute(StepRequest {
+            step_id: "step-recorded".into(),
+            model_request: request(),
+            options: StepExecutionOptions::default(),
+        })
+        .await
+        .unwrap();
+
+    let events = recorder.events.lock().unwrap();
+    assert!(matches!(events[0], StepEvent::Started { .. }));
+    assert!(matches!(&events[1], StepEvent::TextDelta { text, .. } if text == "he"));
+    assert!(matches!(&events[2], StepEvent::ReasoningDelta { text, .. } if text == "think"));
+    assert!(matches!(events[3], StepEvent::Usage { .. }));
+    assert!(matches!(events[4], StepEvent::Completed(_)));
+}
+
+#[tokio::test]
+async fn recorder_failure_stops_the_step_before_completion() {
+    let recorder = Arc::new(CapturingRecorder {
+        events: Mutex::new(Vec::new()),
+        fail_on_text: true,
+    });
+    let error = StepExecutor::new(DeltaProvider)
+        .with_event_recorder(recorder.clone())
+        .execute(StepRequest {
+            step_id: "step-recording-fails".into(),
+            model_request: request(),
+            options: StepExecutionOptions::default(),
+        })
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, StepError::Recording(_)));
+    let events = recorder.events.lock().unwrap();
+    assert_eq!(events.len(), 1);
+    assert!(matches!(events[0], StepEvent::Started { .. }));
 }
 
 #[tokio::test]

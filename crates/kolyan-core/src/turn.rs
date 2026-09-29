@@ -1,6 +1,6 @@
 use crate::{
-    StepControl, StepError, StepExecutionOptions, StepExecutor, StepOutcome, StepRequest,
-    StepResult,
+    StepControl, StepError, StepEventRecorder, StepExecutionOptions, StepExecutor, StepOutcome,
+    StepRequest, StepResult,
 };
 use futures_core::Stream;
 use futures_util::task::AtomicWaker;
@@ -735,6 +735,11 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 
     pub fn with_event_recorder(mut self, recorder: Arc<dyn TurnEventRecorder>) -> Self {
         self.event_recorder = Some(recorder);
+        self
+    }
+
+    pub fn with_step_event_recorder(mut self, recorder: Arc<dyn StepEventRecorder>) -> Self {
+        self.step_executor = self.step_executor.with_event_recorder(recorder);
         self
     }
 

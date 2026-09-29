@@ -1,28 +1,33 @@
 use super::*;
-use kolyan_core::{TurnEvent, TurnEventRecorder};
+use kolyan_core::{StepEvent, StepEventRecorder, TurnEvent, TurnEventRecorder};
 use kolyan_ledger::{InMemoryLedger, LedgerError};
+use kolyan_model::{TokenUsage, ToolCall};
 
 #[test]
 fn attempt_events_preserve_content_and_cursor_across_reconstruction() {
     let ledger = InMemoryLedger::default();
     let first = LedgerRecorder::new(ledger.clone(), key(), "start".into());
-    first
-        .record(&TurnEvent::ToolResult {
+    TurnEventRecorder::record(
+        &first,
+        &TurnEvent::ToolResult {
             turn_id: "turn".into(),
             result: kolyan_model::ToolResult {
                 call_id: "call".into(),
                 content: "actual tool output".into(),
                 is_error: false,
             },
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
     drop(first);
     let second = LedgerRecorder::new(ledger.clone(), key(), "resume/approval".into());
-    second
-        .record(&TurnEvent::Cancelled {
+    TurnEventRecorder::record(
+        &second,
+        &TurnEvent::Cancelled {
             turn_id: "turn".into(),
-        })
-        .unwrap();
+        },
+    )
+    .unwrap();
     let events = ledger.events_after(0).unwrap();
     assert_eq!(events.len(), 2);
     assert!(events[0].cursor < events[1].cursor);
@@ -30,13 +35,89 @@ fn attempt_events_preserve_content_and_cursor_across_reconstruction() {
     assert_eq!(events[0].payload["result"]["content"], "actual tool output");
     let duplicate = LedgerRecorder::new(ledger.clone(), key(), "start".into());
     assert!(
-        duplicate
-            .record(&TurnEvent::Started {
-                turn_id: "turn".into()
-            })
-            .is_err()
+        TurnEventRecorder::record(
+            &duplicate,
+            &TurnEvent::Started {
+                turn_id: "turn".into(),
+            },
+        )
+        .is_err()
     );
     assert_eq!(ledger.events_after(0).unwrap().len(), 2);
+}
+
+#[test]
+fn neutral_model_stream_events_share_the_attempt_cursor_without_raw_provider_events() {
+    let ledger = InMemoryLedger::default();
+    let recorder = LedgerRecorder::new(ledger.clone(), key(), "stream".into());
+    let call = ToolCall {
+        id: "call-1".into(),
+        name: "read".into(),
+        arguments: json!({"path":"notes.txt"}),
+    };
+    for event in [
+        StepEvent::Started {
+            step_id: "step-1".into(),
+        },
+        StepEvent::TextDelta {
+            step_id: "step-1".into(),
+            text: "hello".into(),
+        },
+        StepEvent::ReasoningDelta {
+            step_id: "step-1".into(),
+            text: "inspect".into(),
+        },
+        StepEvent::ToolCallStarted {
+            step_id: "step-1".into(),
+            id: call.id.clone(),
+            name: call.name.clone(),
+        },
+        StepEvent::ToolCallArgumentsDelta {
+            step_id: "step-1".into(),
+            id: call.id.clone(),
+            delta: r#"{"path":"notes.txt"}"#.into(),
+        },
+        StepEvent::ToolCallCompleted {
+            step_id: "step-1".into(),
+            call,
+        },
+        StepEvent::Usage {
+            step_id: "step-1".into(),
+            usage: TokenUsage {
+                output_tokens: Some(7),
+                ..TokenUsage::default()
+            },
+        },
+        StepEvent::Cancelled {
+            step_id: "step-1".into(),
+        },
+    ] {
+        StepEventRecorder::record(&recorder, &event).unwrap();
+    }
+
+    let events = ledger.events_after(0).unwrap();
+    assert_eq!(events.len(), 6);
+    assert!(
+        events
+            .iter()
+            .all(|event| event.kind == LedgerEventKind::ModelStreamEvent)
+    );
+    assert_eq!(
+        events
+            .iter()
+            .map(|event| event.payload["type"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "text_delta",
+            "reasoning_delta",
+            "tool_call_started",
+            "tool_call_arguments_delta",
+            "tool_call_completed",
+            "usage"
+        ]
+    );
+    assert_eq!(events[3].payload["delta"], r#"{"path":"notes.txt"}"#);
+    assert_eq!(events[4].payload["call"]["arguments"]["path"], "notes.txt");
 }
 
 #[derive(Clone)]
