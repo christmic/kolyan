@@ -31,21 +31,10 @@ pub enum ParameterSupport {
     Unknown,
 }
 
-/// Explicit compatibility permission; never inferred from a failed HTTP call.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ParameterFallback {
-    #[default]
-    Reject,
-    AutoOrOmit,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ParameterRule {
     pub support: ParameterSupport,
-    #[serde(default)]
-    pub fallback: ParameterFallback,
     #[serde(default = "empty_schema")]
     pub schema: Value,
     #[serde(default)]
@@ -85,7 +74,7 @@ pub enum ParameterAction {
     Defaulted,
     OmittedUnsupported,
     OmittedUnknown,
-    FallbackToAuto,
+    MappedToAuto,
 }
 
 /// Deliberately excludes values, schemas and defaults, which may contain sensitive data.
@@ -167,10 +156,9 @@ impl RequestPlanner {
         let mut decisions = Vec::new();
         for (key, mut input) in inputs {
             let rule = rules.get(&key);
-            let compatible_choice = key == "tool_choice"
-                && original.tool_choice == ToolChoice::Required
-                && rule.is_some_and(|r| r.fallback == ParameterFallback::AutoOrOmit);
-            let mut fallback_to_auto = false;
+            let compatible_choice =
+                key == "tool_choice" && original.tool_choice == ToolChoice::Required;
+            let mut mapped_to_auto = false;
             if compatible_choice
                 && let Some(rule) = rule
                 && rule.support == ParameterSupport::Supported
@@ -179,7 +167,7 @@ impl RequestPlanner {
                 let auto = serde_json::json!("auto");
                 if rules::validate_value(&rule.schema, &auto, &key).is_ok() {
                     input = auto;
-                    fallback_to_auto = true;
+                    mapped_to_auto = true;
                 } else if rule.omittable {
                     decisions.push(ParameterDecision {
                         parameter: key,
@@ -205,6 +193,11 @@ impl RequestPlanner {
                 continue;
             }
             if support != ParameterSupport::Supported {
+                if compatible_choice && support == ParameterSupport::Unknown {
+                    return Err(unsupported(
+                        "required tool_choice support is unknown; declare model capability",
+                    ));
+                }
                 if rule.is_some_and(|r| !r.omittable)
                     || (key == "tool_choice"
                         && original.tool_choice != ToolChoice::Auto
@@ -225,8 +218,8 @@ impl RequestPlanner {
                 continue;
             }
             let rule = rule.expect("supported status requires a rule");
-            let action = if fallback_to_auto {
-                ParameterAction::FallbackToAuto
+            let action = if mapped_to_auto {
+                ParameterAction::MappedToAuto
             } else if !provided {
                 ParameterAction::Defaulted
             } else {

@@ -38,16 +38,17 @@
 
 能力事实复用同一参数规则：support 表示字段是否支持，schema 表示该字段支持哪些
 中立取值；模型级规则覆盖 Provider 默认，不再增加一份厂商名单。
-规则新增显式 `fallback: "auto_or_omit"`。当调用方请求 required 时：
+`tool_choice` 不维护独立降级开关；有效规则中的 `support`、`schema` 和
+`omittable` 是唯一事实源。当调用方请求 required 时：
 
 1. 字段及 required 值均支持：保持 required（Anthropic 映射为 any）。
 2. 字段支持、required 不支持但 auto 支持：映射为 auto。
-3. 字段不支持/未知，或无可用兼容值：允许省略时不发送该字段。
+3. 字段明确不支持，或字段支持但无 required/auto 兼容值：允许省略时不发送。
 4. 不允许省略且无可用值则本地报错；不会试探性发请求后根据报错重试。
 
-显式降级策略只适用于 required；none 和指定工具不静默放宽。
-未声明 fallback 的规则保持严格约束，避免把硬性工具要求悄悄改成可选。
-处理记录区分 fallback_to_auto 与省略；原请求保留，适配器不得重新补回省略字段。
+未知状态不等同于明确不支持：required 遇到 unknown 必须本地报错，要求先补能力
+事实。兼容映射只适用于 required；none 和指定工具不静默放宽。
+处理记录区分 mapped_to_auto 与省略；原请求保留，适配器不得重新补回省略字段。
 这属于 Provider/Model 兼容，不决定每个 Step 的业务意图：Turn 既有首轮选择后
 恢复 Auto 是执行策略，不是厂商能力判断。本变更不将所有 Step 强制成 required，
 也不通过此规则把模型拒绝执行重复测试记作通过。
@@ -130,3 +131,11 @@
 `tool-choice-initial/` 保留初始六项失败。配置仅反映所测试端点当前默认模式，
 接受参数不等于服务端永远遵守约束：MiniMax 重复写场景仍观察到发送 required 后
 返回纯文本，独立保留为未通过的响应契约证据，不把它伪装成参数规划成功的工具调用。
+
+## 单一能力事实收敛（2026-09-29）
+
+移除与 `support/schema/omittable` 重复的降级字段。required 的 wire 选择现在完全由
+有效 Provider/Model 规则推导，不允许同一事实分两处维护。模型单测 21/21、两协议
+回环请求捕获 2/2、全仓检查均通过；真实矩阵 19 个接入组合 × 5 个场景 = 95/95
+通过，证据目录为测试输出的 `kolyan-r1-matrix-SaAeFN`。MiniMax 的 usage 字段出现
+既有统计告警，但未影响 tool_choice 的实际请求与响应验收。

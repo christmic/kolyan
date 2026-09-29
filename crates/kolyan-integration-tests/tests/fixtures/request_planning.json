@@ -7,56 +7,49 @@
       "decisions":{"tool_choice":"sent"}
     },
     {
-      "name":"tool_choice_auto_fallback",
+      "name":"tool_choice_maps_to_auto",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["auto"]},"fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["auto"]}}},
       "present":{"openai_responses":{"/tool_choice":"auto"},"anthropic_messages":{"/tool_choice/type":"auto"}},
-      "decisions":{"tool_choice":"fallback_to_auto"}
+      "decisions":{"tool_choice":"mapped_to_auto"}
     },
     {
       "name":"tool_choice_field_unsupported",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"unsupported","fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"unsupported"}},
       "absent":["/tool_choice"],
       "decisions":{"tool_choice":"omitted_unsupported"}
     },
     {
       "name":"tool_choice_field_unknown",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"unknown","fallback":"auto_or_omit"}},
-      "absent":["/tool_choice"],
-      "decisions":{"tool_choice":"omitted_unknown"}
+      "rules":{"tool_choice":{"support":"unknown"}},
+      "error":"unsupported"
     },
     {
       "name":"tool_choice_no_compatible_value",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["none"]},"fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["none"]}}},
       "absent":["/tool_choice"],
       "decisions":{"tool_choice":"omitted_unsupported"}
     },
     {
       "name":"tool_choice_omission_forbidden",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"unsupported","fallback":"auto_or_omit","omittable":false}},
+      "rules":{"tool_choice":{"support":"unsupported","omittable":false}},
       "error":"unsupported"
     },
     {
       "name":"tool_choice_none_is_not_relaxed",
       "request":{"tool_choice":"none"},
-      "rules":{"tool_choice":{"support":"unsupported","fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"unsupported"}},
       "error":"unsupported"
     },
     {
       "name":"tool_choice_named_is_not_relaxed",
       "request":{"tool_choice":{"tool":"read"}},
-      "rules":{"tool_choice":{"support":"unsupported","fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"unsupported"}},
       "error":"unsupported"
-    },
-    {
-      "name":"fallback_not_valid_for_other_parameters",
-      "request":{},
-      "rules":{"max_output_tokens":{"support":"supported","fallback":"auto_or_omit"}},
-      "error":"invalid_request"
     },
     {
       "name": "defaults",
@@ -191,7 +184,12 @@
       "request": {
         "tool_choice": "required"
       },
-      "error": "unsupported"
+      "absent": [
+        "/tool_choice"
+      ],
+      "decisions": {
+        "tool_choice": "omitted_unsupported"
+      }
     },
     {
       "name": "invalid_range",
@@ -417,21 +415,21 @@
       "request":{"tool_choice":"required"},
       "decisions_by_profile":{
         "default":{"tool_choice":"sent"},
-        "thinking_auto_only":{"tool_choice":"fallback_to_auto"}
+        "thinking_auto_only":{"tool_choice":"mapped_to_auto"}
       }
     },
     {
-      "name":"required_auto_fallback",
+      "name":"required_maps_to_auto",
       "fixture":"tool_call",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["auto"]},"fallback":"auto_or_omit"}},
-      "decisions":{"tool_choice":"fallback_to_auto"}
+      "rules":{"tool_choice":{"support":"supported","schema":{"enum":["auto"]}}},
+      "decisions":{"tool_choice":"mapped_to_auto"}
     },
     {
       "name":"required_field_omitted",
       "fixture":"tool_call",
       "request":{"tool_choice":"required"},
-      "rules":{"tool_choice":{"support":"unsupported","fallback":"auto_or_omit"}},
+      "rules":{"tool_choice":{"support":"unsupported"}},
       "decisions":{"tool_choice":"omitted_unsupported"}
     },
     {

@@ -18,8 +18,8 @@ pub use error::{ProviderError, ProviderErrorKind, ProviderErrorPhase};
 pub use event::{ModelEvent, ProviderMetadata};
 pub use message::{ContentBlock, ImageSource, Message, MessageRole, SystemInstruction};
 pub use planning::{
-    ModelParameterOverrides, ParameterAction, ParameterDecision, ParameterFallback, ParameterRule,
-    ParameterSupport, ParameterTable, PlannedRequest, RequestPlanner,
+    ModelParameterOverrides, ParameterAction, ParameterDecision, ParameterRule, ParameterSupport,
+    ParameterTable, PlannedRequest, RequestPlanner,
 };
 pub use provider::{ModelEventStream, ModelProvider, ProviderFuture, aggregate_stream};
 pub use structured::OutputValidator;

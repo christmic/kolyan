@@ -380,8 +380,8 @@ are NotRun, not success. Tests write requests, effective parameter tables, full 
 decisions and row outcomes to temporary directories. No credential headers are saved.
 This matrix does not replace the strict structured-output tests in R1.
 
-Tool-choice compatibility uses `fallback: "auto_or_omit"` in the same parameter
-rules. Verified deployment differences are in `tests/config/provider-parameters.json`;
+Tool-choice compatibility is derived from `support`, `schema`, and `omittable` in the
+same parameter rules. Verified deployment differences are in `tests/config/provider-parameters.json`;
 bindings use exact endpoint-family/protocol/model identities and reuse named profiles.
 The three Qwen models with default-thinking restrictions use an auto-only profile
 on both protocols; this is not a claim about all reasoning modes or all Qwen models.

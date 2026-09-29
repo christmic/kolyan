@@ -45,10 +45,11 @@ Protocol client（官方 wire format）
 - 对完成任务必需的能力（如明确要求结构化输出、工具调用）：不支持时在调用前
   拒绝，不能删除 schema/tools 后仍宣称执行了原请求。是否允许降级由调用策略
   显式声明，而非协议层临时决定。
-- tool_choice 的兼容策略可以在规则中声明 `fallback: "auto_or_omit"`：required
-  被支持则原样发送，否则选择受支持的 auto；字段不支持/未知则按 omittable 省略。
-  字段支持与值支持分别来自 support/schema，不维护第二份模型名单。
-  未声明降级时仍为严格请求；none 和指定工具不借此放宽。具体契约见需求 0027。
+- tool_choice 直接由同一规则决定：required 被值域支持则原样发送；字段支持但只
+  支持 auto 则发送 auto；字段明确不支持则按 omittable 省略。unknown 不等于
+  unsupported，required 遇到未知事实时本地拒绝。字段支持与值支持分别来自
+  support/schema，不维护第二份模型名单或降级开关。none 和指定工具不借此放宽。
+  具体契约见需求 0027。
 - 规划保留原请求，生成有效请求和参数处理记录（省略键及原因，不记录敏感值），
   便于测试和上层追踪。正常 Step 不负责将这些记录写文件。
 

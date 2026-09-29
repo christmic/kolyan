@@ -14,19 +14,13 @@ fn tool_choice_compatibility_uses_field_and_value_support_without_mutating_input
             "supported",
             json!(["auto"]),
             ToolChoice::Auto,
-            ParameterAction::FallbackToAuto,
+            ParameterAction::MappedToAuto,
         ),
         (
             "unsupported",
             json!(["auto"]),
             ToolChoice::Auto,
             ParameterAction::OmittedUnsupported,
-        ),
-        (
-            "unknown",
-            json!(["auto"]),
-            ToolChoice::Auto,
-            ParameterAction::OmittedUnknown,
         ),
         (
             "supported",
@@ -38,10 +32,7 @@ fn tool_choice_compatibility_uses_field_and_value_support_without_mutating_input
         let mut config = table();
         config.defaults.insert(
             "tool_choice".into(),
-            serde_json::from_value(json!({
-                "support":support,"schema":{"enum":allowed},"fallback":"auto_or_omit"
-            }))
-            .unwrap(),
+            serde_json::from_value(json!({"support":support,"schema":{"enum":allowed}})).unwrap(),
         );
         let mut input = request();
         input.tool_choice = ToolChoice::Required;
@@ -71,14 +62,14 @@ fn model_override_selects_auto_while_provider_default_accepts_required() {
     config.defaults.insert(
         "tool_choice".into(),
         serde_json::from_value(json!({
-            "support":"supported","schema":{"enum":["auto","required"]},"fallback":"auto_or_omit"
+            "support":"supported","schema":{"enum":["auto","required"]}
         }))
         .unwrap(),
     );
     config.models.get_mut("b").unwrap().parameters.insert(
         "tool_choice".into(),
         serde_json::from_value(json!({
-            "support":"supported","schema":{"enum":["auto"]},"fallback":"auto_or_omit"
+            "support":"supported","schema":{"enum":["auto"]}
         }))
         .unwrap(),
     );
@@ -97,12 +88,12 @@ fn model_override_selects_auto_while_provider_default_accepts_required() {
 }
 
 #[test]
-fn tool_choice_fallback_does_not_relax_none_named_tools_or_forbidden_omission() {
+fn tool_choice_compatibility_rejects_unknown_none_named_and_forbidden_omission() {
     let mut config = table();
     config.defaults.insert(
         "tool_choice".into(),
         serde_json::from_value(json!({
-            "support":"unsupported","fallback":"auto_or_omit","omittable":false
+            "support":"unsupported","omittable":false
         }))
         .unwrap(),
     );
@@ -121,12 +112,17 @@ fn tool_choice_fallback_does_not_relax_none_named_tools_or_forbidden_omission() 
         assert!(planner.plan(&input).is_err());
     }
     let mut config = table();
-    config
-        .defaults
-        .get_mut("max_output_tokens")
-        .unwrap()
-        .fallback = ParameterFallback::AutoOrOmit;
-    assert!(RequestPlanner::new(config, "fixture", &[]).is_err());
+    config.defaults.insert(
+        "tool_choice".into(),
+        serde_json::from_value(json!({"support":"unknown"})).unwrap(),
+    );
+    input.tool_choice = ToolChoice::Required;
+    assert!(
+        RequestPlanner::new(config, "fixture", &[])
+            .unwrap()
+            .plan(&input)
+            .is_err()
+    );
 }
 
 fn table() -> ParameterTable {

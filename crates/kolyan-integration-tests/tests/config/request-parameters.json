@@ -9,7 +9,7 @@
     "prompt_cache.key": {"support":"unsupported"},
     "prompt_cache.retention": {"support":"unsupported"},
     "prompt_cache.breakpoints": {"support":"unsupported"},
-    "tool_choice": {"support":"supported", "schema":{"enum":["auto","none","required"]}, "fallback":"auto_or_omit"},
+    "tool_choice": {"support":"supported", "schema":{"enum":["auto","none","required"]}},
     "extensions.test.temperature": {"support":"unsupported", "wire_name":"temperature", "schema":{"type":"number","minimum":0,"maximum":1}, "default":0.5}
   },
   "models": {"fixture":{}}

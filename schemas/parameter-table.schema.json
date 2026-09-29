@@ -30,7 +30,6 @@
       "type":"object", "additionalProperties":false, "required":["support"],
       "properties": {
         "support":{"enum":["supported","unsupported","unknown"]},
-        "fallback":{"enum":["reject","auto_or_omit"],"default":"reject"},
         "schema":{"type":["object","boolean"],"default":{}},
         "default":true,
         "omittable":{"type":"boolean","default":true},

@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use super::{PARAMETERS, ParameterFallback, ParameterSupport, ParameterTable, invalid};
+use super::{PARAMETERS, ParameterSupport, ParameterTable, invalid};
 use crate::{ModelFeature, ProviderError};
 
 pub(super) fn validate(
@@ -22,11 +22,6 @@ pub(super) fn validate(
         .iter()
         .chain(table.models.values().flat_map(|m| &m.parameters))
     {
-        if rule.fallback != ParameterFallback::Reject && key != "tool_choice" {
-            return Err(invalid(
-                "auto_or_omit fallback is only valid for tool_choice",
-            ));
-        }
         if let Some(extension) = key.strip_prefix("extensions.") {
             let Some((namespace, name)) = extension.split_once('.') else {
                 return Err(invalid("extension requires a namespace and name"));

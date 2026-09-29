@@ -3,7 +3,7 @@
     "default": {"parameters": {}},
     "thinking_auto_only": {
       "parameters": {
-        "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}, "fallback":"auto_or_omit"}
+        "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}}
       }
     }
   },
