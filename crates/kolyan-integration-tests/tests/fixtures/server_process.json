@@ -12,18 +12,34 @@
     "repeat": {"input":{"name":"file.write","arguments":{"path":"safe/repeat.txt","content":"repeat-proof"}},"output":"wrote 12 bytes"}
   },
   "normal_contract": {
-    "counts": {"model_requested": 2, "step_completed": 2, "effect_started": 1, "effect_receipt": 1},
+    "counts": {"model_requested": 2, "model_stream_event": 6, "step_completed": 2, "effect_started": 1, "effect_receipt": 1},
     "forbidden": ["effect_uncertain", "turn_failed", "turn_cancelled"]
   },
   "repeat_contract": {
     "initial_tool_choice": "required",
-    "counts": {"model_requested": 3, "step_completed": 3, "effect_started": 2, "effect_receipt": 2},
+    "counts": {"model_requested": 3, "model_stream_event": 12, "step_completed": 3, "effect_started": 2, "effect_receipt": 2},
     "forbidden": ["effect_uncertain", "turn_completed", "turn_cancelled"]
   },
   "cancel_contract": {
-    "counts": {"model_requested": 1, "step_completed": 1, "effect_started": 0, "effect_receipt": 0},
+    "counts": {"model_requested": 1, "model_stream_event": 4, "step_completed": 1, "effect_started": 0, "effect_receipt": 0},
     "forbidden": ["effect_uncertain", "turn_failed", "turn_completed"]
   },
-  "first_expected_kinds": ["execution_started", "step_completed", "approval_requested", "approval_resolved", "effect_started", "effect_receipt", "effect_completed", "turn_completed", "session_committed"],
-  "second_expected_kinds": ["execution_started", "step_completed", "effect_started", "effect_receipt", "effect_completed", "turn_completed", "session_committed"]
+  "first_expected_kinds": ["execution_started", "model_stream_event", "step_completed", "approval_requested", "approval_resolved", "effect_started", "effect_receipt", "effect_completed", "model_stream_event", "turn_completed", "session_committed"],
+  "second_expected_kinds": ["execution_started", "model_stream_event", "step_completed", "effect_started", "effect_receipt", "effect_completed", "model_stream_event", "turn_completed", "session_committed"],
+  "turn1_stream": [
+    {"type":"reasoning_delta","step_id":"t1-step-0","text":"fixture-reasoning-0"},
+    {"type":"tool_call_started","step_id":"t1-step-0","id":"write1","name":"file.write"},
+    {"type":"tool_call_arguments_delta","step_id":"t1-step-0","id":"write1","delta":"{\"path\":\"safe/result.txt\",\"content\":\"kolyan-process-proof\"}"},
+    {"type":"tool_call_completed","step_id":"t1-step-0","call":{"id":"write1","name":"file.write","arguments":{"path":"safe/result.txt","content":"kolyan-process-proof"}}},
+    {"type":"reasoning_delta","step_id":"t1-step-1","text":"fixture-reasoning-1"},
+    {"type":"text_delta","step_id":"t1-step-1","text":"kolyan-process-proof"}
+  ],
+  "turn2_stream": [
+    {"type":"reasoning_delta","step_id":"t2-step-0","text":"fixture-reasoning-2"},
+    {"type":"tool_call_started","step_id":"t2-step-0","id":"read1","name":"file.read"},
+    {"type":"tool_call_arguments_delta","step_id":"t2-step-0","id":"read1","delta":"{\"path\":\"safe/result.txt\"}"},
+    {"type":"tool_call_completed","step_id":"t2-step-0","call":{"id":"read1","name":"file.read","arguments":{"path":"safe/result.txt"}}},
+    {"type":"reasoning_delta","step_id":"t2-step-1","text":"fixture-reasoning-3"},
+    {"type":"text_delta","step_id":"t2-step-1","text":"kolyan-process-proof"}
+  ]
 }

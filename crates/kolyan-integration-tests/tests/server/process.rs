@@ -156,7 +156,14 @@ fn config(
     path
 }
 
-fn compare(process: &mut Process, key: Value, expected: &Value, directory: &Path, name: &str) {
+fn compare(
+    process: &mut Process,
+    key: Value,
+    expected: &Value,
+    expected_stream: &Value,
+    directory: &Path,
+    name: &str,
+) {
     let result = process.rpc("execution.events", key.clone());
     let events = result["events"].as_array().unwrap();
     let mut file = fs::File::create(directory.join(format!("{name}.jsonl"))).unwrap();
@@ -165,6 +172,15 @@ fn compare(process: &mut Process, key: Value, expected: &Value, directory: &Path
     }
     assert_fact_contract(events, "normal_contract");
     contract::assert_effects(events, name);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event["kind"] == "model_stream_event")
+            .map(|event| event["payload"].clone())
+            .collect::<Vec<_>>(),
+        expected_stream.as_array().unwrap().clone(),
+        "{name}: exact neutral model stream"
+    );
     let mut offset = 0;
     for kind in expected.as_array().unwrap() {
         offset += events[offset..]
@@ -220,6 +236,17 @@ fn scenario(config: &Path, directory: &Path) {
             .exists()
     );
     let approval_id = paused["approval"]["approval_id"].clone();
+    let prefix = process.rpc("execution.events", first_key.clone());
+    let prefix_events = prefix["events"].as_array().unwrap();
+    assert_eq!(
+        prefix_events
+            .iter()
+            .filter(|event| event["kind"] == "model_stream_event")
+            .map(|event| event["payload"].clone())
+            .collect::<Vec<_>>(),
+        case["turn1_stream"].as_array().unwrap()[..4]
+    );
+    let resume_cursor = prefix["next_cursor"].clone();
     drop(process); // Kill the actual service process while approval is pending.
     let mut process = Process::start(config, directory);
     assert_eq!(
@@ -231,6 +258,26 @@ fn scenario(config: &Path, directory: &Path) {
     let completed = process.rpc("execution.approve", approve);
     assert_eq!(completed["state"], "Completed");
     assert_eq!(completed["end_reason"], "FinalAnswer");
+    let mut resumed_key = first_key.clone();
+    resumed_key["after_cursor"] = resume_cursor.clone();
+    let resumed = process.rpc("execution.events", resumed_key);
+    assert!(
+        resumed["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|event| { event["cursor"].as_u64().unwrap() > resume_cursor.as_u64().unwrap() })
+    );
+    assert_eq!(
+        resumed["events"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|event| event["kind"] == "model_stream_event")
+            .map(|event| event["payload"].clone())
+            .collect::<Vec<_>>(),
+        case["turn1_stream"].as_array().unwrap()[4..]
+    );
     assert_eq!(
         fs::read_to_string(
             directory
@@ -244,6 +291,7 @@ fn scenario(config: &Path, directory: &Path) {
         &mut process,
         first_key,
         &case["first_expected_kinds"],
+        &case["turn1_stream"],
         directory,
         "turn1",
     );
@@ -257,6 +305,7 @@ fn scenario(config: &Path, directory: &Path) {
         &mut process,
         second_key,
         &case["second_expected_kinds"],
+        &case["turn2_stream"],
         directory,
         "turn2",
     );
@@ -459,6 +508,14 @@ fn server_process_approval_restart_and_two_turns() {
                 }
             };
             let mut body = String::new();
+            let reasoning = json!({
+                "type":"response.reasoning_summary_text.delta",
+                "delta":format!("fixture-reasoning-{index}")
+            });
+            body.push_str(&format!(
+                "event: {}\ndata: {reasoning}\n\n",
+                reasoning["type"].as_str().unwrap()
+            ));
             if output[0]["type"] == "function_call" {
                 let mut item = output[0].clone();
                 let arguments = item["arguments"].clone();
@@ -473,6 +530,15 @@ fn server_process_approval_restart_and_two_turns() {
                         event["type"].as_str().unwrap()
                     ));
                 }
+            } else {
+                let text = json!({
+                    "type":"response.output_text.delta",
+                    "delta":"kolyan-process-proof"
+                });
+                body.push_str(&format!(
+                    "event: {}\ndata: {text}\n\n",
+                    text["type"].as_str().unwrap()
+                ));
             }
             body.push_str(&format!(
                 "event: response.completed\ndata: {}\n\n",
