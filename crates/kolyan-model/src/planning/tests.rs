@@ -88,6 +88,45 @@ fn model_override_selects_auto_while_provider_default_accepts_required() {
 }
 
 #[test]
+fn required_tool_count_constraint_is_derived_from_the_effective_model_rule() {
+    let mut config = table();
+    config.defaults.insert(
+        "tool_choice".into(),
+        serde_json::from_value(json!({
+            "support":"supported",
+            "schema":{"enum":["auto","required"]},
+            "constraints":{"required_max_tools":1}
+        }))
+        .unwrap(),
+    );
+    let planner = RequestPlanner::new(config, "fixture", &[]).unwrap();
+    let mut input = request();
+    input.tool_choice = ToolChoice::Required;
+    input.tools.push(crate::ToolDefinition {
+        name: "read".into(),
+        description: None,
+        input_schema: json!({"type":"object"}),
+    });
+    assert_eq!(
+        planner.plan(&input).unwrap().request.tool_choice,
+        ToolChoice::Required
+    );
+    input.tools.push(crate::ToolDefinition {
+        name: "write".into(),
+        description: None,
+        input_schema: json!({"type":"object"}),
+    });
+    let plan = planner.plan(&input).unwrap();
+    assert_eq!(plan.request.tool_choice, ToolChoice::Auto);
+    assert!(plan.decisions.contains(&ParameterDecision {
+        parameter: "tool_choice".into(),
+        action: ParameterAction::MappedToAuto,
+    }));
+    assert_eq!(input.tool_choice, ToolChoice::Required);
+    assert_eq!(input.tools.len(), 2);
+}
+
+#[test]
 fn tool_choice_compatibility_rejects_unknown_none_named_and_forbidden_omission() {
     let mut config = table();
     config.defaults.insert(
@@ -299,6 +338,29 @@ fn invalid_schemas_unknown_keys_and_bad_defaults_fail_at_configuration() {
         typo.defaults["reasoning.effort"].clone(),
     );
     assert!(RequestPlanner::new(typo, "fixture", &[]).is_err());
+    for (key, support, schema, limit) in [
+        ("max_output_tokens", "supported", json!({}), 1),
+        ("tool_choice", "supported", json!({"enum":["auto"]}), 1),
+        (
+            "tool_choice",
+            "unsupported",
+            json!({"enum":["required"]}),
+            1,
+        ),
+        ("tool_choice", "supported", json!({"enum":["required"]}), 0),
+    ] {
+        let mut table = table();
+        table.defaults.insert(
+            key.into(),
+            serde_json::from_value(json!({
+                "support":support,
+                "schema":schema,
+                "constraints":{"required_max_tools":limit}
+            }))
+            .unwrap(),
+        );
+        assert!(RequestPlanner::new(table, "fixture", &[]).is_err());
+    }
 }
 
 #[test]

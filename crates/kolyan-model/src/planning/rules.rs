@@ -22,6 +22,14 @@ pub(super) fn validate(
         .iter()
         .chain(table.models.values().flat_map(|m| &m.parameters))
     {
+        if let Some(limit) = rule.constraints.required_max_tools
+            && (key != "tool_choice"
+                || limit == 0
+                || rule.support != ParameterSupport::Supported
+                || validate_value(&rule.schema, &serde_json::json!("required"), key).is_err())
+        {
+            return Err(invalid("invalid required tool-count constraint"));
+        }
         if let Some(extension) = key.strip_prefix("extensions.") {
             let Some((namespace, name)) = extension.split_once('.') else {
                 return Err(invalid("extension requires a namespace and name"));

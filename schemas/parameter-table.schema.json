@@ -30,6 +30,10 @@
       "type":"object", "additionalProperties":false, "required":["support"],
       "properties": {
         "support":{"enum":["supported","unsupported","unknown"]},
+        "constraints":{
+          "type":"object", "additionalProperties":false,
+          "properties":{"required_max_tools":{"type":"integer","minimum":1}}
+        },
         "schema":{"type":["object","boolean"],"default":{}},
         "default":true,
         "omittable":{"type":"boolean","default":true},

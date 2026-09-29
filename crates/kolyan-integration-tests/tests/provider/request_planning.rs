@@ -56,13 +56,20 @@ fn verified_model_profiles_select_exact_tool_choice_rules() {
             "qwen3.8-flash",
             "qwen3.7-plus",
             "qwen3.7-max",
+            "deepseek-v4.1-flash",
+            "deepseek-v4-pro",
+            "deepseek-v4-flash-0731",
+            "glm-5.3",
+            "glm-5.2",
         ] {
             let profile = common::parameter_profile("qwen", protocol, model);
             let value = common::parameter_table("qwen", protocol, model);
-            let expected = if model == "qwen3.7-max" {
-                "default"
-            } else {
+            let expected = if matches!(model, "qwen3.8-max" | "qwen3.8-flash" | "qwen3.7-plus") {
                 "thinking_auto_only"
+            } else if protocol == "openai_responses" {
+                "required_single_tool"
+            } else {
+                "default"
             };
             assert_eq!(profile, expected);
             let table: ParameterTable = serde_json::from_value(value).unwrap();
@@ -76,14 +83,21 @@ fn verified_model_profiles_select_exact_tool_choice_rules() {
             );
             request.tool_choice = kolyan_model::ToolChoice::Required;
             let plan = planner.plan(&request).unwrap();
-            assert_eq!(
-                plan.request.tool_choice,
-                if expected == "default" {
-                    kolyan_model::ToolChoice::Required
-                } else {
+            let expected_choice = if expected == "thinking_auto_only" {
+                kolyan_model::ToolChoice::Auto
+            } else {
+                kolyan_model::ToolChoice::Required
+            };
+            assert_eq!(plan.request.tool_choice, expected_choice);
+            if expected == "required_single_tool" {
+                let mut second = request.tools[0].clone();
+                second.name.push_str("_second");
+                request.tools.push(second);
+                assert_eq!(
+                    planner.plan(&request).unwrap().request.tool_choice,
                     kolyan_model::ToolChoice::Auto
-                }
-            );
+                );
+            }
         }
     }
 }

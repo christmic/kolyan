@@ -35,6 +35,8 @@ pub enum ParameterSupport {
 #[serde(deny_unknown_fields)]
 pub struct ParameterRule {
     pub support: ParameterSupport,
+    #[serde(default)]
+    pub constraints: ParameterConstraints,
     #[serde(default = "empty_schema")]
     pub schema: Value,
     #[serde(default)]
@@ -43,6 +45,13 @@ pub struct ParameterRule {
     pub omittable: bool,
     #[serde(default)]
     pub wire_name: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ParameterConstraints {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_max_tools: Option<usize>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -162,7 +171,11 @@ impl RequestPlanner {
             if compatible_choice
                 && let Some(rule) = rule
                 && rule.support == ParameterSupport::Supported
-                && rules::validate_value(&rule.schema, &input, &key).is_err()
+                && (rules::validate_value(&rule.schema, &input, &key).is_err()
+                    || rule
+                        .constraints
+                        .required_max_tools
+                        .is_some_and(|limit| original.tools.len() > limit))
             {
                 let auto = serde_json::json!("auto");
                 if rules::validate_value(&rule.schema, &auto, &key).is_ok() {

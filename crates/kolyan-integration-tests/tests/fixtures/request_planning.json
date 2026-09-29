@@ -415,7 +415,8 @@
       "request":{"tool_choice":"required"},
       "decisions_by_profile":{
         "default":{"tool_choice":"sent"},
-        "thinking_auto_only":{"tool_choice":"mapped_to_auto"}
+        "thinking_auto_only":{"tool_choice":"mapped_to_auto"},
+        "required_single_tool":{"tool_choice":"sent"}
       }
     },
     {

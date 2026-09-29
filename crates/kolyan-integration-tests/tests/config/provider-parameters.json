@@ -5,6 +5,15 @@
       "parameters": {
         "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}}
       }
+    },
+    "required_single_tool": {
+      "parameters": {
+        "tool_choice": {
+          "support":"supported",
+          "schema":{"enum":["auto","none","required"]},
+          "constraints":{"required_max_tools":1}
+        }
+      }
     }
   },
   "bindings": {
@@ -13,6 +22,12 @@
     "qwen/openai_responses/qwen3.7-plus": "thinking_auto_only",
     "qwen/anthropic_messages/qwen3.8-max": "thinking_auto_only",
     "qwen/anthropic_messages/qwen3.8-flash": "thinking_auto_only",
-    "qwen/anthropic_messages/qwen3.7-plus": "thinking_auto_only"
+    "qwen/anthropic_messages/qwen3.7-plus": "thinking_auto_only",
+    "qwen/openai_responses/qwen3.7-max": "required_single_tool",
+    "qwen/openai_responses/deepseek-v4.1-flash": "required_single_tool",
+    "qwen/openai_responses/deepseek-v4-pro": "required_single_tool",
+    "qwen/openai_responses/deepseek-v4-flash-0731": "required_single_tool",
+    "qwen/openai_responses/glm-5.3": "required_single_tool",
+    "qwen/openai_responses/glm-5.2": "required_single_tool"
   }
 }
