@@ -520,7 +520,6 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             &pending.assistant_content,
             results,
         );
-        state.model_request.tool_choice = ToolChoice::Auto;
         Ok(None)
     }
 }

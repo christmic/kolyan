@@ -173,6 +173,56 @@ async fn failed_model_stream_recording_prevents_tool_execution() {
     assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 }
 
+#[tokio::test]
+async fn required_tool_choice_is_preserved_across_model_steps() {
+    #[derive(Default)]
+    struct RequestChoices(std::sync::Mutex<Vec<ToolChoice>>);
+    impl TurnEventRecorder for RequestChoices {
+        fn record(&self, _event: &TurnEvent) -> Result<(), TurnError> {
+            Ok(())
+        }
+
+        fn record_request(&self, request: &ModelRequest) -> Result<(), TurnError> {
+            self.0.lock().unwrap().push(request.tool_choice.clone());
+            Ok(())
+        }
+    }
+
+    let choices = Arc::new(RequestChoices::default());
+    let mut model_request = request();
+    model_request.tool_choice = ToolChoice::Required;
+    let result = TurnExecutor::with_tools(
+        MockProvider {
+            stop_reason: StopReason::ToolUse,
+            content: vec![ContentBlock::ToolCall {
+                call: ToolCall {
+                    id: "required-call".into(),
+                    name: "read".into(),
+                    arguments: serde_json::json!({}),
+                },
+            }],
+        },
+        MockTool,
+    )
+    .with_event_recorder(choices.clone())
+    .execute(TurnRequest {
+        turn_id: "required-across-steps".into(),
+        model_request,
+        config: TurnConfig {
+            max_steps: 2,
+            ..TurnConfig::default()
+        },
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(result.end_reason, TurnEndReason::MaxSteps);
+    assert_eq!(
+        *choices.0.lock().unwrap(),
+        [ToolChoice::Required, ToolChoice::Required]
+    );
+}
+
 fn request() -> ModelRequest {
     ModelRequest {
         request_id: "turn-request".into(),

@@ -1,4 +1,5 @@
 use super::*;
+use kolyan_model::ToolChoice;
 use kolyan_model::{ModelRef, ModelResponse, StopReason, TokenUsage};
 use serde_json::json;
 

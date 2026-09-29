@@ -6,8 +6,7 @@ use futures_core::Stream;
 use futures_util::task::AtomicWaker;
 use futures_util::{future::join_all, stream};
 use kolyan_model::{
-    ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolChoice,
-    ToolResult,
+    ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolResult,
 };
 use kolyan_policy::{ExecutionGrant, PolicyContext, PolicyDecisionKind, PolicyEngine};
 use std::collections::HashSet;
