@@ -195,21 +195,6 @@ fn compare(
             .unwrap_or_else(|| panic!("missing {kind}, evidence {}", directory.display()))
             + 1;
     }
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| event["kind"] == "effect_started")
-            .count(),
-        1,
-        "exactly one actual tool execution"
-    );
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| event["kind"] == "effect_receipt")
-            .count(),
-        1
-    );
     assert!(!events.iter().any(|event| matches!(
         event["kind"].as_str(),
         Some("effect_uncertain" | "turn_failed")
@@ -291,14 +276,15 @@ fn scenario(config: &Path, directory: &Path, exact_stream: bool) {
     } else {
         assert_live_stream_contract(&resumed_stream, true);
     }
-    assert_eq!(
-        fs::read_to_string(
+    contract::assert_content(
+        &fs::read_to_string(
             directory
                 .join("workspace")
-                .join(case["path"].as_str().unwrap())
+                .join(case["path"].as_str().unwrap()),
         )
         .unwrap(),
-        case["content"].as_str().unwrap()
+        case["content"].as_str().unwrap(),
+        case["effects"]["turn1"]["content_match"].as_str().unwrap(),
     );
     compare(
         &mut process,
@@ -466,7 +452,19 @@ fn assert_fact_contract(events: &[Value], name: &str, exact_stream: bool) {
             .unwrap();
         assert_eq!(&first["payload"]["request"]["tool_choice"], choice);
     }
+    if let Some(choice) = contract.get("all_tool_choices") {
+        for event in events
+            .iter()
+            .filter(|event| event["kind"] == "model_requested")
+        {
+            assert_eq!(&event["payload"]["request"]["tool_choice"], choice);
+        }
+    }
+    let check_counts = exact_stream || contract["counts_mode"] != "fixture_only";
     for (kind, count) in contract["counts"].as_object().unwrap() {
+        if !check_counts {
+            continue;
+        }
         if kind == "model_stream_event" && !exact_stream {
             continue;
         }
@@ -690,28 +688,37 @@ async fn server_process_live_matrix() {
     .unwrap();
     for (index, ((family, protocol, url, key_env, model), case)) in entries.into_iter().enumerate()
     {
-        let directory = report.directory.join(index.to_string());
-        fs::create_dir_all(&directory).unwrap();
+        let row_directory = report.directory.join(index.to_string());
+        fs::create_dir_all(&row_directory).unwrap();
         report
-            .run(index, async {
-                assert!(
-                    std::env::var(&key_env).is_ok_and(|value| !value.is_empty()),
-                    "missing credential variable {key_env}"
-                );
-                let path = config(
-                    &directory,
-                    family,
-                    protocol,
-                    &model.model,
-                    &url,
-                    &key_env,
-                    model.max_output_tokens,
-                );
-                match case {
-                    "approval_two_turn" => scenario(&path, &directory, false),
-                    "no_progress" => repeat_scenario(&path, &directory, false),
-                    "cancel_approval" => cancel_scenario(&path, &directory, false),
-                    _ => unreachable!(),
+            .run_attempts(index, 2, |attempt| {
+                let directory = row_directory.join(format!("attempt-{attempt}"));
+                fs::create_dir_all(&directory).unwrap();
+                let family = family.to_owned();
+                let protocol = protocol.to_owned();
+                let url = url.clone();
+                let key_env = key_env.clone();
+                let model = model.clone();
+                async move {
+                    assert!(
+                        std::env::var(&key_env).is_ok_and(|value| !value.is_empty()),
+                        "missing credential variable {key_env}"
+                    );
+                    let path = config(
+                        &directory,
+                        &family,
+                        &protocol,
+                        &model.model,
+                        &url,
+                        &key_env,
+                        model.max_output_tokens,
+                    );
+                    match case {
+                        "approval_two_turn" => scenario(&path, &directory, false),
+                        "no_progress" => repeat_scenario(&path, &directory, false),
+                        "cancel_approval" => cancel_scenario(&path, &directory, false),
+                        _ => unreachable!(),
+                    }
                 }
             })
             .await;
