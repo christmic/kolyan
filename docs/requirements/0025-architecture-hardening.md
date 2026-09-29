@@ -142,6 +142,24 @@ Qwen 重复调用的根因仍未确定：已有转储证明部分请求包含工
 挂起审批、重启进程、批准恢复并读取结果；补取消、异常断开和事件续读。
 直接调用 Rust Service 的测试不能替代此验收；客户端目前是占位时明确说明。
 
+### R4 模型流闭合（2026-09-29）
+
+`StepEvent` 是模型流的中立契约；Runtime 必须在聚合 StepResult 的同时记录
+TextDelta、ReasoningDelta、ToolCallStarted、ToolCallArgumentsDelta、
+ToolCallCompleted 和 Usage。记录使用与 Turn 事实相同的 Ledger 全局 cursor，Server
+不新增第二套临时推送状态，客户端通过 `execution.events(after_cursor)` 读取及续读。
+
+这些记录统一使用 `model_stream_event` kind，并以 payload.type 区分事件类型。Provider
+原始 metadata 不进入该公共事件，Completed 仍由既有 StepCompleted 表达，避免双终态。
+模型流是耐久观察事实，不参与恢复、效果重放或 Session 投影决策；但写入失败必须
+使当前 Step 失败关闭，并且不得继续执行其后工具。事件内容可能包含模型文本和工具
+参数，服务边界按会话数据处理，不写鉴权头和 Provider 原始诊断。
+
+进程级确定性验收必须让回环 Provider 分片产生文本、思考和工具参数增量，随后断开
+读取并用 cursor 续读，精确比较事件顺序、类型和内容，同时证明最终 Step/Turn 事实
+仍只出现一次。真实模型矩阵检查所有实际返回的中立增量可读取，不要求模型必须产生
+其没有返回的思考内容。
+
 ## R5：无进展治理（在证据链建立后）
 
 - 先用完整请求/响应回放定位重复调用；不把增大 max_steps 当作修复。
@@ -302,8 +320,9 @@ OpenAI 中间空工具参数及 incomplete 原因可选性的 SDK 对照见 0026
 
 服务不是分布式系统，无分布式租约；外部副作用不承诺 exactly-once。
 进程在任意位置被杀后不自动重新执行 claimed attempt；审批检查点可恢复，
-不确定副作用需显式对账。当前事件接口是完整耐久事实的 cursor 查询，不是
-逐 token UI 流。Session 分叉、上下文压缩、网络认证、UI 客户端不在本轮范围。
+不确定副作用需显式对账。当前事件接口是完整耐久事实的 cursor 查询；模型中立增量
+也使用同一查询和 cursor，不是独立的易失 UI 推送通道。Session 分叉、上下文压缩、
+网络认证、UI 客户端不在本轮范围。
 R5 在下一批准入边界治理，批次内部的重复调用仍受批次/工具预算约束。
 真实模型的 schema 不合规不能通过删模型、伪造完成、静默重试或放宽断言闭合验收。
 

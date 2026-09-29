@@ -17,6 +17,9 @@ KOLYAN_SERVER_CONFIG=/absolute/path/server.json target/debug/kolyan-server
 `execution.start` 返回本次执行完成或审批挂起的结果；可同时发送其他 RPC。
 挂起检查点已持久化，可以关闭进程，重启后用原执行身份和 approval_id 确认。
 `execution.events` 使用账本游标增量拉取；日志保留实际内容，不是只有事件名称。
+文本、思考、工具参数和 usage 的中立模型增量以 `model_stream_event` 返回，与执行事实
+共享 cursor，因此客户端重连后可续读。它们是观察数据，不参与恢复或重复执行判定；
+Provider 原始 metadata 和鉴权信息不通过该接口暴露。
 这不是 HTTP/WebSocket 服务，当前不提供网络认证或分布式协调。
 
 正常 EOF 等待在途任务完成；强制退出后，已启动且无收据的工具副作用必须人工对账，

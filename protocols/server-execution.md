@@ -35,8 +35,13 @@ Server 从本地配置装配 Provider 和工具，客户端不传凭据或任意
 
 每条事件带全局递增 cursor、execution_id、turn_id、kind 和实际 payload。
 每页最多 1000 条；下一页使用 next_cursor，重复查询同一 cursor 不产生执行副作用。
-当前订阅是耐久 Turn/Step/Tool 事实（含完整 Step 输出和实际 ModelRequest），
-不是 token 级 UI delta 通道；模型内部仍通过 Provider stream 消费响应。
+当前订阅同时包含耐久 Turn/Step/Tool 事实、实际 ModelRequest，以及 Provider 中立化后的
+模型增量。模型增量 kind 为 `model_stream_event`，payload.type 为 `text_delta`、
+`reasoning_delta`、`tool_call_started`、`tool_call_arguments_delta`、
+`tool_call_completed` 或 `usage`；均包含 step_id，工具事件还包含 call id。
+`StepCompleted` 仍是唯一 Step 终态；Provider 原始 metadata 不通过该接口公开。
+增量与其他事实共享全局 cursor，断线后用 after_cursor 续读，不维护第二套易失流状态。
+模型流只用于观察和客户端呈现，不作为恢复或效果重放输入。
 签名思考等上下文按模型返回保留，不生成或补造模型未提供的内容。
 
 EOF 等待在途任务结束；强制终止后不会自动重跑已 claimed 的 attempt。
