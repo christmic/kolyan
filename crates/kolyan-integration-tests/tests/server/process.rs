@@ -161,6 +161,7 @@ fn compare(
     key: Value,
     expected: &Value,
     expected_stream: &Value,
+    exact_stream: bool,
     directory: &Path,
     name: &str,
 ) {
@@ -170,17 +171,22 @@ fn compare(
     for event in events {
         writeln!(file, "{event}").unwrap();
     }
-    assert_fact_contract(events, "normal_contract");
+    assert_fact_contract(events, "normal_contract", exact_stream);
     contract::assert_effects(events, name);
-    assert_eq!(
-        events
-            .iter()
-            .filter(|event| event["kind"] == "model_stream_event")
-            .map(|event| event["payload"].clone())
-            .collect::<Vec<_>>(),
-        expected_stream.as_array().unwrap().clone(),
-        "{name}: exact neutral model stream"
-    );
+    let stream = events
+        .iter()
+        .filter(|event| event["kind"] == "model_stream_event")
+        .map(|event| event["payload"].clone())
+        .collect::<Vec<_>>();
+    if exact_stream {
+        assert_eq!(
+            stream,
+            expected_stream.as_array().unwrap().clone(),
+            "{name}: exact neutral model stream"
+        );
+    } else {
+        assert_live_stream_contract(&stream, false);
+    }
     let mut offset = 0;
     for kind in expected.as_array().unwrap() {
         offset += events[offset..]
@@ -218,7 +224,7 @@ fn compare(
     );
 }
 
-fn scenario(config: &Path, directory: &Path) {
+fn scenario(config: &Path, directory: &Path, exact_stream: bool) {
     let case: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
     let mut process = Process::start(config, directory);
@@ -238,14 +244,16 @@ fn scenario(config: &Path, directory: &Path) {
     let approval_id = paused["approval"]["approval_id"].clone();
     let prefix = process.rpc("execution.events", first_key.clone());
     let prefix_events = prefix["events"].as_array().unwrap();
-    assert_eq!(
-        prefix_events
-            .iter()
-            .filter(|event| event["kind"] == "model_stream_event")
-            .map(|event| event["payload"].clone())
-            .collect::<Vec<_>>(),
-        case["turn1_stream"].as_array().unwrap()[..4]
-    );
+    let prefix_stream = prefix_events
+        .iter()
+        .filter(|event| event["kind"] == "model_stream_event")
+        .map(|event| event["payload"].clone())
+        .collect::<Vec<_>>();
+    if exact_stream {
+        assert_eq!(prefix_stream, case["turn1_stream"].as_array().unwrap()[..4]);
+    } else {
+        assert_live_stream_contract(&prefix_stream, false);
+    }
     let resume_cursor = prefix["next_cursor"].clone();
     drop(process); // Kill the actual service process while approval is pending.
     let mut process = Process::start(config, directory);
@@ -268,16 +276,21 @@ fn scenario(config: &Path, directory: &Path) {
             .iter()
             .all(|event| { event["cursor"].as_u64().unwrap() > resume_cursor.as_u64().unwrap() })
     );
-    assert_eq!(
-        resumed["events"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|event| event["kind"] == "model_stream_event")
-            .map(|event| event["payload"].clone())
-            .collect::<Vec<_>>(),
-        case["turn1_stream"].as_array().unwrap()[4..]
-    );
+    let resumed_stream = resumed["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|event| event["kind"] == "model_stream_event")
+        .map(|event| event["payload"].clone())
+        .collect::<Vec<_>>();
+    if exact_stream {
+        assert_eq!(
+            resumed_stream,
+            case["turn1_stream"].as_array().unwrap()[4..]
+        );
+    } else {
+        assert_live_stream_contract(&resumed_stream, true);
+    }
     assert_eq!(
         fs::read_to_string(
             directory
@@ -292,6 +305,7 @@ fn scenario(config: &Path, directory: &Path) {
         first_key,
         &case["first_expected_kinds"],
         &case["turn1_stream"],
+        exact_stream,
         directory,
         "turn1",
     );
@@ -306,6 +320,7 @@ fn scenario(config: &Path, directory: &Path) {
         second_key,
         &case["second_expected_kinds"],
         &case["turn2_stream"],
+        exact_stream,
         directory,
         "turn2",
     );
@@ -315,7 +330,7 @@ fn scenario(config: &Path, directory: &Path) {
     assert_eq!(session["context_messages"].as_array().unwrap().len(), 8);
 }
 
-fn repeat_scenario(config: &Path, directory: &Path) {
+fn repeat_scenario(config: &Path, directory: &Path, exact_stream: bool) {
     let case: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
     let mut settings: Value = serde_json::from_slice(&fs::read(config).unwrap()).unwrap();
@@ -357,7 +372,15 @@ fn repeat_scenario(config: &Path, directory: &Path) {
     for event in &events {
         writeln!(file, "{event}").unwrap();
     }
-    assert_fact_contract(&events, "repeat_contract");
+    assert_fact_contract(&events, "repeat_contract", exact_stream);
+    if !exact_stream {
+        let stream = events
+            .iter()
+            .filter(|event| event["kind"] == "model_stream_event")
+            .map(|event| event["payload"].clone())
+            .collect::<Vec<_>>();
+        assert_live_stream_contract(&stream, false);
+    }
     contract::assert_effects(&events, "repeat");
     assert_eq!(
         events
@@ -387,7 +410,7 @@ fn repeat_scenario(config: &Path, directory: &Path) {
     );
 }
 
-fn cancel_scenario(config: &Path, directory: &Path) {
+fn cancel_scenario(config: &Path, directory: &Path, exact_stream: bool) {
     let case: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
     let mut process = Process::start(config, directory);
@@ -419,12 +442,20 @@ fn cancel_scenario(config: &Path, directory: &Path) {
     for event in &events {
         writeln!(file, "{event}").unwrap();
     }
-    assert_fact_contract(&events, "cancel_contract");
+    assert_fact_contract(&events, "cancel_contract", exact_stream);
+    if !exact_stream {
+        let stream = events
+            .iter()
+            .filter(|event| event["kind"] == "model_stream_event")
+            .map(|event| event["payload"].clone())
+            .collect::<Vec<_>>();
+        assert_live_stream_contract(&stream, false);
+    }
     assert!(!events.iter().any(|event| event["kind"] == "effect_started"));
     assert!(!directory.join("workspace/safe/cancel.txt").exists());
 }
 
-fn assert_fact_contract(events: &[Value], name: &str) {
+fn assert_fact_contract(events: &[Value], name: &str, exact_stream: bool) {
     let fixture: Value =
         serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
     let contract = &fixture[name];
@@ -436,6 +467,9 @@ fn assert_fact_contract(events: &[Value], name: &str) {
         assert_eq!(&first["payload"]["request"]["tool_choice"], choice);
     }
     for (kind, count) in contract["counts"].as_object().unwrap() {
+        if kind == "model_stream_event" && !exact_stream {
+            continue;
+        }
         assert_eq!(
             events.iter().filter(|event| event["kind"] == *kind).count() as u64,
             count.as_u64().unwrap(),
@@ -456,6 +490,34 @@ fn assert_fact_contract(events: &[Value], name: &str) {
             event["payload"]["request"]["messages"].is_array(),
             "actual model context must be retained"
         );
+    }
+}
+
+fn assert_live_stream_contract(stream: &[Value], allow_empty: bool) {
+    let fixture: Value =
+        serde_json::from_str(include_str!("../fixtures/server_process.json")).unwrap();
+    let contract = &fixture["live_stream_contract"];
+    if !allow_empty {
+        assert!(
+            !stream.is_empty(),
+            "real Provider produced no observable model stream events"
+        );
+    }
+    for payload in stream {
+        assert!(
+            payload["step_id"]
+                .as_str()
+                .is_some_and(|value| !value.is_empty())
+        );
+        assert!(
+            contract["allowed_types"]
+                .as_array()
+                .unwrap()
+                .contains(&payload["type"])
+        );
+        for field in contract["forbidden_fields"].as_array().unwrap() {
+            assert!(payload.get(field.as_str().unwrap()).is_none());
+        }
     }
 }
 
@@ -557,9 +619,9 @@ fn server_process_approval_restart_and_two_turns() {
         Some(4096),
     );
     eprintln!("process evidence: {}", directory.display());
-    scenario(&path, &directory);
-    repeat_scenario(&path, &directory);
-    cancel_scenario(&path, &directory);
+    scenario(&path, &directory, true);
+    repeat_scenario(&path, &directory, true);
+    cancel_scenario(&path, &directory, true);
     worker.join().unwrap();
     let next_turn: Value =
         serde_json::from_slice(&fs::read(directory.join("model-request-2.json")).unwrap()).unwrap();
@@ -646,9 +708,9 @@ async fn server_process_live_matrix() {
                     model.max_output_tokens,
                 );
                 match case {
-                    "approval_two_turn" => scenario(&path, &directory),
-                    "no_progress" => repeat_scenario(&path, &directory),
-                    "cancel_approval" => cancel_scenario(&path, &directory),
+                    "approval_two_turn" => scenario(&path, &directory, false),
+                    "no_progress" => repeat_scenario(&path, &directory, false),
+                    "cancel_approval" => cancel_scenario(&path, &directory, false),
                     _ => unreachable!(),
                 }
             })

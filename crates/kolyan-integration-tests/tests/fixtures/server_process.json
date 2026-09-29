@@ -41,5 +41,9 @@
     {"type":"tool_call_completed","step_id":"t2-step-0","call":{"id":"read1","name":"file.read","arguments":{"path":"safe/result.txt"}}},
     {"type":"reasoning_delta","step_id":"t2-step-1","text":"fixture-reasoning-3"},
     {"type":"text_delta","step_id":"t2-step-1","text":"kolyan-process-proof"}
-  ]
+  ],
+  "live_stream_contract": {
+    "allowed_types": ["text_delta", "reasoning_delta", "tool_call_started", "tool_call_arguments_delta", "tool_call_completed", "usage"],
+    "forbidden_fields": ["raw", "metadata"]
+  }
 }
