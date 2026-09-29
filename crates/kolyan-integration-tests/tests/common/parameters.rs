@@ -2,6 +2,8 @@
 
 use serde_json::{Value, json};
 
+use kolyan_model::{ModelFeature, ParameterTable};
+
 pub fn parameter_profile(provider: &str, protocol: &str, model: &str) -> String {
     let catalog: Value =
         serde_json::from_str(include_str!("../config/provider-parameters.json")).unwrap();
@@ -26,4 +28,19 @@ pub fn parameter_table(provider: &str, protocol: &str, model: &str) -> Value {
     table["protocol"] = json!(protocol);
     table["models"] = json!({model: model_rules});
     table
+}
+
+pub fn supports_feature(
+    provider: &str,
+    protocol: &str,
+    model: &str,
+    feature: ModelFeature,
+) -> bool {
+    let table: ParameterTable = serde_json::from_value(parameter_table(provider, protocol, model))
+        .expect("validated test parameter table");
+    table.models[model]
+        .features
+        .as_ref()
+        .unwrap_or(&table.features)
+        .contains(&feature)
 }

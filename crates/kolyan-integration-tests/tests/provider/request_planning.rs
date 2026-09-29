@@ -51,6 +51,14 @@ fn dataset() -> Value {
 #[test]
 fn verified_model_profiles_select_exact_tool_choice_rules() {
     for protocol in ["openai_responses", "anthropic_messages"] {
+        assert!(!common::supports_feature(
+            "minimax",
+            protocol,
+            "MiniMax-M3",
+            kolyan_model::ModelFeature::StructuredOutput,
+        ));
+    }
+    for protocol in ["openai_responses", "anthropic_messages"] {
         for model in [
             "qwen3.8-max",
             "qwen3.8-flash",
@@ -64,12 +72,21 @@ fn verified_model_profiles_select_exact_tool_choice_rules() {
         ] {
             let profile = common::parameter_profile("qwen", protocol, model);
             let value = common::parameter_table("qwen", protocol, model);
-            let expected = if matches!(model, "qwen3.8-max" | "qwen3.8-flash" | "qwen3.7-plus") {
-                "thinking_auto_only"
-            } else if protocol == "openai_responses" {
-                "required_single_tool"
-            } else {
-                "default"
+            let expected = match (protocol, model) {
+                ("openai_responses", "qwen3.8-max" | "qwen3.8-flash") => "thinking_auto_only",
+                ("openai_responses", "qwen3.7-plus")
+                | ("anthropic_messages", "qwen3.8-max" | "qwen3.8-flash" | "qwen3.7-plus") => {
+                    "thinking_auto_only_structured"
+                }
+                (
+                    "openai_responses",
+                    "deepseek-v4.1-flash" | "deepseek-v4-flash-0731" | "glm-5.3",
+                ) => "required_single_tool_no_structured_output",
+                ("openai_responses", _) => "required_single_tool",
+                ("anthropic_messages", "deepseek-v4.1-flash") => "default",
+                ("anthropic_messages", "deepseek-v4-flash-0731" | "glm-5.3") => "default",
+                ("anthropic_messages", _) => "structured_output",
+                _ => unreachable!(),
             };
             assert_eq!(profile, expected);
             let table: ParameterTable = serde_json::from_value(value).unwrap();
@@ -83,19 +100,35 @@ fn verified_model_profiles_select_exact_tool_choice_rules() {
             );
             request.tool_choice = kolyan_model::ToolChoice::Required;
             let plan = planner.plan(&request).unwrap();
-            let expected_choice = if expected == "thinking_auto_only" {
+            let expected_choice = if expected.starts_with("thinking_auto_only") {
                 kolyan_model::ToolChoice::Auto
             } else {
                 kolyan_model::ToolChoice::Required
             };
             assert_eq!(plan.request.tool_choice, expected_choice);
-            if expected == "required_single_tool" {
+            if expected.starts_with("required_single_tool") {
                 let mut second = request.tools[0].clone();
                 second.name.push_str("_second");
                 request.tools.push(second);
                 assert_eq!(
                     planner.plan(&request).unwrap().request.tool_choice,
                     kolyan_model::ToolChoice::Auto
+                );
+            }
+            if !common::supports_feature(
+                "qwen",
+                protocol,
+                model,
+                kolyan_model::ModelFeature::StructuredOutput,
+            ) {
+                request.output_format = Some(kolyan_model::OutputFormat {
+                    name: "answer".into(),
+                    schema: serde_json::json!({"type":"object"}),
+                    strict: true,
+                });
+                assert_eq!(
+                    planner.plan(&request).unwrap_err().kind,
+                    kolyan_model::ProviderErrorKind::Unsupported
                 );
             }
         }

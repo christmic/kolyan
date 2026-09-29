@@ -415,8 +415,11 @@
       "request":{"tool_choice":"required"},
       "decisions_by_profile":{
         "default":{"tool_choice":"sent"},
+        "structured_output":{"tool_choice":"sent"},
         "thinking_auto_only":{"tool_choice":"mapped_to_auto"},
-        "required_single_tool":{"tool_choice":"sent"}
+        "thinking_auto_only_structured":{"tool_choice":"mapped_to_auto"},
+        "required_single_tool":{"tool_choice":"sent"},
+        "required_single_tool_no_structured_output":{"tool_choice":"sent"}
       }
     },
     {

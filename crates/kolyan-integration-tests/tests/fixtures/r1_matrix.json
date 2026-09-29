@@ -1,4 +1,6 @@
 {
   "cases": ["text", "tool_call", "structured_output", "prompt_cache"],
-  "attempts": 1
+  "sampling": {
+    "structured_output": {"samples": 3, "minimum_passes": 1}
+  }
 }

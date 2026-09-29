@@ -1,12 +1,33 @@
 {
   "profiles": {
     "default": {"parameters": {}},
+    "structured_output": {
+      "features":["text_input","text_output","streaming","tool_use","structured_output"],
+      "parameters": {}
+    },
     "thinking_auto_only": {
       "parameters": {
         "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}}
       }
     },
+    "thinking_auto_only_structured": {
+      "features":["text_input","text_output","streaming","tool_use","structured_output"],
+      "parameters": {
+        "tool_choice": {"support":"supported", "schema":{"enum":["auto"]}}
+      }
+    },
     "required_single_tool": {
+      "features":["text_input","text_output","streaming","tool_use","structured_output"],
+      "parameters": {
+        "tool_choice": {
+          "support":"supported",
+          "schema":{"enum":["auto","none","required"]},
+          "constraints":{"required_max_tools":1}
+        }
+      }
+    },
+    "required_single_tool_no_structured_output": {
+      "features":["text_input","text_output","streaming","tool_use"],
       "parameters": {
         "tool_choice": {
           "support":"supported",
@@ -19,15 +40,18 @@
   "bindings": {
     "qwen/openai_responses/qwen3.8-max": "thinking_auto_only",
     "qwen/openai_responses/qwen3.8-flash": "thinking_auto_only",
-    "qwen/openai_responses/qwen3.7-plus": "thinking_auto_only",
-    "qwen/anthropic_messages/qwen3.8-max": "thinking_auto_only",
-    "qwen/anthropic_messages/qwen3.8-flash": "thinking_auto_only",
-    "qwen/anthropic_messages/qwen3.7-plus": "thinking_auto_only",
+    "qwen/openai_responses/qwen3.7-plus": "thinking_auto_only_structured",
+    "qwen/anthropic_messages/qwen3.8-max": "thinking_auto_only_structured",
+    "qwen/anthropic_messages/qwen3.8-flash": "thinking_auto_only_structured",
+    "qwen/anthropic_messages/qwen3.7-plus": "thinking_auto_only_structured",
+    "qwen/anthropic_messages/qwen3.7-max": "structured_output",
+    "qwen/anthropic_messages/deepseek-v4-pro": "structured_output",
+    "qwen/anthropic_messages/glm-5.2": "structured_output",
     "qwen/openai_responses/qwen3.7-max": "required_single_tool",
-    "qwen/openai_responses/deepseek-v4.1-flash": "required_single_tool",
+    "qwen/openai_responses/deepseek-v4.1-flash": "required_single_tool_no_structured_output",
     "qwen/openai_responses/deepseek-v4-pro": "required_single_tool",
-    "qwen/openai_responses/deepseek-v4-flash-0731": "required_single_tool",
-    "qwen/openai_responses/glm-5.3": "required_single_tool",
+    "qwen/openai_responses/deepseek-v4-flash-0731": "required_single_tool_no_structured_output",
+    "qwen/openai_responses/glm-5.3": "required_single_tool_no_structured_output",
     "qwen/openai_responses/glm-5.2": "required_single_tool"
   }
 }

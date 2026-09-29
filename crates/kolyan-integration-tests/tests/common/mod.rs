@@ -13,7 +13,7 @@
 
 mod parameters;
 #[allow(unused_imports)]
-pub use parameters::{parameter_profile, parameter_table};
+pub use parameters::{parameter_profile, parameter_table, supports_feature};
 
 use std::time::Duration;
 

@@ -28,9 +28,11 @@ impl ModelProvider for Provider {
     }
 }
 
+#[derive(Clone)]
 struct Case {
     label: String,
     family: String,
+    protocol: String,
     fixture: String,
     entry: ModelMatrixEntry,
     provider: Option<Provider>,
@@ -40,10 +42,6 @@ fn plan() -> Vec<Case> {
     let config = load_config();
     let dataset: serde_json::Value =
         serde_json::from_str(include_str!("../fixtures/r1_matrix.json")).unwrap();
-    assert_eq!(
-        dataset["attempts"], 1,
-        "R1 does not retry failed model contracts"
-    );
     let fixtures = dataset["cases"].as_array().unwrap();
     let mut cases = vec![];
     for (family, cfg) in [
@@ -58,6 +56,7 @@ fn plan() -> Vec<Case> {
                 cases.push(Case {
                     label: format!("{family}/openai/{}/{fixture}", entry.model),
                     family: family.into(),
+                    protocol: "openai_responses".into(),
                     fixture: fixture.into(),
                     entry: entry.clone(),
                     provider: provider.clone(),
@@ -81,6 +80,7 @@ fn plan() -> Vec<Case> {
                 cases.push(Case {
                     label: format!("{family}/anthropic/{}/{fixture}", entry.model),
                     family: family.into(),
+                    protocol: "anthropic_messages".into(),
                     fixture: fixture.into(),
                     entry: entry.clone(),
                     provider: provider.clone(),
@@ -95,6 +95,8 @@ fn plan() -> Vec<Case> {
 #[ignore = "real providers; all configured protocol/model/case combinations; writes complete matrix evidence"]
 async fn all_r1_provider_step_contracts() {
     let cases = plan();
+    let dataset: serde_json::Value =
+        serde_json::from_str(include_str!("../fixtures/r1_matrix.json")).unwrap();
     let mut matrix = Matrix::new(cases.iter().map(|case| case.label.clone()));
     let revision = std::process::Command::new("git")
         .args(["rev-parse", "HEAD"])
@@ -116,21 +118,52 @@ async fn all_r1_provider_step_contracts() {
             );
             continue;
         }
+        if case.fixture == "structured_output"
+            && !common::supports_feature(
+                &case.family,
+                &case.protocol,
+                &case.entry.model,
+                kolyan_model::ModelFeature::StructuredOutput,
+            )
+        {
+            matrix.record(
+                index,
+                Status::Skipped,
+                "feature table declares structured output unsupported",
+            );
+            continue;
+        }
         let Some(provider) = case.provider.clone() else {
             matrix.record(index, Status::NotRun, "missing provider credential");
             continue;
         };
         let directory = matrix.directory.join(index.to_string());
         fs::create_dir(&directory).unwrap();
-        matrix
-            .run(index, async {
-                let first = run_step(&provider, &case, &fixture, &directory, 0).await;
-                if let Some(expected) = &fixture.expectations.prompt_cache {
-                    let second = run_step(&provider, &case, &fixture, &directory, 1).await;
-                    assert_prompt_cache_diff(&first, &second, expected, &case.label);
-                }
-            })
-            .await;
+        if let Some(sampling) = dataset["sampling"].get(&case.fixture) {
+            let samples = sampling["samples"].as_u64().unwrap() as usize;
+            let minimum = sampling["minimum_passes"].as_u64().unwrap() as usize;
+            matrix
+                .run_samples(index, samples, minimum, |sample| {
+                    let case = case.clone();
+                    let directory = directory.clone();
+                    async move {
+                        let provider = case.provider.clone().unwrap();
+                        let fixture = load_fixture(&case.fixture);
+                        run_step(&provider, &case, &fixture, &directory, sample).await;
+                    }
+                })
+                .await;
+        } else {
+            matrix
+                .run(index, async {
+                    let first = run_step(&provider, &case, &fixture, &directory, 0).await;
+                    if let Some(expected) = &fixture.expectations.prompt_cache {
+                        let second = run_step(&provider, &case, &fixture, &directory, 1).await;
+                        assert_prompt_cache_diff(&first, &second, expected, &case.label);
+                    }
+                })
+                .await;
+        }
     }
     assert!(
         matrix.complete(),
@@ -205,6 +238,35 @@ async fn matrix_failure_does_not_prevent_later_rows() {
     assert_eq!(matrix.rows[2].status, Status::NotRun);
     assert!(!matrix.complete());
     assert!(matrix.directory.join("report.json").exists());
+}
+
+#[tokio::test]
+async fn matrix_retry_preserves_failed_attempt_evidence() {
+    let mut matrix = Matrix::new(["model".into()]);
+    matrix
+        .run_attempts(0, 2, |attempt| async move {
+            assert_eq!(attempt, 2, "transient model failure");
+        })
+        .await;
+    assert_eq!(matrix.rows[0].status, Status::Passed);
+    assert_eq!(matrix.rows[0].attempts, 2);
+    assert_eq!(matrix.rows[0].passed_attempts, 1);
+    assert_eq!(matrix.rows[0].attempt_failures.len(), 1);
+    assert!(matrix.rows[0].attempt_failures[0].contains("transient model failure"));
+}
+
+#[tokio::test]
+async fn matrix_sampling_runs_every_sample_and_applies_threshold() {
+    let mut matrix = Matrix::new(["structured".into()]);
+    matrix
+        .run_samples(0, 3, 2, |sample| async move {
+            assert_ne!(sample, 1, "first sample failed schema validation");
+        })
+        .await;
+    assert_eq!(matrix.rows[0].status, Status::Passed);
+    assert_eq!(matrix.rows[0].attempts, 3);
+    assert_eq!(matrix.rows[0].passed_attempts, 2);
+    assert_eq!(matrix.rows[0].attempt_failures.len(), 1);
 }
 
 #[tokio::test]
