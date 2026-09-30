@@ -2,6 +2,10 @@
 
 mod progress;
 pub use progress::ProgressPolicy;
+mod prepared;
+pub use prepared::{
+    ApprovalEvidence, PreparedCall, PreparedError, PreparedGrant, ToolRequirements,
+};
 
 use kolyan_model::ToolCall;
 use serde::{Deserialize, Serialize};
@@ -14,6 +18,7 @@ pub enum Capability {
     FilesystemRead,
     FilesystemWrite,
     ProcessInspect,
+    ProcessExecute,
     NetworkConnect,
     SecretUse,
 }
@@ -304,16 +309,28 @@ impl PolicyEngine {
     }
 
     pub fn decide_with_context(&self, call: &ToolCall, context: &PolicyContext) -> PolicyDecision {
+        self.decide_claim(&InvocationClaim::from_call(call), context)
+    }
+
+    /// Evaluate validated adapter-derived semantics, not tool-name heuristics.
+    /// Invalid persisted preparation is denied before any authority is issued.
+    pub fn decide_prepared(&self, call: &PreparedCall, context: &PolicyContext) -> PolicyDecision {
+        if let Err(error) = call.validate() {
+            return PolicyDecision::denied(error.to_string());
+        }
+        self.decide_claim(call.claim(), context)
+    }
+
+    fn decide_claim(&self, claim: &InvocationClaim, context: &PolicyContext) -> PolicyDecision {
         if context.remaining_tool_calls == Some(0) {
             return PolicyDecision::denied("tool-call budget is exhausted");
         }
-        if self.denied_tools.contains(&call.name) {
+        if self.denied_tools.contains(&claim.tool_name) {
             return PolicyDecision::denied("tool is denied by runtime policy");
         }
-        let Some(manifest) = self.manifests.get(&call.name) else {
+        let Some(manifest) = self.manifests.get(&claim.tool_name) else {
             return PolicyDecision::denied("tool has no trusted manifest");
         };
-        let claim = InvocationClaim::from_call(call);
         if !claim.capabilities.is_subset(&manifest.capabilities)
             || !claim.effects.is_subset(&manifest.effects)
         {
