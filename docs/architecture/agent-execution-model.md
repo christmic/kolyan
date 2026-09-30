@@ -19,7 +19,7 @@ Kolyan 的最小执行单元是：
   → 结束状态
 ```
 
-第一阶段不引入完整 Session Runtime、事件总线、持久化 Ledger、MCP、Plugin 或多 Agent 编排。仓库目录会提前预留这些边界，但实现按开发路线逐步加入。
+最小 Kernel 不直接引入 Session 存储、持久化 Ledger、MCP、Plugin 或多 Agent 编排。当前 Runtime 和 Server 已通过外部接口接入持久化、治理和最小 Session 执行链；后续增强边界见 [内核演进评估](kernel-evolution.md)。
 
 ## 三层抽象
 
@@ -45,7 +45,7 @@ flowchart TD
 - resume / fork / replay；
 - 持久化和事件记录。
 
-当前阶段只保留它作为上层边界，不实现 Session 存储和恢复。
+当前已由 Storage 和 Server 提供最小 Session 存储及执行协调；分叉等更丰富能力仍待完善。Turn 不直接依赖 SessionStore。
 
 ### Turn
 
