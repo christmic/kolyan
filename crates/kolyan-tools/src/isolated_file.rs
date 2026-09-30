@@ -7,7 +7,7 @@ use std::time::Duration;
 use kolyan_model::ToolCall;
 use kolyan_policy::{
     Capability, Effect, Idempotency, InvocationClaim, PreparedCall, PreparedError, PreparedGrant,
-    ResourceClaim, ToolRequirements,
+    ResourceClaim, ToolExecutionScope, ToolRequirements,
 };
 use kolyan_sandbox::{
     MacOsSandbox, SandboxCancellation, SandboxCommand, SandboxConfig, SandboxError, SandboxRequest,
@@ -168,6 +168,8 @@ impl IsolatedFileTools {
     }
 
     /// Reprepare and verify exact authority before spawning a sandboxed helper.
+    /// `expected_scope` comes from independent trusted host context, never from
+    /// the presented grant or reusable model-generated tool-call identity.
     /// Cancellation returns after cleanup; interruption does not promise rollback
     /// of an already committed write. Runtime must persist effect receipts.
     pub async fn execute(
@@ -175,6 +177,7 @@ impl IsolatedFileTools {
         prepared: &PreparedCall,
         grant: &PreparedGrant,
         policy_revision: &str,
+        expected_scope: &ToolExecutionScope,
         cancellation: SandboxCancellation,
     ) -> Result<FileOperationResult, IsolatedFileError> {
         let adapter = Self {
@@ -188,7 +191,7 @@ impl IsolatedFileTools {
             return Err(IsolatedFileError::Prepared(PreparedError::BindingMismatch));
         }
         grant
-            .validate(prepared, policy_revision)
+            .validate(prepared, policy_revision, expected_scope)
             .map_err(IsolatedFileError::Prepared)?;
         let operation = self.operation(prepared.call())?;
         let input = serde_json::to_vec(&operation)

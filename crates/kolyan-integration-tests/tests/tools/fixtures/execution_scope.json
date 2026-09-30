@@ -1,0 +1,39 @@
+{
+  "id": "file-worker-execution-scope-v1",
+  "expected_rows": 20,
+  "admitted_scope": {
+    "execution": {
+      "session_id": "file-fixture-session",
+      "turn_id": "file-fixture-turn",
+      "execution_id": "file-fixture-execution"
+    },
+    "step_id": "file-fixture-step",
+    "agent_snapshot_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "modes": [
+    {
+      "id": "allow",
+      "approval": "allow",
+      "call": {"id":"allow-write","name":"file.write","arguments":{"path":"allow-effect","content":"scoped-content"}},
+      "check_foreign_approval": false,
+      "matching_case_id": "allow-matching-scope",
+      "expected_matching": {"refused":false,"effect_exists":true,"content":"scoped-content","result_bytes":14}
+    },
+    {
+      "id": "approved",
+      "approval": "confirmed",
+      "call": {"id":"approved-write","name":"file.write","arguments":{"path":"approved-effect","content":"scoped-content"}},
+      "check_foreign_approval": true,
+      "matching_case_id": "approved-matching-scope",
+      "expected_matching": {"refused":false,"effect_exists":true,"content":"scoped-content","result_bytes":14}
+    }
+  ],
+  "mutations": [
+    {"id":"session","field":"session_id","value":"foreign-session","expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}},
+    {"id":"turn","field":"turn_id","value":"foreign-turn","expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}},
+    {"id":"execution","field":"execution_id","value":"foreign-execution","expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}},
+    {"id":"step","field":"step_id","value":"foreign-step","expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}},
+    {"id":"agent","field":"agent_snapshot_digest","value":"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd","expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}},
+    {"id":"missing-agent","field":"agent_snapshot_digest","value":null,"expected_refusal":{"refused":true,"effect_exists":false,"error_contains":"binding mismatch"}}
+  ]
+}

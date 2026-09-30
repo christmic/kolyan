@@ -43,11 +43,28 @@ mod macos {
         }
     }
 
-    fn grant(prepared: &PreparedCall) -> PreparedGrant {
-        issue(prepared, None, None)
+    fn scope() -> ToolExecutionScope {
+        ToolExecutionScope {
+            execution: kolyan_types::ExecutionKey {
+                session_id: "shell-fixture-session".into(),
+                turn_id: "shell-fixture-turn".into(),
+                execution_id: "shell-fixture-execution".into(),
+            },
+            step_id: "shell-fixture-step".into(),
+            agent_snapshot_digest: Some("a".repeat(64)),
+        }
     }
 
-    fn issue(prepared: &PreparedCall, output: Option<u64>, timeout: Option<u64>) -> PreparedGrant {
+    fn grant(prepared: &PreparedCall, scope: &ToolExecutionScope) -> PreparedGrant {
+        issue(prepared, None, None, scope)
+    }
+
+    fn issue(
+        prepared: &PreparedCall,
+        output: Option<u64>,
+        timeout: Option<u64>,
+        scope: &ToolExecutionScope,
+    ) -> PreparedGrant {
         PreparedGrant::issue(
             prepared,
             PolicyDecision {
@@ -60,6 +77,7 @@ mod macos {
                 },
             },
             ApprovalEvidence::NotConfirmed,
+            scope.clone(),
         )
         .unwrap()
     }
@@ -197,6 +215,7 @@ mod macos {
 
     #[tokio::test]
     async fn actual_execution_supports_cwd_streams_and_raw_exit() {
+        let scope = scope();
         let (root, tool) = setup();
         std::fs::create_dir(root.path().join("sub")).unwrap();
         let cases = [
@@ -221,8 +240,9 @@ mod macos {
             let output = tool
                 .execute(
                     &prepared,
-                    &grant(&prepared),
+                    &grant(&prepared, &scope),
                     "policy-v1",
+                    &scope,
                     SandboxCancellation::default(),
                 )
                 .await
@@ -242,14 +262,16 @@ mod macos {
 
     #[tokio::test]
     async fn stale_policy_input_revision_and_forged_claims_have_no_effects() {
+        let scope = scope();
         let (root, tool) = setup();
         let prepared = tool.prepare(call("printf bad > forbidden")).unwrap();
-        let authority = grant(&prepared);
+        let authority = grant(&prepared, &scope);
         assert!(matches!(
             tool.execute(
                 &prepared,
                 &authority,
                 "policy-v2",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -261,6 +283,7 @@ mod macos {
                 &changed,
                 &authority,
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -278,8 +301,9 @@ mod macos {
         assert!(matches!(
             tool.execute(
                 &forged,
-                &grant(&forged),
+                &grant(&forged, &scope),
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -295,8 +319,9 @@ mod macos {
         assert!(matches!(
             tool.execute(
                 &changed_revision,
-                &grant(&changed_revision),
+                &grant(&changed_revision, &scope),
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -307,6 +332,7 @@ mod macos {
 
     #[tokio::test]
     async fn changed_cwd_binding_and_host_protections_invalidate_grants() {
+        let scope = scope();
         use std::os::unix::fs::symlink;
         let (root, tool) = setup();
         for name in ["first", "second", "private"] {
@@ -321,8 +347,9 @@ mod macos {
         assert!(matches!(
             tool.execute(
                 &prepared,
-                &grant(&prepared),
+                &grant(&prepared, &scope),
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -338,8 +365,9 @@ mod macos {
             replacement
                 .execute(
                     &prepared,
-                    &grant(&prepared),
+                    &grant(&prepared, &scope),
                     "policy-v1",
+                    &scope,
                     SandboxCancellation::default()
                 )
                 .await,
@@ -352,6 +380,7 @@ mod macos {
 
     #[tokio::test]
     async fn enforces_granted_output_timeout_and_precancel_limits() {
+        let scope = scope();
         let (root, tool) = setup();
         let prepared = tool
             .prepare(call("while :; do printf 1234567890; done"))
@@ -359,8 +388,9 @@ mod macos {
         assert!(matches!(
             tool.execute(
                 &prepared,
-                &issue(&prepared, Some(64), None),
+                &issue(&prepared, Some(64), None, &scope),
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -370,8 +400,9 @@ mod macos {
         assert!(matches!(
             tool.execute(
                 &prepared,
-                &issue(&prepared, None, Some(100)),
+                &issue(&prepared, None, Some(100), &scope),
                 "policy-v1",
+                &scope,
                 SandboxCancellation::default()
             )
             .await,
@@ -381,8 +412,14 @@ mod macos {
         let cancelled = SandboxCancellation::default();
         cancelled.cancel();
         assert!(matches!(
-            tool.execute(&prepared, &grant(&prepared), "policy-v1", cancelled)
-                .await,
+            tool.execute(
+                &prepared,
+                &grant(&prepared, &scope),
+                "policy-v1",
+                &scope,
+                cancelled
+            )
+            .await,
             Err(IsolatedShellError::Sandbox(SandboxError::Cancelled))
         ));
         assert!(!root.path().join("forbidden").exists());
@@ -390,6 +427,7 @@ mod macos {
 
     #[tokio::test]
     async fn actual_sandbox_denies_outside_and_control_paths() {
+        let scope = scope();
         let (root, _tool) = setup();
         let outside = tempfile::tempdir().unwrap();
         std::fs::write(outside.path().join("secret"), "secret-not-visible").unwrap();
@@ -409,8 +447,9 @@ mod macos {
             let output = tool
                 .execute(
                     &prepared,
-                    &grant(&prepared),
+                    &grant(&prepared, &scope),
                     "policy-v1",
+                    &scope,
                     SandboxCancellation::default(),
                 )
                 .await
@@ -423,5 +462,100 @@ mod macos {
             b"untouched"
         );
         assert!(!root.path().join(".git").exists());
+    }
+
+    #[tokio::test]
+    async fn cross_scope_grants_are_rejected_before_real_shell_effects() {
+        use std::io::Write;
+
+        let (root, tool) = setup();
+        let admitted_scope = scope();
+        let prepared = tool.prepare(call("printf scoped > scope-effect")).unwrap();
+        let authority = grant(&prepared, &admitted_scope);
+        let reports = tempfile::Builder::new()
+            .prefix("kolyan-shell-execution-scope-")
+            .tempdir()
+            .unwrap()
+            .keep();
+        let mut trace = std::fs::File::create(reports.join("actual.jsonl")).unwrap();
+        for field in [
+            "session",
+            "turn",
+            "execution",
+            "step",
+            "agent",
+            "missing-agent",
+        ] {
+            let mut expected_scope = admitted_scope.clone();
+            match field {
+                "session" => expected_scope.execution.session_id = "foreign-session".into(),
+                "turn" => expected_scope.execution.turn_id = "foreign-turn".into(),
+                "execution" => expected_scope.execution.execution_id = "foreign-execution".into(),
+                "step" => expected_scope.step_id = "foreign-step".into(),
+                "agent" => expected_scope.agent_snapshot_digest = Some("c".repeat(64)),
+                "missing-agent" => expected_scope.agent_snapshot_digest = None,
+                _ => unreachable!(),
+            }
+            let result = tool
+                .execute(
+                    &prepared,
+                    &authority,
+                    "policy-v1",
+                    &expected_scope,
+                    SandboxCancellation::default(),
+                )
+                .await;
+            let effect_exists = root.path().join("scope-effect").exists();
+            serde_json::to_writer(&mut trace, &json!({
+                "case":field, "prepared":prepared, "grant":authority,
+                "expected_scope":expected_scope, "effect_exists":effect_exists,
+                "actual_error":result.as_ref().err().map(ToString::to_string),
+                "actual_output":result.as_ref().ok().map(|output| json!({
+                    "exit_code":output.exit_code, "stdout":output.stdout, "stderr":output.stderr,
+                })),
+            })).unwrap();
+            trace.write_all(b"\n").unwrap();
+            trace.flush().unwrap();
+            assert!(
+                matches!(
+                    result,
+                    Err(IsolatedShellError::Prepared(PreparedError::BindingMismatch))
+                ),
+                "{field}: {result:?}; trace {}",
+                reports.display()
+            );
+            assert!(
+                !effect_exists,
+                "unauthorized {field} scope caused an effect"
+            );
+        }
+        let result = tool
+            .execute(
+                &prepared,
+                &authority,
+                "policy-v1",
+                &admitted_scope,
+                SandboxCancellation::default(),
+            )
+            .await;
+        let effect = std::fs::read(root.path().join("scope-effect"));
+        serde_json::to_writer(
+            &mut trace,
+            &json!({
+                "case":"matching-scope", "expected_scope":admitted_scope,
+                "actual_error":result.as_ref().err().map(ToString::to_string),
+                "actual_exit":result.as_ref().ok().and_then(|output| output.exit_code),
+                "actual_effect":effect.as_ref().ok(),
+            }),
+        )
+        .unwrap();
+        trace.write_all(b"\n").unwrap();
+        trace.flush().unwrap();
+        assert_eq!(result.unwrap().exit_code, Some(0));
+        assert_eq!(effect.unwrap(), b"scoped");
+        eprintln!(
+            "shell scope trajectory: {}",
+            reports.join("actual.jsonl").display()
+        );
     }
 }

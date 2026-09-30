@@ -68,8 +68,19 @@ result must not authorize strict model admission. Serialized byte limits are
 enforced independently and capped at 16 MiB.
 
 **Not implemented:** a production provider tokenizer, lossy compaction, summaries,
-context reduction or integration before every Core Step. No long-task reduction
+context reduction or automatic Runner assembly. No long-task reduction
 acceptance is claimed by this module. Overflow never silently discards history.
+
+`provider::ContextPreparingProvider` validates every actual `stream` opening and
+requires host `ContextRecorder` acknowledgement before calling the inner Provider.
+Source, preparation and rejection evidence are typed. It forbids changes to the
+neutral request at this boundary, including adding a missing output limit: initial
+projection must happen before Turn admission so Core's recorded input remains
+identical to the dispatched request. Strict/Inspect mode is explicit; recording
+or preparation errors block dispatch rather than being retried as network errors.
+Successful requests and the original event stream are passed through unchanged.
+Recording proves preparation acknowledgement, not network completion. Durability,
+redaction, counter trust and integration into the Agent Runner remain host-owned.
 
 Production and tests are separate according to the repository code conventions.
 Run `cargo test -p kolyan-agent` and

@@ -8,7 +8,7 @@ use std::time::Duration;
 use kolyan_model::{ToolCall, ToolDefinition};
 use kolyan_policy::{
     Capability, Effect, Idempotency, InvocationClaim, PreparedCall, PreparedError, PreparedGrant,
-    ResourceClaim, ToolRequirements,
+    ResourceClaim, ToolExecutionScope, ToolRequirements,
 };
 use kolyan_sandbox::{
     MacOsSandbox, SandboxCancellation, SandboxCommand, SandboxConfig, SandboxError, SandboxOutput,
@@ -122,6 +122,8 @@ impl IsolatedShellTool {
     }
 
     /// Reprepare exact arguments, claims, roots and shell revision before effects.
+    /// `expected_scope` must be supplied by the trusted host independently of
+    /// the presented grant; model-generated call IDs are not execution scope.
     /// Raw nonzero process exits are returned as outcomes. Cancellation/drop is
     /// handled by the sandbox reaper; committed side effects are not rolled back.
     pub async fn execute(
@@ -129,6 +131,7 @@ impl IsolatedShellTool {
         prepared: &PreparedCall,
         grant: &PreparedGrant,
         current_policy_revision: &str,
+        expected_scope: &ToolExecutionScope,
         cancellation: SandboxCancellation,
     ) -> Result<SandboxOutput, IsolatedShellError> {
         let adapter = self.clone();
@@ -143,7 +146,7 @@ impl IsolatedShellTool {
             return Err(IsolatedShellError::Prepared(PreparedError::BindingMismatch));
         }
         grant
-            .validate(prepared, current_policy_revision)
+            .validate(prepared, current_policy_revision, expected_scope)
             .map_err(IsolatedShellError::Prepared)?;
         let max_output_bytes = grant
             .constraints()

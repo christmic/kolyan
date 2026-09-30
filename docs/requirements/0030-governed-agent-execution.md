@@ -140,11 +140,16 @@ Grants bind call identity, prepared digest, tool revision, policy revision and
 constraints. The executor validates the complete binding before effects, including
 on resume. Missing grants, changed inputs, revisions or unavailable mandatory
 isolation are errors. Approval cannot expand static capability ceilings.
-The Runtime invocation binding additionally includes execution, Turn, Step and
-Agent snapshot identities: a model's raw call ID is not globally unique authority.
+The mandatory `ToolExecutionScope` binds the shared `ExecutionKey` (Session,
+Execution and Turn), Step and Agent snapshot identity. A missing Agent snapshot
+is permitted only for explicitly non-Agent execution. The expected scope must
+come from host admission, never from the grant being checked or model arguments:
+a model's raw call ID is not globally unique authority.
 The integrated grant must reject reuse across another invocation or Session.
 Policy revision must represent the effective trusted rule set, not a constant
 label surviving changes to registered manifests, static ceilings or constraints.
+Dynamic workspace restrictions intersect with host restrictions; they never
+replace a narrower host scope. Approval evidence binds the same exact scope.
 Standalone preparation/grant primitives are not acceptance of those integrated
 scope and dynamic policy guarantees.
 
@@ -242,11 +247,11 @@ the complete scope remains active until every gate above is proven.
 ## Implementation checkpoint on 2026 10 01
 
 Definition/catalog resolution, permission intersection and immutable snapshots
-are implemented. Agent module tests passed 40/40, including context preparation
+are implemented. Agent module tests passed 50/50, including context preparation
 and Memory/SQLite invocation ownership restoration. This does
 not implement model-driven delegation, durable child waits or an Agent runner.
 Policy now accepts adapter-derived prepared claims and binds grants to input,
-implementation and policy revisions. Policy tests passed 17/17; a separate Core
+implementation and policy revisions. Policy tests passed 24/24; a separate Core
 regression verifies that changed rules invalidate old approval even when the
 decision still requires approval. Revision hashes cover effective rules, and
 prepared JSON canonicalization sorts nested objects without reordering arrays.
@@ -256,7 +261,7 @@ been migrated to these preparation and grant contracts.
 
 File operations implement strict typed read/write/edit, bounded content,
 atomic replacement and stale/ambiguous edit rejection. Tools module tests passed
-32/32, preserving nine original tests. This includes isolated shell argument,
+33/33, preserving nine original tests. This includes isolated shell argument,
 grant, actual process output and refusal tests. The trusted helper has three passing
 protocol tests. `IsolatedFileTools` reprepares the call, hashes the actual trusted
 worker binary, checks the exact grant and launches the worker through Seatbelt.
@@ -272,9 +277,10 @@ escape denial. This evidence applies to the tested host, not every macOS release
 The adapter denies process-group/session detachment and cleans up normal child
 groups; it is not a universal guarantee against an adversarial operating system.
 
-The new `file_worker_process` integration target passed three tests: eight fixture
+The new `file_worker_process` integration target passed four tests: eight fixture
 operations and refusal of changed arguments, policy revision and worker binary
-before file effects, and canonical symlink resource authorization/rebinding.
+before file effects, canonical symlink resource authorization/rebinding, and
+cross-scope refusal for both ordinary and confirmed-approval authority.
 It compares explicit failure semantics and actual read
 content after exporting JSONL. Cargo builds the exact production worker entrypoint
 for this test target; no manual pre-build or duplicate worker source is required.
@@ -283,6 +289,16 @@ Final observed process artifacts at this checkpoint are:
 - `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-worker-8z0pst/actual.jsonl`
 - `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-bindings-S5hma0/actual.jsonl`
 - Sandbox output: `/tmp/kolyan-l5-sandbox-main.log`.
+- Scoped file/approval fixture: `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-execution-scopes-c3b6kF/actual.jsonl`.
+- Scoped shell refusal: `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-shell-execution-scope-xxZbyk/actual.jsonl`.
+
+The scope integration fixture declares authority modes, exact inputs, mutations
+and semantic expectations independently of the runner. Its final report has
+20 rows and 20 unique fixture identities; every refusal precedes any effect.
+The post-extraction process target passed 4/4. The current default workspace
+regression and strict Clippy passed (`/tmp/kolyan-l5-scope-workspace-tests.log`
+and `/tmp/kolyan-l5-scope-workspace-clippy-v2.log`). Explicitly ignored network
+tests were not executed and are not included in actual-model acceptance.
 
 The default workspace test run passed at its intermediate checkpoint, with
 explicitly ignored network tests still unexecuted. A failed sandbox host-control
@@ -294,3 +310,18 @@ These are real local subprocess tests, not actual-model Agent acceptance. Strict
 model-specific token counting, context reduction, loop integration, recursive/parallel Agent
 execution, durable child waits and the full real-model/long-task matrix remain
 in progress. L5 is not accepted.
+
+Every Provider opening can now be composed with an Agent-side preparation guard.
+It records exact source/preparation before dispatch and blocks preparation or
+recorder failures. It rejects changed requests at this boundary so the Core
+trajectory cannot differ from actual dispatch. Initial request projection belongs
+before Turn admission; Strict mode never falls back to diagnostic estimates.
+Ten new wrapper tests verify repeated requests, refusal, stream/error/drop and
+usage passthrough. Runner assembly and real-model acceptance remain pending.
+
+Before integrated permission acceptance, file preparation still needs complete
+create/read/update semantics, and file isolation must enforce the admitted
+resource despite concurrent path rebinding after preparation. Current workspace
+sandboxing and pre-execution re-preparation are not a proof of atomic per-path
+mediation against an uncooperative sibling writer. Keep this limitation explicit;
+do not describe the standalone adapters as the completed permission pipeline.
