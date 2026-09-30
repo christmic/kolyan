@@ -1,3 +1,9 @@
+//! Optional observations, durable event links and integrity-checked local
+//! content artifacts. None of these diagnostics grants execution authority.
+
+mod artifacts;
+pub use artifacts::{ArtifactError, ArtifactRef, ArtifactStore, Retention};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use thiserror::Error;
@@ -19,6 +25,27 @@ pub struct TraceRecord {
     pub sequence: u64,
     pub kind: TraceKind,
     pub payload: Value,
+}
+
+/// Diagnostic linkage only; it never constitutes execution or recovery authority.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LinkedTraceRecord<B> {
+    pub binding: B,
+    pub event_id: String,
+    pub cursor: u64,
+    pub record: TraceRecord,
+}
+
+impl<B: Serialize> LinkedTraceRecord<B> {
+    /// Emit a linked diagnostic envelope through the existing sink port.
+    /// Failure is returned to the observer, not converted to execution failure.
+    pub fn emit(&self, sink: &impl TraceSink) -> Result<(), TraceError> {
+        let mut record = self.record.clone();
+        record.payload = serde_json::to_value(self).map_err(|error| TraceError {
+            message: error.to_string(),
+        })?;
+        sink.record(record)
+    }
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
