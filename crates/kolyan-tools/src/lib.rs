@@ -1,6 +1,18 @@
 //! Tool registration and execution boundaries.
 
+mod file_operations;
+mod isolated_file;
+mod isolated_shell;
 mod workspace;
+pub use isolated_file::{IsolatedFileConfig, IsolatedFileError, IsolatedFileTools};
+pub use isolated_shell::{
+    IsolatedShellConfig, IsolatedShellError, IsolatedShellTool, ShellArguments,
+};
+
+pub use file_operations::{
+    EditArguments, FileOperation, FileOperationError, FileOperationLimits, FileOperationResult,
+    FileOperations, ReadArguments, WriteArguments,
+};
 
 use kolyan_core::{ToolError, ToolExecutor, ToolFuture};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
