@@ -7,6 +7,7 @@ mod catalog;
 pub mod context;
 mod definition;
 mod permission;
+pub mod provider;
 mod snapshot;
 
 pub use catalog::{AgentCatalog, AgentSelector, Registration};
