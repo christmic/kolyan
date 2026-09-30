@@ -7,6 +7,17 @@ use thiserror::Error;
 
 mod driver;
 mod execution;
+mod reconciliation;
+
+pub use reconciliation::{
+    ReconciliationRequest, ReconciliationResolution, ToolEffectReconciler, reconcile_tool_effect,
+};
+mod linked;
+
+pub use linked::{
+    ContentPolicy, ExecutionBinding, LinkedTrajectory, LinkedTrajectoryError,
+    LinkedTrajectoryRecord,
+};
 
 pub use driver::{DurableTurnDriver, DurableTurnResult};
 pub use execution::{
