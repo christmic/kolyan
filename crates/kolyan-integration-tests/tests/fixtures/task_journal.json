@@ -1,0 +1,87 @@
+{
+  "read_after": 0,
+  "page_limit": 1,
+  "cases": [
+    {
+      "name": "dangling_cause_rolls_back_entire_batch",
+      "drafts": {
+        "first": {"fact_id":"first","subject":{"kind":"task.invocation","id":"parent"},"kind":"task.invocation.admitted","schema_version":1,"critical":true,"causes":[],"payload":{"role":"parent"}},
+        "bad": {"fact_id":"bad","subject":{"kind":"task.invocation","id":"child"},"kind":"task.delegation.admitted","schema_version":1,"critical":true,"causes":[{"stream_id":"parent-stream","position":1,"fact_id":"missing"}],"payload":{"role":"child"}},
+        "valid_child": {"fact_id":"child","subject":{"kind":"task.invocation","id":"child"},"kind":"task.delegation.admitted","schema_version":1,"critical":true,"causes":[{"stream_id":"parent-stream","position":1,"fact_id":"first"}],"payload":{"role":"child"}}
+      },
+      "operations": [
+        {"stream":"parent-stream","expected_position":0,"batch":["first","bad"],"outcome":"missing_cause","returned_positions":[]},
+        {"stream":"parent-stream","expected_position":0,"batch":["first","valid_child"],"outcome":"committed","returned_positions":[1,2]}
+      ],
+      "expected": {
+        "parent-stream": [
+          {"position":1,"fact_id":"first","kind":"task.invocation.admitted","subject":{"kind":"task.invocation","id":"parent"},"schema_version":1,"critical":true,"causes":[]},
+          {"position":2,"fact_id":"child","kind":"task.delegation.admitted","subject":{"kind":"task.invocation","id":"child"},"schema_version":1,"critical":true,"causes":[{"stream_id":"parent-stream","position":1,"fact_id":"first"}]}
+        ]
+      }
+    },
+    {
+      "name": "exact_retry_after_advance_and_conflicting_partial_retries",
+      "drafts": {
+        "one": {"fact_id":"one","subject":{"kind":"task.invocation","id":"one"},"kind":"task.invocation.admitted","schema_version":1,"critical":true,"causes":[],"payload":{"revision":"v1"}},
+        "two": {"fact_id":"two","subject":{"kind":"task.attempt","id":"attempt-one"},"kind":"task.attempt.started","schema_version":1,"critical":true,"causes":[{"stream_id":"work","position":1,"fact_id":"one"}],"payload":{"execution_id":"execution-one"}},
+        "three": {"fact_id":"three","subject":{"kind":"task.attempt","id":"attempt-one"},"kind":"task.attempt.observed","schema_version":1,"critical":true,"causes":[{"stream_id":"work","position":2,"fact_id":"two"}],"payload":{"outcome":"completed"}},
+        "changed": {"fact_id":"one","subject":{"kind":"task.invocation","id":"one"},"kind":"task.invocation.admitted","schema_version":1,"critical":true,"causes":[],"payload":{"revision":"v2"}},
+        "new": {"fact_id":"new","subject":{"kind":"task.invocation","id":"next"},"kind":"task.invocation.admitted","schema_version":1,"critical":true,"causes":[],"payload":{}}
+      },
+      "operations": [
+        {"stream":"work","expected_position":0,"batch":["one","two"],"outcome":"committed","returned_positions":[1,2]},
+        {"stream":"work","expected_position":2,"batch":["three"],"outcome":"committed","returned_positions":[3]},
+        {"stream":"work","expected_position":0,"batch":["one","two"],"outcome":"committed","returned_positions":[1,2]},
+        {"stream":"work","expected_position":0,"batch":["changed","two"],"outcome":"conflict","returned_positions":[]},
+        {"stream":"work","expected_position":0,"batch":["one"],"outcome":"conflict","returned_positions":[]},
+        {"stream":"work","expected_position":1,"batch":["two"],"outcome":"conflict","returned_positions":[]},
+        {"stream":"work","expected_position":3,"batch":["one","new"],"outcome":"conflict","returned_positions":[]},
+        {"stream":"unused","expected_position":1,"batch":["new"],"outcome":"stale_position","returned_positions":[]}
+      ],
+      "expected": {
+        "unused": [],
+        "work": [
+          {"position":1,"fact_id":"one","kind":"task.invocation.admitted","subject":{"kind":"task.invocation","id":"one"},"schema_version":1,"critical":true,"causes":[]},
+          {"position":2,"fact_id":"two","kind":"task.attempt.started","subject":{"kind":"task.attempt","id":"attempt-one"},"schema_version":1,"critical":true,"causes":[{"stream_id":"work","position":1,"fact_id":"one"}]},
+          {"position":3,"fact_id":"three","kind":"task.attempt.observed","subject":{"kind":"task.attempt","id":"attempt-one"},"schema_version":1,"critical":true,"causes":[{"stream_id":"work","position":2,"fact_id":"two"}]}
+        ]
+      }
+    },
+    {
+      "name": "unknown_critical_and_observational_semantics_remain_structural",
+      "drafts": {
+        "critical": {"fact_id":"future-critical","subject":{"kind":"future.task","id":"future-one"},"kind":"future.authority.claim","schema_version":99,"critical":true,"causes":[],"payload":{"claim":"not_authorization"}},
+        "observational": {"fact_id":"future-note","subject":{"kind":"future.task","id":"future-one"},"kind":"future.observation.note","schema_version":99,"critical":false,"causes":[{"stream_id":"future","position":1,"fact_id":"future-critical"}],"payload":{"note":"queryable_not_recovery_authority"}}
+      },
+      "operations": [
+        {"stream":"future","expected_position":0,"batch":["critical","observational"],"outcome":"committed","returned_positions":[1,2]}
+      ],
+      "expected": {
+        "future": [
+          {"position":1,"fact_id":"future-critical","kind":"future.authority.claim","subject":{"kind":"future.task","id":"future-one"},"schema_version":99,"critical":true,"causes":[]},
+          {"position":2,"fact_id":"future-note","kind":"future.observation.note","subject":{"kind":"future.task","id":"future-one"},"schema_version":99,"critical":false,"causes":[{"stream_id":"future","position":1,"fact_id":"future-critical"}]}
+        ]
+      }
+    },
+    {
+      "name": "cross_stream_exact_cause_coordinates",
+      "drafts": {
+        "parent": {"fact_id":"parent","subject":{"kind":"task.invocation","id":"parent"},"kind":"task.invocation.admitted","schema_version":1,"critical":true,"causes":[],"payload":{"agent":"same-definition"}},
+        "child": {"fact_id":"child","subject":{"kind":"task.invocation","id":"child"},"kind":"task.delegation.admitted","schema_version":1,"critical":true,"causes":[{"stream_id":"parent-stream","position":1,"fact_id":"parent"}],"payload":{"agent":"same-definition"}},
+        "bad_position": {"fact_id":"bad-position","subject":{"kind":"task.invocation","id":"child"},"kind":"task.observation.note","schema_version":1,"critical":false,"causes":[{"stream_id":"parent-stream","position":2,"fact_id":"parent"}],"payload":{}},
+        "bad_stream": {"fact_id":"bad-stream","subject":{"kind":"task.invocation","id":"child"},"kind":"task.observation.note","schema_version":1,"critical":false,"causes":[{"stream_id":"child-stream","position":1,"fact_id":"parent"}],"payload":{}}
+      },
+      "operations": [
+        {"stream":"parent-stream","expected_position":0,"batch":["parent"],"outcome":"committed","returned_positions":[1]},
+        {"stream":"child-stream","expected_position":0,"batch":["child"],"outcome":"committed","returned_positions":[1]},
+        {"stream":"child-stream","expected_position":1,"batch":["bad_position"],"outcome":"missing_cause","returned_positions":[]},
+        {"stream":"child-stream","expected_position":1,"batch":["bad_stream"],"outcome":"missing_cause","returned_positions":[]}
+      ],
+      "expected": {
+        "child-stream": [{"position":1,"fact_id":"child","kind":"task.delegation.admitted","subject":{"kind":"task.invocation","id":"child"},"schema_version":1,"critical":true,"causes":[{"stream_id":"parent-stream","position":1,"fact_id":"parent"}]}],
+        "parent-stream": [{"position":1,"fact_id":"parent","kind":"task.invocation.admitted","subject":{"kind":"task.invocation","id":"parent"},"schema_version":1,"critical":true,"causes":[]}]
+      }
+    }
+  ]
+}

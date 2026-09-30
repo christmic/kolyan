@@ -1,0 +1,97 @@
+{
+  "configured_combinations": 19,
+  "group": "durable_task_self_call_join_approval",
+  "task_id": "durable-task-1",
+  "objective": "Write two independently approved results, consume both child results, then read and report the actual files.",
+  "approval_rejections": [
+    {"name": "changed_definition_cannot_restore_approval", "mutation": "agent_revision"},
+    {"name": "changed_constraints_cannot_restore_approval", "mutation": "constraints"},
+    {"name": "foreign_approval_cannot_restore_authority", "mutation": "approval_id"}
+  ],
+  "limits": {"max_depth": 3, "max_invocations": 5, "max_attempts": 7, "max_steps_per_turn": 12, "max_tokens": null},
+  "system": "You are executing a local integration test. The safe/ directory exists. Use only the requested file operations. In a WRITE Turn call file.write exactly once, let the host handle approval, and finish after the successful write result. Do not read back a write: the successful wrote N bytes result suffices. In a READ Turn actually read both requested files once each, then report their exact contents from the fresh tool results. Do not write in a READ Turn. Do not repeat a tool operation. The tools supplied in this request are registered and executed by the local host; they need no separate connection. Use the supplied tool definitions to invoke them. Only an actual tool error can establish that an operation is unavailable.",
+  "invocations": [
+    {"id": "root", "role": "Root", "parent": null},
+    {"id": "self-child", "role": "SelfCall", "parent": "root"},
+    {"id": "nested-child", "role": "Delegation", "parent": "self-child"},
+    {"id": "delegate-child", "role": "Delegation", "parent": "root"},
+    {"id": "next-turn", "role": "Continuation", "parent": "root", "admit": "after_parent"}
+  ],
+  "cases": [
+    {
+      "name": "nested_delegation_approval_restart",
+      "invocation_id": "nested-child",
+      "session_id": "nested-session",
+      "turn_id": "nested-write",
+      "execution_id": "nested-execution",
+      "attempt_id": "nested-attempt",
+      "input": "WRITE Turn: use file.write exactly once to write TASK_GAMMA_9574 to safe/gamma.txt, exactly 15 ASCII bytes without a newline. Let the host handle approval. When the result confirms wrote 15 bytes, report TASK_GAMMA_9574 and finish immediately, without reading or further tools.",
+      "approval": true,
+      "path": "safe/gamma.txt",
+      "marker": "TASK_GAMMA_9574",
+      "offline_calls": [{"id":"write-nested","name":"file.write","arguments":{"path":"safe/gamma.txt","content":"TASK_GAMMA_9574"}}],
+      "offline_answer": "TASK_GAMMA_9574",
+      "expected": {"calls": 1, "receipts": 1, "minimum_steps": 2, "state": "Completed"}
+    },
+    {
+      "name": "self_child_approval_restart",
+      "invocation_id": "self-child",
+      "session_id": "self-session",
+      "turn_id": "self-write",
+      "execution_id": "self-execution",
+      "attempt_id": "self-attempt",
+      "input": "WRITE Turn: use file.write exactly once to write TASK_ALPHA_7392 to safe/alpha.txt, exactly 15 ASCII bytes without a newline. Let the host handle approval. When the result confirms wrote 15 bytes, report TASK_ALPHA_7392 and finish immediately, without reading or further tools.",
+      "approval": true,
+      "path": "safe/alpha.txt",
+      "marker": "TASK_ALPHA_7392",
+      "offline_calls": [{"id":"write-self","name":"file.write","arguments":{"path":"safe/alpha.txt","content":"TASK_ALPHA_7392"}}],
+      "offline_answer": "TASK_ALPHA_7392",
+      "expected": {"calls": 1, "receipts": 1, "minimum_steps": 2, "state": "Completed"}
+    },
+    {
+      "name": "delegate_child_approval_restart",
+      "invocation_id": "delegate-child",
+      "session_id": "delegate-session",
+      "turn_id": "delegate-write",
+      "execution_id": "delegate-execution",
+      "attempt_id": "delegate-attempt",
+      "input": "WRITE Turn: use file.write exactly once to write TASK_BETA_8463 to safe/beta.txt, exactly 14 ASCII bytes without a newline. Let the host handle approval. When the result confirms wrote 14 bytes, report TASK_BETA_8463 and finish immediately, without reading or further tools.",
+      "approval": true,
+      "path": "safe/beta.txt",
+      "marker": "TASK_BETA_8463",
+      "offline_calls": [{"id":"write-delegate","name":"file.write","arguments":{"path":"safe/beta.txt","content":"TASK_BETA_8463"}}],
+      "offline_answer": "TASK_BETA_8463",
+      "expected": {"calls": 1, "receipts": 1, "minimum_steps": 2, "state": "Completed"}
+    },
+    {
+      "name": "parent_join_reads_actual_child_results",
+      "invocation_id": "root",
+      "session_id": "parent-session",
+      "turn_id": "join-read",
+      "execution_id": "join-execution",
+      "attempt_id": "join-attempt",
+      "input": "READ Turn: both child writes have completed. Call file.read once on safe/alpha.txt and once on safe/beta.txt now. Report both exact contents from those fresh results. Do not answer from memory, invent contents, write anything, or call any tool more than these two reads.",
+      "approval": false,
+      "offline_calls": [{"id":"read-alpha","name":"file.read","arguments":{"path":"safe/alpha.txt"}},{"id":"read-beta","name":"file.read","arguments":{"path":"safe/beta.txt"}}],
+      "offline_answer": "TASK_ALPHA_7392 TASK_BETA_8463",
+      "expected": {"calls": 2, "receipts": 2, "minimum_steps": 2, "state": "Completed", "markers": ["TASK_ALPHA_7392", "TASK_BETA_8463"]}
+    },
+    {
+      "name": "continuation_new_turn_after_parent_completion",
+      "invocation_id": "next-turn",
+      "session_id": "parent-session",
+      "turn_id": "continuation-read",
+      "execution_id": "continuation-execution",
+      "attempt_id": "continuation-attempt",
+      "input": "This is a new READ Turn after the preceding result. Call file.read once now on safe/alpha.txt. Report the exact contents from that fresh read and finish. Do not answer from memory, read any other file, repeat the read, or write anything.",
+      "approval": false,
+      "reuse_session": true,
+      "admit": "after_parent",
+      "offline_calls": [{"id":"read-continuation","name":"file.read","arguments":{"path":"safe/alpha.txt"}}],
+      "offline_answer": "TASK_ALPHA_7392",
+      "expected": {"calls": 1, "receipts": 1, "minimum_steps": 2, "state": "Completed", "markers": ["TASK_ALPHA_7392"]}
+    }
+  ],
+  "expected_task": {"state": "Completed", "invocations": 5, "attempts": 5, "consumed_children": 2, "evidence": 5},
+  "forbidden_journal_kinds": ["task.failed", "task.cancelled"]
+}

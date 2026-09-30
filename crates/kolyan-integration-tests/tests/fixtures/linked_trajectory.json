@@ -1,0 +1,53 @@
+{
+  "cases": [
+    {
+      "binding": {"task_id":"task-final","invocation_id":"invoke-final","attempt_id":"attempt-final","session_id":"session-final","turn_id":"turn-final","execution_id":"execution-final"},
+      "model": {"provider":"fixture","model":"linked"},
+      "input":"PRIVATE_FINAL_INPUT_731",
+      "tools":[], "max_steps":4, "page_limit":2, "artifact_max_bytes":65536,
+      "steps":[{
+        "content":[{"type":"reasoning","text":"PRIVATE_FINAL_REASONING_731","opaque":null},{"type":"text","text":"PRIVATE_FINAL_RESPONSE_731"}],
+        "stop_reason":{"reason":"end_turn"},
+        "usage":{"input_tokens":10,"output_tokens":8,"reasoning_tokens":3},
+        "events":[{"ReasoningDelta":"PRIVATE_FINAL_REASONING_731"},{"TextDelta":"PRIVATE_FINAL_RESPONSE_731"},{"Usage":{"input_tokens":10,"output_tokens":8,"reasoning_tokens":3}}]
+      }],
+      "tool_results":[],
+      "expected":{
+        "counts":{"model_requested":1,"step_completed":1,"model_stream_event":3,"effect_receipt":0,"tool_execution_completed":0,"turn_completed":2},
+        "terminal_payload_keys":[["reason"],["outcome"]],
+        "stream_types":["reasoning_delta","text_delta","usage"],
+        "redacted_strings":["PRIVATE_FINAL_INPUT_731","PRIVATE_FINAL_REASONING_731","PRIVATE_FINAL_RESPONSE_731"],
+        "neighbor_marker":"NEIGHBOR_FINAL_731"
+      }
+    },
+    {
+      "binding": {"task_id":"task-tool","invocation_id":"invoke-tool","attempt_id":"attempt-tool","session_id":"session-tool","turn_id":"turn-tool","execution_id":"execution-tool"},
+      "model": {"provider":"fixture","model":"linked"},
+      "input":"PRIVATE_TOOL_INPUT_842",
+      "tools":[{"name":"fixture.lookup","description":"Deterministic lookup","input_schema":{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}}],
+      "max_steps":4,"page_limit":3,"artifact_max_bytes":65536,
+      "steps":[
+        {
+          "content":[{"type":"reasoning","text":"PRIVATE_LOOKUP_REASONING_842","opaque":null},{"type":"text","text":"PRIVATE_LOOKUP_TEXT_842"},{"type":"tool_call","call":{"id":"lookup-842","name":"fixture.lookup","arguments":{"key":"PRIVATE_ARGUMENT_842"}}}],
+          "stop_reason":{"reason":"tool_use"},
+          "usage":{"input_tokens":10,"output_tokens":12,"reasoning_tokens":4},
+          "events":[{"ReasoningDelta":"PRIVATE_LOOKUP_REASONING_842"},{"TextDelta":"PRIVATE_LOOKUP_TEXT_842"},{"ToolCallStarted":{"id":"lookup-842","name":"fixture.lookup"}},{"ToolCallArgumentsDelta":{"id":"lookup-842","delta":"{\"key\":\"PRIVATE_ARGUMENT_842\"}"}},{"ToolCallCompleted":{"id":"lookup-842","name":"fixture.lookup","arguments":{"key":"PRIVATE_ARGUMENT_842"}}},{"Usage":{"input_tokens":10,"output_tokens":12,"reasoning_tokens":4}}]
+        },
+        {
+          "content":[{"type":"reasoning","text":"PRIVATE_RESULT_REASONING_842","opaque":null},{"type":"text","text":"PRIVATE_TOOL_RESPONSE_842"}],
+          "stop_reason":{"reason":"end_turn"},
+          "usage":{"input_tokens":24,"output_tokens":7,"reasoning_tokens":2},
+          "events":[{"ReasoningDelta":"PRIVATE_RESULT_REASONING_842"},{"TextDelta":"PRIVATE_TOOL_RESPONSE_842"},{"Usage":{"input_tokens":24,"output_tokens":7,"reasoning_tokens":2}}]
+        }
+      ],
+      "tool_results":[{"call_id":"lookup-842","content":"PRIVATE_TOOL_OUTPUT_842","is_error":false}],
+      "expected":{
+        "counts":{"model_requested":2,"step_completed":2,"model_stream_event":9,"effect_receipt":1,"tool_execution_completed":1,"turn_completed":2},
+        "terminal_payload_keys":[["reason"],["outcome"]],
+        "stream_types":["reasoning_delta","text_delta","tool_call_started","tool_call_arguments_delta","tool_call_completed","usage","reasoning_delta","text_delta","usage"],
+        "redacted_strings":["PRIVATE_TOOL_INPUT_842","PRIVATE_LOOKUP_REASONING_842","PRIVATE_LOOKUP_TEXT_842","PRIVATE_ARGUMENT_842","PRIVATE_TOOL_OUTPUT_842","PRIVATE_RESULT_REASONING_842","PRIVATE_TOOL_RESPONSE_842"],
+        "neighbor_marker":"NEIGHBOR_TOOL_842"
+      }
+    }
+  ]
+}

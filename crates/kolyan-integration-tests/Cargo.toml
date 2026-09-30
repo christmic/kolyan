@@ -70,6 +70,19 @@ path = "tests/session_execution_live.rs"
 workspace = true
 
 [[test]]
+name = "fact_journal"
+path = "tests/ledger/fact_journal.rs"
+
+[[test]]
+name = "linked_trajectory"
+path = "tests/runtime/linked_trajectory.rs"
+
+[[test]]
+name = "task_execution"
+path = "tests/server/task_execution.rs"
+
+
+[[test]]
 name = "r1_matrix"
 path = "tests/provider/r1_matrix.rs"
 
