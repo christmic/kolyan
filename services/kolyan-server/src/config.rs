@@ -11,6 +11,8 @@ use std::{path::PathBuf, time::Duration};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(default)]
+    pub http: Option<HttpConfig>,
     pub ledger_path: PathBuf,
     pub session_root: PathBuf,
     pub workspace: PathBuf,
@@ -24,6 +26,14 @@ pub struct Config {
     pub max_steps: usize,
     pub max_tool_calls: usize,
     pub progress: kolyan_policy::ProgressPolicy,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HttpConfig {
+    pub listen: std::net::SocketAddr,
+    pub api_token_env: String,
+    pub max_active_turns: usize,
 }
 
 #[derive(Clone)]

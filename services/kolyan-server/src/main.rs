@@ -1,15 +1,8 @@
-//! Stdio service assembly. Model requests run independently of control queries.
+//! Transport selection and process lifecycle. Execution assembly is shared.
+mod assembly;
 mod config;
+mod http;
 
-use kolyan_core::{TurnConfig, TurnExecutor};
-use kolyan_ledger::SqliteLedger;
-use kolyan_policy::{
-    ApprovalMode, Capability, Effect, Idempotency, PathScope, PolicyEngine, ToolManifest,
-};
-use kolyan_server::{ExecutionRpc, ExecutionService, SessionExecutionService, SessionService};
-use kolyan_storage::FileSessionStore;
-use kolyan_tools::{PolicyEnforcingTool, RestrictedFileTool};
-use kolyan_trace::NoopTraceSink;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
@@ -18,68 +11,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path =
         std::env::var_os("KOLYAN_SERVER_CONFIG").ok_or("KOLYAN_SERVER_CONFIG is required")?;
     let config: config::Config = serde_json::from_slice(&std::fs::read(path)?)?;
-    if config.max_steps == 0 || config.max_tool_calls == 0 || config.timeout_secs == 0 {
-        return Err("execution budgets must be positive".into());
+    let transport = config.http.clone();
+    let app = assembly::App::new(config)?;
+    if let Some(transport) = transport {
+        return http::serve(app, transport).await;
     }
-    std::fs::create_dir_all(&config.workspace)?;
-    let provider = config.provider()?;
-    let mut policy = PolicyEngine::default();
-    for (name, capability, effect, approval, idempotency) in [
-        (
-            "file.read",
-            Capability::FilesystemRead,
-            Effect::Read,
-            ApprovalMode::Never,
-            Idempotency::Idempotent,
-        ),
-        (
-            "file.write",
-            Capability::FilesystemWrite,
-            Effect::Update,
-            ApprovalMode::Always,
-            Idempotency::NonIdempotent,
-        ),
-    ] {
-        policy.register(ToolManifest {
-            tool_name: name.into(),
-            capabilities: [capability].into_iter().collect(),
-            effects: [effect].into_iter().collect(),
-            path_scopes: vec![PathScope::new(&config.tool_scope)],
-            idempotency,
-            approval,
-        });
-    }
-    policy.restrict_workspace(&config.tool_scope);
-    let policy = policy.with_progress_policy(config.progress)?;
-    let policy = Arc::new(policy);
-    let ledger = SqliteLedger::open(&config.ledger_path)?;
-    let sessions = FileSessionStore::new(&config.session_root)?;
-    let service = SessionExecutionService::new(
-        ExecutionService::new(ledger, NoopTraceSink),
-        SessionService::new(sessions),
-    )
-    .with_context_policy(kolyan_storage::SessionContextPolicy::FullTrajectory);
-    let mut template = config.request;
-    template.tools = RestrictedFileTool::tool_definitions();
-    let host = Arc::new(ExecutionRpc::new(
-        service,
-        move || {
-            TurnExecutor::with_tools(
-                provider.clone(),
-                PolicyEnforcingTool::new(
-                    RestrictedFileTool::new(&config.workspace),
-                    policy.clone(),
-                ),
-            )
-            .with_policy_engine(policy.clone())
-        },
-        template,
-        TurnConfig {
-            max_steps: config.max_steps,
-            max_tool_calls: Some(config.max_tool_calls),
-            deadline: None,
-        },
-    ));
+    let host = Arc::new(app.rpc());
     let (sender, mut receiver) = tokio::sync::mpsc::channel::<String>(64);
     let writer = tokio::spawn(async move {
         let mut stdout = tokio::io::stdout();

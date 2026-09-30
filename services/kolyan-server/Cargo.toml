@@ -26,9 +26,11 @@ kolyan-provider-openai = { path = "../../crates/kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../../crates/kolyan-provider-anthropic" }
 serde.workspace = true
 serde_json.workspace = true
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync"] }
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync", "net", "signal"] }
 
 [dev-dependencies]
+reqwest.workspace = true
 kolyan-runtime = { path = "../../crates/kolyan-runtime" }
 tempfile = "3"
 toml = "0.8"
@@ -37,3 +39,7 @@ futures-util.workspace = true
 [[test]]
 name = "server_process"
 path = "../../crates/kolyan-integration-tests/tests/server/process.rs"
+
+[[test]]
+name = "server_http_process"
+path = "../../crates/kolyan-integration-tests/tests/server/http_process.rs"
