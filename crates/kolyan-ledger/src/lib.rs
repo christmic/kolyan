@@ -1,6 +1,11 @@
-//! Durable execution facts, bounded queries, global audit reads and leases.
+//! Durable execution facts, bounded queries, leases and atomic coordination facts.
 
+mod facts;
 mod query;
+pub use facts::{
+    FactDraft, FactError, FactJournal, FactRecord, FactRef, FactSubject, MemoryFactJournal,
+    SqliteFactJournal,
+};
 pub use query::LedgerQuery;
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -31,6 +36,7 @@ pub enum LedgerEventKind {
     TurnTimedOut,
     TurnCompleted,
     ExecutionStarted,
+    ExecutionBound,
     ExecutionSuspended,
     ExecutionCancelled,
     EffectPrepared,
@@ -42,6 +48,7 @@ pub enum LedgerEventKind {
     EffectUncertain,
     EffectDenied,
     EffectReceipt,
+    EffectReconciled,
     SessionCommitPrepared,
     SessionCommitted,
 }
