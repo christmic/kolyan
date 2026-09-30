@@ -9,6 +9,12 @@
 3. `examples/` 中的样例；
 4. 相关 `evals/` 或集成测试。
 
+## Server HTTP
+
+[最小 HTTP API v1](server-http.md) 只覆盖 Session、Turn、审批、取消与完整结果，不提供事件流；
+[OpenAPI](../schemas/server-http.openapi.json) 维护机器可读形状。
+HTTP 监听已实现并完成本期验收，详见 [需求 0028](../docs/requirements/0028-http-server-boundary.md)；不改变已有 stdio 执行协议。
+
 ## 模型参数表配置
 
 配置形状见 [parameter-table.schema.json](../schemas/parameter-table.schema.json)，

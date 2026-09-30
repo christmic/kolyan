@@ -37,6 +37,8 @@ Session
 
 ## 设计文档
 
+- [最小 HTTP Server 需求与验收（已实现，真实矩阵 76/76 通过）](docs/requirements/0028-http-server-boundary.md)
+- [HTTP API v1 契约](protocols/server-http.md) · [OpenAPI](schemas/server-http.openapi.json)
 - [内核对照评估与扩展边界（已有接口、缺口及增强顺序）](docs/architecture/kernel-evolution.md)
 - [架构整改与验收记录（真实矩阵未全通过）](docs/requirements/0025-architecture-hardening.md)
 - [Provider 官方 SDK 对照整改与真实证据](docs/requirements/0026-provider-sdk-conformance.md)

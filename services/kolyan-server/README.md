@@ -20,7 +20,40 @@ KOLYAN_SERVER_CONFIG=/absolute/path/server.json target/debug/kolyan-server
 文本、思考、工具参数和 usage 的中立模型增量以 `model_stream_event` 返回，与执行事实
 共享 cursor，因此客户端重连后可续读。它们是观察数据，不参与恢复或重复执行判定；
 Provider 原始 metadata 和鉴权信息不通过该接口暴露。
-这不是 HTTP/WebSocket 服务，当前不提供网络认证或分布式协调。
+上述为 stdio 模式；不配置 HTTP 时保持原行为。不提供分布式协调。
+
+## 最小 HTTP 模式
+
+在同一份项目本地配置中增加以下字段，即可切换到 HTTP（不同时监听 stdio）：
+
+```json
+"http": {
+  "listen": "127.0.0.1:3000",
+  "api_token_env": "KOLYAN_HTTP_API_TOKEN",
+  "max_active_turns": 4
+}
+```
+
+API token 的真实值由环境提供，不能放进配置；它与模型 API Key 分离。
+客户端携带 `Authorization: Bearer <token>`，并使用监听地址作为 Host。
+只接受 loopback，拒绝 Origin，不启用 CORS。启动方式仍是上面的服务命令。
+
+契约见 [HTTP v1](../../protocols/server-http.md) 和
+[OpenAPI](../../schemas/server-http.openapi.json)。本期六个接口返回完整结果，
+不提供事件流。提交输入和批准审批会等到执行完成或再次挂起；
+挂起不占用连接等待用户。拒绝与取消是不同终态。
+客户端指定 Session/Turn ID，断线后查询，不盲目重发；重复提交返回冲突。
+
+HTTP 测试独立于已有 stdio 测试，普通运行不含网络真实矩阵：
+
+```sh
+cargo test -p kolyan-server-service --test server_http_process -- --nocapture
+cargo test -p kolyan-server-service --test server_http_process http_process_live_matrix -- --ignored --nocapture
+```
+
+案例数据位于 `tests/fixtures/server_http*.json`，生产代码不写测试轨迹。
+验收状态与未完成的测试项以 [需求 0028](../../docs/requirements/0028-http-server-boundary.md)
+为准，接口存在不等于所有验收场景已通过。
 
 正常 EOF 等待在途任务完成；强制退出后，已启动且无收据的工具副作用必须人工对账，
 不能自动重跑。`session.reconcile` 只补 Session 提交，不执行模型和工具。
