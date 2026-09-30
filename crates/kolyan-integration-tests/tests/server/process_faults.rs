@@ -39,6 +39,9 @@ impl FaultLedger {
 }
 
 impl LedgerStore for FaultLedger {
+    fn query(&self, query: &kolyan_ledger::LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        self.inner.query(query)
+    }
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
         self.before(&event);
         let event = self.inner.append(event)?;

@@ -7,6 +7,9 @@ struct RacingLedger {
     mismatch: bool,
 }
 impl LedgerStore for RacingLedger {
+    fn query(&self, query: &kolyan_ledger::LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        self.inner.query(query)
+    }
     fn append(&self, mut event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
         let id = event.event_id.clone();
         if self.mismatch {

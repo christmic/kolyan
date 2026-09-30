@@ -129,6 +129,9 @@ impl LedgerStore for UnreadableLedger {
     fn events_after(&self, _: u64) -> Result<Vec<LedgerEvent>, LedgerError> {
         Err(LedgerError::Storage("unavailable".into()))
     }
+    fn query(&self, _: &kolyan_ledger::LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        Err(LedgerError::Storage("unavailable".into()))
+    }
     fn claim(&self, _: &str) -> Result<bool, LedgerError> {
         panic!("must not claim")
     }

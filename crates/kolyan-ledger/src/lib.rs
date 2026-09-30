@@ -1,3 +1,8 @@
+//! Durable execution facts, bounded queries, global audit reads and leases.
+
+mod query;
+pub use query::LedgerQuery;
+
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,6 +59,8 @@ pub struct LedgerEvent {
 
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum LedgerError {
+    #[error("invalid ledger query: {0}")]
+    InvalidQuery(String),
     #[error("ledger conflict for idempotency key: {0}")]
     Conflict(String),
     #[error("execution was cancelled: {0}")]
@@ -71,6 +78,55 @@ pub trait LedgerStore: Send + Sync {
         ))
     }
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError>;
+    /// Read matching facts in ascending cursor order, bounded after filtering.
+    /// This required port has no global audit fallback.
+    fn query(&self, query: &LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError>;
+
+    /// Look up an exact event identity through the required query port.
+    fn event_by_id(&self, event_id: &str) -> Result<Option<LedgerEvent>, LedgerError> {
+        Ok(query::checked_query(
+            self,
+            &LedgerQuery {
+                execution_id: None,
+                event_id: Some(event_id.into()),
+                after: 0,
+                through: None,
+                limit: 1,
+            },
+        )?
+        .into_iter()
+        .next())
+    }
+
+    /// Read one execution in pages of 512. Concurrent appends are not a snapshot;
+    /// callers needing a frozen range must use query with an explicit through.
+    fn execution_events_after(
+        &self,
+        execution_id: &str,
+        after: u64,
+    ) -> Result<Vec<LedgerEvent>, LedgerError> {
+        let mut query = LedgerQuery {
+            execution_id: Some(execution_id.into()),
+            event_id: None,
+            after,
+            through: None,
+            limit: 512,
+        };
+        let mut events = Vec::new();
+        loop {
+            let page = query::checked_query(self, &query)?;
+            let count = page.len();
+            if let Some(last) = page.last() {
+                query.after = last.cursor;
+            }
+            events.extend(page);
+            if count < query.limit {
+                return Ok(events);
+            }
+        }
+    }
+
+    /// Explicit unbounded global audit/export read, not an execution recovery API.
     fn events_after(&self, cursor: u64) -> Result<Vec<LedgerEvent>, LedgerError>;
     fn claim(&self, idempotency_key: &str) -> Result<bool, LedgerError>;
 }
@@ -140,6 +196,18 @@ impl InMemoryLedger {
 }
 
 impl LedgerStore for InMemoryLedger {
+    fn query(&self, query: &LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        query.validate()?;
+        let state = self.state.lock().expect("ledger lock must not be poisoned");
+        Ok(state
+            .events
+            .iter()
+            .filter(|event| query.matches(event))
+            .take(query.limit)
+            .cloned()
+            .collect())
+    }
+
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
         self.append_checked(event, false)
     }
@@ -260,6 +328,10 @@ impl FileLedger {
 }
 
 impl LedgerStore for FileLedger {
+    fn query(&self, query: &LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        query::file_query(self, query)
+    }
+
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
         self.append_checked(event, false)
     }
@@ -347,6 +419,7 @@ impl SqliteLedger {
                 idempotency_key TEXT NOT NULL UNIQUE,
                 payload TEXT NOT NULL
              );
+             CREATE INDEX IF NOT EXISTS events_execution_cursor ON events (execution_id, cursor);
              CREATE TABLE IF NOT EXISTS leases (
                 execution_id TEXT PRIMARY KEY,
                 owner_id TEXT NOT NULL,
@@ -416,6 +489,10 @@ impl SqliteLedger {
 }
 
 impl LedgerStore for SqliteLedger {
+    fn query(&self, query: &LedgerQuery) -> Result<Vec<LedgerEvent>, LedgerError> {
+        query::sqlite_query(self, query)
+    }
+
     fn append(&self, event: LedgerEvent) -> Result<LedgerEvent, LedgerError> {
         self.append_checked(event, false)
     }
