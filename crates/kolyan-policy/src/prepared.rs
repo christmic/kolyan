@@ -134,14 +134,13 @@ impl PreparedCall {
     }
 
     fn compute_digest(&self) -> Result<String, PreparedError> {
-        // JSON maps use ordered keys in the workspace serde_json configuration.
-        let value = serde_json::json!({
+        let value = canonical(serde_json::json!({
             "schema_version": 1,
             "call": self.call,
             "tool_revision": self.tool_revision,
             "claim": self.claim,
             "requirements": self.requirements,
-        });
+        }));
         let bytes = serde_json::to_vec(&value)
             .map_err(|error| PreparedError::Invalid(error.to_string()))?;
         if bytes.len() > 1024 * 1024 {
@@ -150,6 +149,24 @@ impl PreparedCall {
             ));
         }
         Ok(format!("{:x}", Sha256::digest(bytes)))
+    }
+}
+
+fn canonical(value: serde_json::Value) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        // Sort explicitly so enabling serde_json/preserve_order in another
+        // workspace crate cannot change the approval digest contract.
+        Value::Object(entries) => Value::Object(
+            entries
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .map(|(key, value)| (key, canonical(value)))
+                .collect(),
+        ),
+        Value::Array(values) => Value::Array(values.into_iter().map(canonical).collect()),
+        value => value,
     }
 }
 

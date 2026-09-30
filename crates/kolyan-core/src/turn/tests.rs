@@ -7,6 +7,8 @@ use kolyan_model::{
 };
 use serde_json::Value;
 
+mod policy_revision;
+
 #[tokio::test]
 async fn no_progress_stops_repeated_tool_results_before_max_steps() {
     use kolyan_policy::{

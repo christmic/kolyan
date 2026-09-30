@@ -294,6 +294,28 @@ pub struct PolicyEngine {
 }
 
 impl PolicyEngine {
+    /// Content identity of the effective trusted rules, independent of insertion
+    /// order. Dynamic invocation context is evaluated separately, not a rule edit.
+    pub fn revision(&self) -> String {
+        use sha2::{Digest, Sha256};
+
+        let mut manifests = self.manifests.values().collect::<Vec<_>>();
+        manifests.sort_by(|left, right| left.tool_name.cmp(&right.tool_name));
+        let rules = serde_json::json!({
+            "algorithm": "kolyan-policy-v2",
+            "manifests": manifests,
+            "denied_tools": self.denied_tools,
+            "workspace": self.workspace,
+            "progress": self.progress,
+            "default_output_bytes": 1024 * 1024,
+            "default_timeout_ms": 30_000,
+        });
+        format!(
+            "kolyan-policy-v2/{:x}",
+            Sha256::digest(rules.to_string().as_bytes())
+        )
+    }
+
     pub fn register(&mut self, manifest: ToolManifest) {
         self.manifests.insert(manifest.tool_name.clone(), manifest);
     }
@@ -309,16 +331,21 @@ impl PolicyEngine {
     }
 
     pub fn decide_with_context(&self, call: &ToolCall, context: &PolicyContext) -> PolicyDecision {
-        self.decide_claim(&InvocationClaim::from_call(call), context)
+        self.stamp(self.decide_claim(&InvocationClaim::from_call(call), context))
     }
 
     /// Evaluate validated adapter-derived semantics, not tool-name heuristics.
     /// Invalid persisted preparation is denied before any authority is issued.
     pub fn decide_prepared(&self, call: &PreparedCall, context: &PolicyContext) -> PolicyDecision {
         if let Err(error) = call.validate() {
-            return PolicyDecision::denied(error.to_string());
+            return self.stamp(PolicyDecision::denied(error.to_string()));
         }
-        self.decide_claim(call.claim(), context)
+        self.stamp(self.decide_claim(call.claim(), context))
+    }
+
+    fn stamp(&self, mut decision: PolicyDecision) -> PolicyDecision {
+        decision.policy_version = self.revision();
+        decision
     }
 
     fn decide_claim(&self, claim: &InvocationClaim, context: &PolicyContext) -> PolicyDecision {

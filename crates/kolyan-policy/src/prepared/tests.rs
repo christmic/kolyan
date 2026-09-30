@@ -63,14 +63,15 @@ fn adapter_claims_not_tool_name_heuristics_drive_policy() {
 fn exact_binding_rejects_changed_arguments_revision_and_policy() {
     let call = prepared("edit-v1", "a");
     let decision = policy(ApprovalMode::Never).decide_prepared(&call, &PolicyContext::default());
+    let revision = decision.policy_version.clone();
     let grant = PreparedGrant::issue(&call, decision, ApprovalEvidence::NotConfirmed).unwrap();
-    grant.validate(&call, "v1").unwrap();
+    grant.validate(&call, &revision).unwrap();
     assert_eq!(
-        grant.validate(&prepared("edit-v1", "c"), "v1"),
+        grant.validate(&prepared("edit-v1", "c"), &revision),
         Err(PreparedError::BindingMismatch)
     );
     assert_eq!(
-        grant.validate(&prepared("edit-v2", "a"), "v1"),
+        grant.validate(&prepared("edit-v2", "a"), &revision),
         Err(PreparedError::BindingMismatch)
     );
     assert_eq!(
@@ -97,6 +98,7 @@ fn persisted_input_tampering_is_denied_before_grant() {
 fn approval_never_overrides_a_denial_and_limits_cannot_expand() {
     let call = prepared("edit-v1", "a");
     let decision = policy(ApprovalMode::Always).decide_prepared(&call, &PolicyContext::default());
+    let revision = decision.policy_version.clone();
     assert!(PreparedGrant::issue(&call, decision.clone(), ApprovalEvidence::NotConfirmed).is_err());
     let approval = ApprovalEvidence::Confirmed {
         prepared_digest: call.digest().into(),
@@ -104,15 +106,77 @@ fn approval_never_overrides_a_denial_and_limits_cannot_expand() {
         evidence_id: "approval-fact-1".into(),
     };
     let grant = PreparedGrant::issue(&call, decision, approval.clone()).unwrap();
-    grant.validate(&call, "v1").unwrap();
+    grant.validate(&call, &revision).unwrap();
     assert!(PreparedGrant::issue(&call, PolicyDecision::denied("ceiling"), approval).is_err());
     let mut value = serde_json::to_value(grant).unwrap();
     value["constraints"]["timeout_ms"] = json!(2000);
     let changed: PreparedGrant = serde_json::from_value(value).unwrap();
     assert_eq!(
-        changed.validate(&call, "v1"),
+        changed.validate(&call, &revision),
         Err(PreparedError::BindingMismatch)
     );
+}
+
+#[test]
+fn policy_revision_tracks_rules_not_insertion_order_or_dynamic_budget() {
+    let mut engine = policy(ApprovalMode::Always);
+    let initial = engine.revision();
+    engine.register(policy(ApprovalMode::Always).manifests["file.edit"].clone());
+    assert_eq!(engine.revision(), initial);
+    let first = engine.manifests["file.edit"].clone();
+    let mut second = first.clone();
+    second.tool_name = "file.write".into();
+    let mut left = PolicyEngine::default();
+    left.register(first.clone());
+    left.register(second.clone());
+    let mut right = PolicyEngine::default();
+    right.register(second);
+    right.register(first);
+    assert_eq!(left.revision(), right.revision());
+    let call = prepared("edit-v1", "a");
+    let original = engine.decide_prepared(&call, &PolicyContext::default());
+    assert_eq!(original.policy_version, initial);
+    let no_budget = PolicyContext {
+        remaining_tool_calls: Some(0),
+        ..Default::default()
+    };
+    assert_eq!(
+        engine.decide_prepared(&call, &no_budget).policy_version,
+        initial
+    );
+    engine.restrict_workspace("work");
+    assert_ne!(engine.revision(), initial);
+    let scoped = engine.revision();
+    engine.deny_tool("file.edit");
+    assert_ne!(engine.revision(), scoped);
+    assert_eq!(
+        engine
+            .decide_prepared(&call, &PolicyContext::default())
+            .policy_version,
+        engine.revision()
+    );
+}
+
+#[test]
+fn canonical_preparation_sorts_nested_keys_but_preserves_array_order() {
+    let original = prepared("edit-v1", "a");
+    let build = |arguments| {
+        let mut call = original.call.clone();
+        call.arguments = arguments;
+        PreparedCall::new(
+            call,
+            original.tool_revision.clone(),
+            original.claim.clone(),
+            original.requirements.clone(),
+        )
+        .unwrap()
+    };
+    let first = build(serde_json::from_str(r#"{"nested":{"b":2,"a":1},"ordered":[1,2]}"#).unwrap());
+    let second =
+        build(serde_json::from_str(r#"{"ordered":[1,2],"nested":{"a":1,"b":2}}"#).unwrap());
+    assert_eq!(first.digest(), second.digest());
+    let reversed = build(json!({"nested":{"a":1,"b":2},"ordered":[2,1]}));
+    assert_ne!(first.digest(), reversed.digest());
 }
 
 #[test]
