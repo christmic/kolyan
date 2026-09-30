@@ -1,0 +1,10 @@
+[
+  {"name":"root only disallows a recursive self call","operation":"recursion","ceiling":0,"admitted":false},
+  {"name":"one recursion level allows one self call","operation":"recursion","ceiling":1,"admitted":true},
+  {"name":"one shared invocation consumed by root","operation":"invocations","ceiling":1,"admitted":false},
+  {"name":"two shared invocations allow root and child","operation":"invocations","ceiling":2,"admitted":true},
+  {"name":"one shared attempt forbids second safe retry","operation":"attempts","ceiling":1,"admitted":false},
+  {"name":"two shared attempts admit second safe retry","operation":"attempts","ceiling":2,"admitted":true},
+  {"name":"fifteen reported tokens exhaust ceiling before retry","operation":"tokens","ceiling":15,"admitted":false},
+  {"name":"sixteen reported tokens leave room to admit retry","operation":"tokens","ceiling":16,"admitted":true}
+]
