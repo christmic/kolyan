@@ -1,0 +1,20 @@
+[package]
+name = "kolyan-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kolyan-ledger = { path = "../kolyan-ledger" }
+kolyan-model = { path = "../kolyan-model" }
+kolyan-server = { path = "../kolyan-server" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+
+[dev-dependencies]
+tempfile = "3"

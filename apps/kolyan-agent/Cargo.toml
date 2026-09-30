@@ -1,8 +1,12 @@
 [package]
-name = "kolyan-agent"
+name = "kolyan-agent-app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+
+[[bin]]
+name = "kolyan-agent"
+path = "src/main.rs"
 
 [lints]
 workspace = true
