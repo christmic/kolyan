@@ -1,7 +1,11 @@
 mod coordinator;
 mod rpc_execution;
 mod session_execution;
+mod task_driver;
+mod tasks;
 pub use rpc_execution::ExecutionRpc;
+pub use task_driver::{TaskExecutionError, TaskExecutionService};
+pub use tasks::*;
 
 use kolyan_core::{
     ApprovalRequest, ToolExecutor, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
