@@ -109,6 +109,103 @@ continuation. Self-call/delegation and topology revisions retain identity,
 budget, recursion and cancellation guards. No distributed lease infrastructure
 or general workflow engine is required for the first useful task implementation.
 
+## L2 through L4 implementation contract
+
+Implementation authorized on 2026-09-30. These contracts supplement the increments
+above, without expanding Step/Turn into task scheduling or adding historical
+format adapters. Execution Ledger events continue to represent their existing
+execution domain; the new versioned coordination journal represents task and
+invocation facts. They are separate fact families, not alternative decoders for
+the same stored format. Both may share the same SQLite database.
+
+### Versioned coordination journal
+
+`FactSubject { kind, id }`, `FactRef { stream_id, position, fact_id }`, and
+`FactDraft { fact_id, subject, kind, schema_version, critical, causes, payload }`
+form the append contract. `FactRecord { stream_id, position, draft }` is committed
+evidence. Kinds are namespaced strings; identities are nonempty and bounded;
+positions are one-based within the owning stream, not global execution cursors.
+Payloads, batches and causal references are bounded. References must resolve to
+an exact committed fact or an earlier member of the same transaction.
+
+`FactJournal::read(stream_id, after, limit)` is an exclusive ascending query.
+`append(stream_id, expected_position, batch)` atomically compares the stream
+head and commits the entire batch. A stale head fails with no partial write.
+Retrying an identical committed batch returns its original records; changing
+content or a partly duplicated batch fails. Memory and SQLite adapters implement
+the same contract. SQLite uses WAL/FULL durability and an immediate transaction.
+No file adapter pretending that several JSONL appends are atomic is introduced.
+
+Runtime effect reconciliation uses a trusted executor-owned inspection port, not
+a model statement. It binds the saved prepared input, authorization and Started
+fact to an exact execution/effect. A committed tool result and its reconciliation
+evidence are persisted in one receipt append. Proven-not-committed and unknown
+outcomes remain explicit evidence and never execute a retry or restore a grant.
+Reconciliation request identities are idempotent; changed evidence under the same
+identity is a conflict. Existing receipts are validated before reconstruction.
+
+Task-family validation is Server-owned: append and replay both validate version,
+subject, typed payload, references and transition. Unknown critical kinds or
+versions block recovery. Unknown observational records remain queryable but
+cannot change task state or grant authority. There is one concrete task family,
+not an empty plugin registry. CAS protects validation against competing writers.
+
+### Linked execution trajectory
+
+A queryable `LinkedTrajectory` joins each actual execution record to its immutable
+event identity and durable cursor. A caller supplies an explicit binding of task,
+invocation, execution attempt, Session and Turn. Exact execution identity must
+match; this never merges neighboring executions. Records retain actual requests,
+responses, reasoning/text deltas and tool observations; Step identity is derived
+only from recorded evidence, never invented. Repeated queries do not rewrite facts.
+
+Content export is explicit and policy-controlled, with a redacted metadata-only
+view available. Large content references carry digest and byte length; a local
+content-addressed artifact store verifies bytes before returning them and enforces
+bounded reads. Missing/corrupt retained content fails explicitly. Retention may
+remove optional artifacts, but may not silently remove required recovery facts.
+Trace gets durable event links through an additive linked-record contract; sink
+failure remains diagnostic and cannot authorize rerun or replace Ledger evidence.
+
+### Durable task coordinator
+
+Server stores the objective, typed completion criteria, admitted agent definition
+revision/instance, limits, waiting reason, cumulative usage and explicit success
+evidence in a task stream. Invocation and attempt identities are distinct. A new
+invocation is required for self-call, delegation or continuation; retries allocate
+a new attempt only after an explicit safe-retry decision. No persisted grant is
+inherited across a changed revision or changed constraints.
+
+The coordinator validates creation, invocation admission, relation admission,
+attempt start, attempt observation, result consumption, completion and cancellation.
+Call/delegation ancestry is acyclic; dependency/result-consumption edges support
+fan-out and join. Child completion alone does not commit the parent result.
+Recursion, total invocations, bounded Turn attempts and cumulative token usage
+are admitted limits. Cancellation propagation is explicit policy, not a property
+of a parent pointer. Approval waiting consumes no worker and survives restart.
+
+The Server driver invokes the existing SessionExecutionService with a fresh
+executor/request supplied by the host, records authoritative stopped outcomes,
+and reconstructs approval state from durable execution evidence. Interrupted
+attempts fail closed to recovery-required; they are never automatically rerun.
+Resume verifies the original binding, definition revision and constraints before
+invoking the existing approval resume path. Completion criteria must be supported
+by bound execution results or verified artifacts, not merely a model's claim.
+This is a reusable Server service; new HTTP endpoints and distributed scheduling
+are outside this increment. Tests call the service directly, including live models.
+
+### Additional acceptance
+
+New deterministic fixtures cover atomic rollback, concurrent stale writers,
+identical/conflicting retries, dangling causal references, unknown critical and
+observational facts, identity collision, revision change, self-call, fan-out/join,
+unconsumed child results, recursion/shared budget limits, explicit cancel policy,
+approval restart and effect uncertainty. Artifact tests cover hash mismatch,
+missing content, bounds and path safety. Existing test fixtures remain intact.
+New live scenarios drive the Server task service with real model calls and tools,
+retain actual linked JSONL and compare fixture-owned semantic expectations across
+every configured Provider/protocol/model row. Existing HTTP matrices are rerun.
+
 ## Acceptance and growth policy
 
 Each increment adds module-local tests in separate source files and independent
