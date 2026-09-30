@@ -1,4 +1,5 @@
 use super::*;
+mod scoped;
 use kolyan_ledger::InMemoryLedger;
 use kolyan_model::ToolResult;
 use std::sync::{

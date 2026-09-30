@@ -1,4 +1,5 @@
 use super::*;
+pub(crate) mod scoped;
 use futures_util::stream;
 use kolyan_core::NoopToolExecutor;
 use kolyan_model::{

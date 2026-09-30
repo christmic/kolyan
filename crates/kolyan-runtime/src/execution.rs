@@ -184,9 +184,14 @@ where
         if let Some(existing) = self.terminal_effect(key, effect)? {
             return Ok(existing);
         }
-        if self.ledger.events_after(0)?.iter().any(|event| {
-            event.event_id == format!("{}/effect/{}/started", key.execution_id, effect.effect_id)
-        }) {
+        if self
+            .ledger
+            .event_by_id(&format!(
+                "{}/effect/{}/started",
+                key.execution_id, effect.effect_id
+            ))?
+            .is_some()
+        {
             return Ok(EffectDisposition::Uncertain {
                 evidence: "effect started without a terminal result; reconciliation required"
                     .into(),
@@ -225,12 +230,9 @@ where
         &self,
         key: &ExecutionKey,
     ) -> Result<Option<ExecutionStatus>, RuntimeExecutionError> {
-        let events = self.ledger.events_after(0)?;
+        let events = self.ledger.execution_events_after(&key.execution_id, 0)?;
         let mut status = None;
-        for event in events
-            .into_iter()
-            .filter(|event| event.execution_id == key.execution_id)
-        {
+        for event in events {
             if status == Some(ExecutionStatus::Cancelled) {
                 break;
             }
@@ -346,12 +348,7 @@ where
         key: &ExecutionKey,
         effect: &EffectRequest,
     ) -> Result<Option<EffectDisposition>, RuntimeExecutionError> {
-        for event in self
-            .ledger
-            .events_after(0)?
-            .into_iter()
-            .filter(|event| event.execution_id == key.execution_id)
-        {
+        for event in self.ledger.execution_events_after(&key.execution_id, 0)? {
             if event.event_id == format!("{}/effect/{}/receipt", key.execution_id, effect.effect_id)
             {
                 let receipt: EffectReceipt =
@@ -429,12 +426,7 @@ where
         payload: Value,
     ) -> Result<LedgerEvent, RuntimeExecutionError> {
         let event_id = format!("{}/{}", key.execution_id, suffix);
-        if let Some(existing) = self
-            .ledger
-            .events_after(0)?
-            .into_iter()
-            .find(|event| event.event_id == event_id)
-        {
+        if let Some(existing) = self.ledger.event_by_id(&event_id)? {
             if existing.turn_id != key.turn_id
                 || existing.execution_id != key.execution_id
                 || existing.kind != kind

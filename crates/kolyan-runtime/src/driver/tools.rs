@@ -60,10 +60,10 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                 json!(request),
             )
             .map_err(failed)?;
-            let events = self.ledger.events_after(0).map_err(failed)?;
-            if let Some(receipt) = events
-                .iter()
-                .find(|event| event.event_id == format!("{prefix}/receipt"))
+            if let Some(receipt) = self
+                .ledger
+                .event_by_id(&format!("{prefix}/receipt"))
+                .map_err(failed)?
             {
                 if receipt.payload["receipt"]["input_digest"] != input_digest {
                     return Err(failed("receipt input mismatch"));
@@ -77,9 +77,11 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                         .unwrap_or("invalid receipt"),
                 ));
             }
-            if events
-                .iter()
-                .any(|event| event.event_id == format!("{prefix}/started"))
+            if self
+                .ledger
+                .event_by_id(&format!("{prefix}/started"))
+                .map_err(failed)?
+                .is_some()
             {
                 append_once(
                     &self.ledger,

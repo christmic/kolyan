@@ -62,11 +62,10 @@ where
     ) -> Result<ApprovalRequest, RuntimeError> {
         let event = self
             .ledger
-            .events_after(0)?
+            .execution_events_after(execution_id, 0)?
             .into_iter()
             .find(|event| {
-                event.execution_id == execution_id
-                    && event.kind == LedgerEventKind::ApprovalRequested
+                event.kind == LedgerEventKind::ApprovalRequested
                     && event.payload["approval_id"] == approval_id
             })
             .ok_or_else(|| RuntimeError::Driver(format!("approval not found: {approval_id}")))?;
@@ -147,9 +146,7 @@ where
         };
         let identity = self
             .ledger
-            .events_after(0)?
-            .into_iter()
-            .find(|event| event.event_id == format!("{}/execution-started", key.execution_id))
+            .event_by_id(&format!("{}/execution-started", key.execution_id))?
             .ok_or_else(|| RuntimeError::Driver("missing execution identity".into()))?;
         if identity.payload != json!(key) {
             return Err(RuntimeError::Driver(
@@ -226,16 +223,20 @@ where
     }
 
     fn persist_error(&self, key: &RuntimeTurnKey, error: &TurnError) -> Result<(), RuntimeError> {
-        if self.ledger.events_after(0)?.iter().any(|event| {
-            event.execution_id == key.execution_id
-                && matches!(
+        if self
+            .ledger
+            .execution_events_after(&key.execution_id, 0)?
+            .iter()
+            .any(|event| {
+                matches!(
                     event.kind,
                     LedgerEventKind::TurnCompleted
                         | LedgerEventKind::TurnCancelled
                         | LedgerEventKind::TurnFailed
                         | LedgerEventKind::TurnTimedOut
                 )
-        }) {
+            })
+        {
             return Ok(());
         }
         append_once(
@@ -260,9 +261,12 @@ where
             ..Default::default()
         };
         let prefix = format!("{}/turn-event/", key.execution_id);
-        for event in self.ledger.events_after(0)?.into_iter().filter(|event| {
-            event.execution_id == key.execution_id && event.event_id.starts_with(&prefix)
-        }) {
+        for event in self
+            .ledger
+            .execution_events_after(&key.execution_id, 0)?
+            .into_iter()
+            .filter(|event| event.event_id.starts_with(&prefix))
+        {
             if let Err(error) = self.trace.record(kolyan_trace::TraceRecord {
                 turn_id: key.turn_id.clone(),
                 execution_id: key.execution_id.clone(),
@@ -392,11 +396,7 @@ fn append_once<L: LedgerStore>(
     payload: Value,
 ) -> Result<LedgerEvent, RuntimeError> {
     let event_id = format!("{execution_id}/{suffix}");
-    if let Some(event) = ledger
-        .events_after(0)?
-        .into_iter()
-        .find(|event| event.event_id == event_id)
-    {
+    if let Some(event) = ledger.event_by_id(&event_id)? {
         if event.turn_id != turn_id
             || event.execution_id != execution_id
             || event.kind != kind
