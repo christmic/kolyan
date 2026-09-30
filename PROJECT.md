@@ -37,7 +37,7 @@ Session
 
 ## 设计文档
 
-- [账本、轨迹与长任务能力规格（L1 已验收，L2–L4 已实现、扩展验收中，L5 待明确）](docs/requirements/0029-durable-task-foundation.md)
+- [账本、轨迹与长任务能力规格（L1–L4 已验收，L5 待明确）](docs/requirements/0029-durable-task-foundation.md)
 - [最小 HTTP Server 需求与验收（已实现，真实矩阵 76/76 通过）](docs/requirements/0028-http-server-boundary.md)
 - [HTTP API v1 契约](protocols/server-http.md) · [OpenAPI](schemas/server-http.openapi.json)
 - [内核对照评估与扩展边界（已有接口、缺口及增强顺序）](docs/architecture/kernel-evolution.md)

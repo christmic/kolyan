@@ -235,12 +235,12 @@ live tests prove model-facing integration. Neither substitutes for the other.
 
 ## Verification record
 
-L1 accepted on 2026-09-30. L2-L4 production implementations and their initial
-module/data-driven tests are now committed, but final expanded acceptance is in
-progress. The L1 results below prove only scoped execution reads, not the later
-fact envelope, topology execution, artifact retention or task coordination.
+L1 accepted on 2026-09-30. L2-L4 accepted on 2026-10-01 against the contracts
+above and the inspected final evidence below. L5 has not been defined or accepted.
+The historical L1 results prove only scoped execution reads, not the later fact
+envelope, topology execution, artifact retention or task coordination.
 
-### Current L2-L4 verification checkpoint
+### Historical L2-L4 checkpoint before expanded acceptance
 
 - Atomic coordination journal, linked trajectories, integrity-checked artifacts,
   executor-owned effect reconciliation, task domain and host execution service
@@ -251,7 +251,7 @@ fact envelope, topology execution, artifact retention or task coordination.
   Revision, constraint and foreign-approval rejection checks run before resume.
 - The fixture was subsequently expanded to five Turns with a third-level
   delegated write and approval reconstruction. Its deterministic run passed in
-  `kolyan-task-offline-tOGWyq`; the expanded live matrix is running. Four-Turn
+  `kolyan-task-offline-tOGWyq`; the expanded live matrix was running. Four-Turn
   evidence does not prove this additional branch.
 - The scoped HTTP process matrix passed 19/19 in `kolyan-r1-matrix-9JGvaL`.
   Workspace default tests and strict all-target Clippy passed at this checkpoint;
@@ -269,8 +269,56 @@ fact envelope, topology execution, artifact retention or task coordination.
   files enabled by `KOLYAN_DUMP_MODEL_REQUESTS=1`; authentication headers are not
   logged. Test code exports journal/execution JSONL even during assertion unwind.
 - Additional service recovery, nested governance, physical artifact completion
-  checks and live cancellation-policy cases remain under development. No L4
-  completion or L5 implementation is claimed by this checkpoint.
+  checks and live cancellation-policy cases were still under development.
+  No L4 completion or L5 implementation was claimed by that checkpoint.
+
+### Final L2-L4 acceptance, 2026-10-01
+
+| Required gate | Authoritative implementation and executed evidence |
+| --- | --- |
+| Versioned bounded facts, causal identity, atomic CAS, exact retry, competing writes | Ledger `facts.rs`, `facts/sqlite.rs`; 28 Ledger module tests including 10 fact tests; `fact_journal` fixture target passed |
+| Critical/version/subject/transition validation, observations cannot grant authority | Server task reducer and validation tests; concrete namespaced task family, no empty plugin registry or historical decoder |
+| Effect result and inspection evidence committed together, uncertainty never re-executes | Runtime `reconciliation.rs` and four tests; `task_recovery.json` executes ten service scenarios including Started without receipt, committed receipt and safe retry |
+| Actual requests/responses/tool observations linked to immutable execution coordinates | Runtime `linked.rs` and four tests; `linked_trajectory` actual Core fixture passed; live task JSONL contains every Step's actual source content |
+| Redaction, bounded content reads, integrity, retention and optional Trace failure | Trace artifact tests 4/4; Runtime linked metadata/Trace tests; governance fixture rejects missing/corrupt required completion artifacts |
+| Objective, evidence criteria, waiting, cumulative known/unknown usage, graph limits and recursion | Server task domain and evidence tests; governance fixture eight scenarios; 57 Server module tests passed |
+| Self-call, independent delegation, nested delegation, exact child-result consumption and continuation | Five-Turn task fixture across all 19 configured combinations: final report `kolyan-r1-matrix-xAYmY6` **19 Passed, 0 failed/skipped/not-run** |
+| Approval reconstruction retains no worker/grant and rejects changed revision/constraints/approval identity | Three approved writes per task, services dropped/reopened, rejection guards before original resume; same five-Turn live matrix |
+| Explicit cancellation propagation; admitted child can finish without reviving cancelled parent | `task_cancellation.json`: AllInvocations and RootOnly for each configured combination; `kolyan-r1-matrix-NgX5xH` **38 Passed, 0 failed/skipped/not-run** |
+| Existing HTTP and scoped process-restart regression | Final unchanged HTTP fixture `kolyan-r1-matrix-S63ijf` **76/76**; isolation/restart fixture `kolyan-r1-matrix-9JGvaL` **19/19** |
+| Workspace regression, formatting, strict lint and all-target build | `cargo test --workspace --all-targets`, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo check --workspace --all-targets`: all exited 0 |
+
+Final five-Turn results were additionally read from all 19 `result.json` files:
+each contains Completed, five invocations, five attempts and five bound success
+proofs. The two direct child results are consumed by the root; the nested child's
+result is consumed by its initiating self-call. Real actions come from model
+outputs, not the offline scripted Provider. Test-owned JSONL captures failures
+as well as successes; no production Step/Turn performs file export.
+
+The first five-Turn report `kolyan-r1-matrix-x9cMNG` is retained with one
+Qwen/Anthropic extra-read failure. Actual results contained both correct file
+contents; recorded reasoning treated tool feedback as a new user Turn and repeated
+the reads. The fixture now explicitly explains the host Turn/tool-result boundary.
+Exact call/content assertions, all model rows and both protocols remain unchanged.
+The final run executed each planned row once with no scenario retries. Earlier
+failed reports do not disappear merely because the final matrix passed.
+
+Final workspace output is `/tmp/kolyan-l4-workspace-final.log`. Protocol request
+bodies for the accepted five-Turn and cancellation runs are respectively
+`/tmp/kolyan-task-live-turn-boundary-wire.log` and
+`/tmp/kolyan-task-cancellation-wire.log`. Reports/JSONL are under the temporary
+root documented above. Required credentials were supplied through environment
+variables and are not committed or included in logged authentication headers.
+
+Scope limits remain deliberate: a host admits and drives the graph; there is no
+autonomous scheduler, distributed lease service or new task HTTP endpoint. Task
+tests physically reconstruct services from SQLite/file stores; the separate HTTP
+tests additionally restart actual OS processes. ArtifactDigest in the current
+driver verifies persisted final ModelResponse JSON bytes, not an arbitrary
+workspace-file claim. Token limits use observed usage and reject unknown usage;
+they are not pre-priced input-token reservations. Historical ignored Provider,
+SDK-oracle and other lower-level network suites were not all rerun; their ignored
+status is not counted as executed acceptance. L5 requires its own approved scope.
 
 | L1 gate | Inspected evidence |
 | --- | --- |
