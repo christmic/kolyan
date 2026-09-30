@@ -1,0 +1,40 @@
+{
+  "input": "Reply exactly delayed-proof without using tools.",
+  "output": [
+    {
+      "type": "message",
+      "id": "slow-message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "delayed-proof"
+        }
+      ]
+    }
+  ],
+  "active": {
+    "state": "running",
+    "execution_stopped": false,
+    "recovery_required": false
+  },
+  "cancel_intent": {
+    "state": "running",
+    "execution_stopped": false,
+    "cancellation_requested": true
+  },
+  "cancelled": {
+    "state": "cancelled",
+    "execution_stopped": true,
+    "recovery_required": false
+  },
+  "interrupted": {
+    "state": "running",
+    "execution_stopped": false,
+    "recovery_required": true
+  },
+  "counts": {
+    "model_requested": 1,
+    "effect_started": 0
+  }
+}

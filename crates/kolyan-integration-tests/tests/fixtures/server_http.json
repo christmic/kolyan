@@ -1,0 +1,157 @@
+{
+  "outputs": [
+    [
+      {
+        "type": "message",
+        "id": "m0",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "direct-proof"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "type": "function_call",
+        "id": "i1",
+        "call_id": "write1",
+        "name": "file.write",
+        "arguments": "{\"path\":\"safe/proof.txt\",\"content\":\"http-proof\"}"
+      }
+    ],
+    [
+      {
+        "type": "message",
+        "id": "m2",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "http-proof"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "type": "function_call",
+        "id": "i3",
+        "call_id": "read1",
+        "name": "file.read",
+        "arguments": "{\"path\":\"safe/proof.txt\"}"
+      }
+    ],
+    [
+      {
+        "type": "message",
+        "id": "m4",
+        "role": "assistant",
+        "content": [
+          {
+            "type": "output_text",
+            "text": "http-proof"
+          }
+        ]
+      }
+    ],
+    [
+      {
+        "type": "function_call",
+        "id": "i5",
+        "call_id": "deny1",
+        "name": "file.write",
+        "arguments": "{\"path\":\"safe/denied.txt\",\"content\":\"denied\"}"
+      }
+    ],
+    [
+      {
+        "type": "function_call",
+        "id": "i6",
+        "call_id": "cancel1",
+        "name": "file.write",
+        "arguments": "{\"path\":\"safe/cancelled.txt\",\"content\":\"cancelled\"}"
+      }
+    ]
+  ],
+  "cases": [
+    {
+      "name": "direct",
+      "session_id": "direct",
+      "turn_id": "t1",
+      "create": true,
+      "input": "Return direct-proof without using tools.",
+      "action": "none",
+      "expected": {
+        "state": "completed",
+        "end_reason": "FinalAnswer",
+        "steps": 1,
+        "effects": 0
+      }
+    },
+    {
+      "name": "approve_restart",
+      "session_id": "shared",
+      "turn_id": "t1",
+      "create": true,
+      "input": "Write exactly http-proof to safe/proof.txt using file.write, then report the content.",
+      "action": "approve",
+      "restart": true,
+      "path": "safe/proof.txt",
+      "file_content": "http-proof",
+      "expected": {
+        "state": "completed",
+        "end_reason": "FinalAnswer",
+        "steps": 2,
+        "effects": 1
+      }
+    },
+    {
+      "name": "context_next_turn",
+      "session_id": "shared",
+      "turn_id": "t2",
+      "create": false,
+      "input": "Read the file you wrote in the preceding Turn using file.read and report its contents.",
+      "action": "none",
+      "expected": {
+        "state": "completed",
+        "end_reason": "FinalAnswer",
+        "steps": 2,
+        "effects": 1
+      },
+      "verify_context": true
+    },
+    {
+      "name": "deny",
+      "session_id": "denied",
+      "turn_id": "t1",
+      "create": true,
+      "input": "Write denied to safe/denied.txt using file.write.",
+      "action": "deny",
+      "path": "safe/denied.txt",
+      "expected": {
+        "state": "failed",
+        "end_reason": "ApprovalRejected",
+        "steps": 1,
+        "effects": 0
+      }
+    },
+    {
+      "name": "cancel",
+      "session_id": "cancelled",
+      "turn_id": "t1",
+      "create": true,
+      "input": "Write cancelled to safe/cancelled.txt using file.write.",
+      "action": "cancel",
+      "path": "safe/cancelled.txt",
+      "expected": {
+        "state": "cancelled",
+        "end_reason": "Cancelled",
+        "steps": 1,
+        "effects": 0
+      }
+    }
+  ]
+}

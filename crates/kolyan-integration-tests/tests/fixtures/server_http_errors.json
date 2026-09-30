@@ -1,0 +1,138 @@
+[
+  {
+    "name": "create",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "body": {
+      "session_id": "s"
+    },
+    "status": 201
+  },
+  {
+    "name": "duplicate",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "body": {
+      "session_id": "s"
+    },
+    "status": 409,
+    "code": "conflict"
+  },
+  {
+    "name": "bad_id",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "body": {
+      "session_id": "../bad"
+    },
+    "status": 400,
+    "code": "invalid_request"
+  },
+  {
+    "name": "unknown_field",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "body": {
+      "session_id": "new",
+      "unknown": true
+    },
+    "status": 400,
+    "code": "invalid_request"
+  },
+  {
+    "name": "missing_auth",
+    "method": "GET",
+    "path": "/v1/sessions/s",
+    "auth": false,
+    "status": 401,
+    "code": "unauthorized"
+  },
+  {
+    "name": "origin",
+    "method": "GET",
+    "path": "/v1/sessions/s",
+    "headers": {
+      "Origin": "https://example.invalid"
+    },
+    "status": 403,
+    "code": "origin_forbidden"
+  },
+  {
+    "name": "host",
+    "method": "GET",
+    "path": "/v1/sessions/s",
+    "headers": {
+      "Host": "evil.invalid"
+    },
+    "status": 421,
+    "code": "misdirected_request"
+  },
+  {
+    "name": "method",
+    "method": "DELETE",
+    "path": "/v1/sessions/s",
+    "status": 405,
+    "code": "method_not_allowed"
+  },
+  {
+    "name": "missing_session",
+    "method": "GET",
+    "path": "/v1/sessions/missing",
+    "status": 404,
+    "code": "not_found"
+  },
+  {
+    "name": "unsupported_media",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "raw": "{}",
+    "status": 415,
+    "code": "unsupported_media_type"
+  },
+  {
+    "name": "malformed",
+    "method": "POST",
+    "path": "/v1/sessions",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "raw": "{",
+    "status": 400,
+    "code": "invalid_request"
+  },
+  {
+    "name": "empty_input",
+    "method": "POST",
+    "path": "/v1/sessions/s/turns",
+    "body": {
+      "turn_id": "t",
+      "input": ""
+    },
+    "status": 400,
+    "code": "invalid_request"
+  },
+  {
+    "name": "oversized_text",
+    "method": "POST",
+    "path": "/v1/sessions/s/turns",
+    "body": {
+      "turn_id": "t",
+      "input": "placeholder"
+    },
+    "text_size": 32769,
+    "status": 413,
+    "code": "payload_too_large"
+  },
+  {
+    "name": "oversized_body",
+    "method": "POST",
+    "path": "/v1/sessions/s/turns",
+    "body": {
+      "turn_id": "t",
+      "input": "placeholder"
+    },
+    "text_size": 70000,
+    "status": 413,
+    "code": "payload_too_large"
+  }
+]

@@ -1,0 +1,141 @@
+{
+  "groups": [
+    {
+      "name": "direct",
+      "cases": [
+        {
+          "name": "direct",
+          "session_id": "direct",
+          "turn_id": "t1",
+          "create": true,
+          "input": "Respond with exactly the literal string HTTP_LITERAL_OK_4829. This is an output-format check, not a mathematical proof. Do not use tools or ask questions.",
+          "action": "none",
+          "expected_state": "completed",
+          "end_reason": "FinalAnswer",
+          "minimum_steps": 1,
+          "contains": "HTTP_LITERAL_OK_4829",
+          "minimum_effects": 0,
+          "maximum_effects": 0,
+          "allowed_tools": [],
+          "write_calls": 0
+        }
+      ],
+      "system": [
+        {
+          "text": "This is a literal-output test. Follow the user's requested output exactly, without tools, commentary or questions.",
+          "cache": false
+        }
+      ]
+    },
+    {
+      "name": "approval_restart_two_turn",
+      "cases": [
+        {
+          "name": "approve_restart",
+          "session_id": "shared",
+          "turn_id": "t1",
+          "create": true,
+          "input": "Write exactly http-proof to safe/proof.txt using file.write, then report the content.",
+          "action": "approve",
+          "restart": true,
+          "path": "safe/proof.txt",
+          "file_content": "http-proof",
+          "expected_state": "completed",
+          "end_reason": "FinalAnswer",
+          "minimum_steps": 2,
+          "contains": "http-proof",
+          "minimum_effects": 1,
+          "maximum_effects": 3,
+          "allowed_tools": [
+            "file.write",
+            "file.read"
+          ],
+          "write_calls": 1
+        },
+        {
+          "name": "context_next_turn",
+          "session_id": "shared",
+          "turn_id": "t2",
+          "create": false,
+          "input": "In this new Turn, call file.read again now for the same file you wrote in the preceding Turn. Do not answer from memory or the preceding tool result. After this new read finishes, report the exact contents.",
+          "action": "none",
+          "expected_state": "completed",
+          "end_reason": "FinalAnswer",
+          "minimum_steps": 2,
+          "verify_context": true,
+          "contains": "http-proof",
+          "minimum_effects": 1,
+          "maximum_effects": 2,
+          "allowed_tools": [
+            "file.read"
+          ],
+          "write_calls": 0
+        }
+      ],
+      "system": [
+        {
+          "text": "You are running a local integration test. The workspace exists, and all relative paths under safe/ are explicitly allowed. When the user asks to write, propose the file.write call; the host handles user approval afterwards. Do not ask for approval in ordinary text. For each new user request perform its explicitly requested tool operation, even if the answer is known from earlier context. Optional read-back verification after a write is allowed once within that Turn; a later explicit read request is independent. Never execute unrelated effects.",
+          "cache": false
+        }
+      ]
+    },
+    {
+      "name": "deny",
+      "cases": [
+        {
+          "name": "deny",
+          "session_id": "denied",
+          "turn_id": "t1",
+          "create": true,
+          "input": "Use file.write now to write exactly hello to safe/decision-note.txt. This relative path is explicitly allowed below the existing safe/ directory. Let the host handle the approval request after you propose the tool call.",
+          "action": "deny",
+          "path": "safe/decision-note.txt",
+          "expected_state": "failed",
+          "end_reason": "ApprovalRejected",
+          "minimum_steps": 1,
+          "minimum_effects": 0,
+          "maximum_effects": 0,
+          "allowed_tools": [
+            "file.write"
+          ],
+          "write_calls": 1
+        }
+      ],
+      "system": [
+        {
+          "text": "You are running a local integration test. The workspace exists, and all relative paths under safe/ are explicitly allowed. When the user asks to write, propose the file.write call; the host handles user approval afterwards. Do not ask for approval in ordinary text. For each new user request perform its explicitly requested tool operation, even if the answer is known from earlier context. Optional read-back verification after a write is allowed once within that Turn; a later explicit read request is independent. Never execute unrelated effects.",
+          "cache": false
+        }
+      ]
+    },
+    {
+      "name": "cancel",
+      "cases": [
+        {
+          "name": "cancel",
+          "session_id": "cancelled",
+          "turn_id": "t1",
+          "create": true,
+          "input": "Write cancelled to safe/cancelled.txt using file.write.",
+          "action": "cancel",
+          "path": "safe/cancelled.txt",
+          "expected_state": "cancelled",
+          "end_reason": "Cancelled",
+          "minimum_steps": 1,
+          "minimum_effects": 0,
+          "maximum_effects": 0,
+          "allowed_tools": [
+            "file.write"
+          ],
+          "write_calls": 1
+        }
+      ],
+      "system": [
+        {
+          "text": "You are running a local integration test. The workspace exists, and all relative paths under safe/ are explicitly allowed. When the user asks to write, propose the file.write call; the host handles user approval afterwards. Do not ask for approval in ordinary text. For each new user request perform its explicitly requested tool operation, even if the answer is known from earlier context. Optional read-back verification after a write is allowed once within that Turn; a later explicit read request is independent. Never execute unrelated effects.",
+          "cache": false
+        }
+      ]
+    }
+  ]
+}
