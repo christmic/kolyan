@@ -162,7 +162,7 @@ where
         Ok(ExecutionAdmission { execution, kind })
     }
 
-    fn is_active(&self, execution_id: &str) -> bool {
+    pub(super) fn is_active(&self, execution_id: &str) -> bool {
         self.active
             .lock()
             .expect("coordinator lock must not be poisoned")
@@ -192,7 +192,7 @@ where
             }
             return Ok(());
         }
-        self.ledger.append(LedgerEvent {
+        let event = LedgerEvent {
             event_id: event_id.clone(),
             turn_id: execution.turn_id.clone(),
             execution_id: execution.execution_id.clone(),
@@ -200,7 +200,26 @@ where
             kind,
             idempotency_key: event_id,
             payload,
-        })?;
+        };
+        match self.ledger.append(event.clone()) {
+            Ok(_) => {}
+            Err(error @ LedgerError::Conflict(_)) => {
+                // A read can reconcile the same commit as the finishing driver.
+                // Only an identical winning fact makes this race idempotent.
+                let identical = self.ledger.events_after(0)?.iter().any(|existing| {
+                    existing.event_id == event.event_id
+                        && existing.turn_id == event.turn_id
+                        && existing.execution_id == event.execution_id
+                        && existing.kind == event.kind
+                        && existing.payload == event.payload
+                        && existing.idempotency_key == event.idempotency_key
+                });
+                if !identical {
+                    return Err(error.into());
+                }
+            }
+            Err(error) => return Err(error.into()),
+        }
         Ok(())
     }
 
@@ -221,3 +240,6 @@ fn is_terminal(state: ExecutionState) -> bool {
         ExecutionState::Completed | ExecutionState::Cancelled | ExecutionState::Failed
     )
 }
+
+#[cfg(test)]
+mod tests;

@@ -31,6 +31,53 @@ where
         &self.sessions
     }
 
+    /// Repair stopped Session projections from existing durable facts. Active
+    /// attempts retain ownership of their commit; this never drives execution.
+    pub fn load_reconciled(&self, session_id: &str) -> Result<SessionRecord, ServerError> {
+        let session = self.sessions.load(session_id)?;
+        let coordinator = self.execution.server.coordinator();
+        let events = coordinator
+            .ledger()
+            .events_after(0)
+            .map_err(CoordinatorError::from)?;
+        for turn in &session.turns {
+            if coordinator.is_active(&turn.execution_id) {
+                continue;
+            }
+            let facts = events
+                .iter()
+                .filter(|event| event.execution_id == turn.execution_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            let state = self.execution.state(&turn.execution_id)?;
+            let suspension = facts
+                .iter()
+                .rev()
+                .find(|event| event.kind == LedgerEventKind::ExecutionSuspended);
+            let status = terminal_status(&facts).or_else(|| {
+                (state == ExecutionState::Suspended
+                    && facts.iter().any(|event| {
+                        event.kind == LedgerEventKind::ApprovalRequested
+                            && event.payload.get("continuation").is_some()
+                            && suspension.is_some_and(|suspended| {
+                                suspended.payload["approval_id"] == event.payload["approval_id"]
+                            })
+                    }))
+                .then_some(SessionTurnStatus::Suspended)
+            });
+            if let Some(status) = status
+                && (status != turn.status
+                    || !facts.iter().any(|event| {
+                        event.kind == LedgerEventKind::SessionCommitted
+                            && event.payload["status"] == json!(status)
+                    }))
+            {
+                self.reconcile(session_id, &turn.execution_id)?;
+            }
+        }
+        Ok(self.sessions.load(session_id)?)
+    }
+
     pub async fn start<P, T>(
         &self,
         executor: TurnExecutor<P, T>,
@@ -128,6 +175,85 @@ where
             .resume(executor, session_id.clone(), execution_id, approval_id)
             .await;
         self.commit_result(&session_id, &approval.turn_id, pending_messages, result)
+    }
+
+    /// Reject exactly the current persisted approval without invoking model or
+    /// tool code. The shared resume claim prevents approve/deny double decisions.
+    /// A crash after the terminal fact is recoverable through reconcile.
+    pub fn deny<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        execution: &ExecutionRef,
+        approval_id: &str,
+    ) -> Result<(), ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session = self.sessions.load(&execution.session_id)?;
+        if !session.turns.iter().any(|turn| {
+            turn.turn_id == execution.turn_id
+                && turn.execution_id == execution.execution_id
+                && turn.status == SessionTurnStatus::Suspended
+        }) || self.execution.state(&execution.execution_id)? != ExecutionState::Suspended
+        {
+            return Err(
+                StorageError::Conflict("Turn is not suspended under this Session".into()).into(),
+            );
+        }
+        let ledger = self.execution.server.coordinator().ledger();
+        let events = ledger.events_after(0).map_err(CoordinatorError::from)?;
+        let current = events.iter().rev().find(|event| {
+            event.execution_id == execution.execution_id
+                && event.kind == LedgerEventKind::ApprovalRequested
+        });
+        if !current.is_some_and(|event| event.payload["approval_id"] == approval_id) {
+            return Err(StorageError::Conflict("approval is not current".into()).into());
+        }
+        let approval = self
+            .execution
+            .load_approval(&execution.execution_id, approval_id)?;
+        if approval.turn_id != execution.turn_id {
+            return Err(StorageError::Conflict("approval Turn mismatch".into()).into());
+        }
+        executor
+            .reject_approval(approval, approval_id, "denied by user")
+            .map_err(RuntimeError::from)?;
+        if !ledger
+            .claim(&format!(
+                "{}/attempt/resume/{approval_id}",
+                execution.execution_id
+            ))
+            .map_err(CoordinatorError::from)?
+        {
+            return Err(StorageError::Conflict("approval already decided".into()).into());
+        }
+        // Terminal persistence is atomic against cancellation. No side effect
+        // is authorized by this decision, even if the process stops afterwards.
+        let event_id = format!("{}/approval/{approval_id}/denied", execution.execution_id);
+        ledger
+            .append_unless_cancelled(LedgerEvent {
+                event_id: event_id.clone(),
+                turn_id: execution.turn_id.clone(),
+                execution_id: execution.execution_id.clone(),
+                cursor: 0,
+                kind: LedgerEventKind::TurnFailed,
+                idempotency_key: event_id,
+                payload: json!({"reason":"ApprovalRejected", "approval_id":approval_id}),
+            })
+            .map_err(CoordinatorError::from)?;
+        self.execution.server.coordinator().append_once(
+            execution,
+            &format!("approval/{approval_id}/resolved"),
+            LedgerEventKind::ApprovalResolved,
+            json!({"approval_id":approval_id, "decision":"deny"}),
+        )?;
+        self.commit_session(
+            &execution.session_id,
+            &execution.turn_id,
+            SessionTurnStatus::Failed,
+            Vec::new(),
+        )
     }
 
     pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
@@ -378,6 +504,8 @@ fn terminal_status(events: &[LedgerEvent]) -> Option<SessionTurnStatus> {
     })
 }
 
+#[cfg(test)]
+mod denial_tests;
 #[cfg(test)]
 mod tests;
 
