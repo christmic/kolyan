@@ -81,6 +81,14 @@ path = "tests/runtime/linked_trajectory.rs"
 name = "task_execution"
 path = "tests/server/task_execution.rs"
 
+[[test]]
+name = "task_recovery"
+path = "tests/server/task_recovery.rs"
+
+[[test]]
+name = "task_governance"
+path = "tests/server/task_governance.rs"
+
 
 [[test]]
 name = "r1_matrix"

@@ -467,3 +467,37 @@ The network matrix verifies separate Sessions in one SQLite Ledger, persisted
 approval and completed-result restart, and an actual read in a subsequent Turn.
 Actual requests, output/reasoning and tool effects remain in temporary evidence;
 missing credentials or ordinary failures fail the planned row.
+
+## Durable tasks, recovery and linked content
+
+Requirement 0029 owns the contract and dated acceptance evidence. Production
+task coordination lives in Server; Runtime never acquires task scheduling or
+Session ownership. These targets are independent additions, not replacements
+for the earlier HTTP, Turn or Provider suites.
+
+```sh
+cargo test -p kolyan-integration-tests --test fact_journal --test linked_trajectory --test task_execution --test task_recovery --test task_governance -- --nocapture
+KOLYAN_DUMP_MODEL_REQUESTS=1 cargo test -p kolyan-integration-tests --test task_execution task_execution_live_matrix -- --ignored --nocapture
+```
+
+`task_journal.json` and `linked_trajectory.json` cover atomic coordination batches
+and actual Core request/response/tool facts with binding, redaction and retained
+content integrity. `task_acceptance.json` drives a five-Turn task: nested delegated
+approval, self-call approval, independent delegation approval, two-result join,
+and a new Turn in the retained parent Session. Each approval drops and reconstructs
+the service. Changed revision, constraints and approval identities must fail before
+the original approval can resume. Each configured model/protocol/provider performs
+its own actual model-generated operations; scripted responses run only offline.
+
+`task_governance.json` supplies deterministic service-level nested approval,
+cancellation propagation, bound-artifact completion and budget/unknown-usage
+cases. `task_recovery.json` supplies explicit durable orchestration windows;
+injected execution facts are never described as real model outputs. Recovery
+must not invent permission or re-execute an uncertain effect.
+
+Test code exports temporary journal/execution JSONL, preserves reasoning/text/tool
+content and compares fixture-owned counts, identities, tool inputs/results and
+completion evidence. The task runner also exports raw scoped execution facts on
+assertion unwind. Request-body logging records the actual outgoing protocol body,
+not authentication headers. All failed attempts remain evidence; a later passing
+matrix does not erase earlier failures or prove newly added cases automatically.

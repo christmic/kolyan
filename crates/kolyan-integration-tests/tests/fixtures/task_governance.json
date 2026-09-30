@@ -1,0 +1,38 @@
+{
+  "artifact_max_bytes": 1048576,
+  "workspace_scope": "safe",
+  "turn_max_steps": 6,
+  "register_fact": "register-governance",
+  "task": {
+    "task_id":"governance-task","objective":"Deterministically verify service governance, not a live model.",
+    "criteria":[{"ExecutionCompleted":{"id":"root-result","invocation_id":"root"}}],
+    "agent":{"definition_id":"personal-agent","revision":"r1","instance_id":"instance-one"},
+    "constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "limits":{"max_depth":3,"max_invocations":8,"max_attempts":8,"max_tokens":null,"max_steps_per_turn":6},
+    "cancellation_policy":"AllInvocations"
+  },
+  "request":{"request_id":"rebound","model":{"provider":"fixture","model":"offline"},"system":[],"messages":[{"role":"user","content":[{"type":"text","text":"Perform the admitted deterministic operation."}]}],"tools":[],"tool_choice":"auto","max_output_tokens":1024,"extensions":{},"reasoning":null,"output_format":null,"prompt_cache":null},
+  "response":{"id":"fixture-answer","model":{"provider":"fixture","model":"offline"},"content":[{"type":"text","text":"GOVERNANCE_BOUND_RESPONSE"}],"structured_output":null,"stop_reason":{"reason":"end_turn"},"usage":{"input_tokens":10,"output_tokens":5,"cache_read_tokens":null,"cache_write_tokens":null},"metadata":{"source":"deterministic_fixture"}},
+  "invocations": {
+    "root":{"definition":{"invocation_id":"root","role":"Root","parent_invocation_id":null,"dependencies":[]},"admit_fact":"admit-root","attempt_id":"attempt-root","execution":{"session_id":"session-root","turn_id":"turn-root","execution_id":"execution-root"},"path":"safe/root.txt","calls":[{"id":"write-root","name":"file.write","arguments":{"path":"safe/root.txt","content":"ROOT"}}]},
+    "child":{"definition":{"invocation_id":"child","role":"SelfCall","parent_invocation_id":"root","dependencies":[]},"admit_fact":"admit-child","attempt_id":"attempt-child","execution":{"session_id":"session-child","turn_id":"turn-child","execution_id":"execution-child"},"path":"safe/child.txt","calls":[{"id":"write-child","name":"file.write","arguments":{"path":"safe/child.txt","content":"CHILD"}}]},
+    "nested":{"definition":{"invocation_id":"nested","role":"Delegation","parent_invocation_id":"child","dependencies":[]},"admit_fact":"admit-nested","attempt_id":"attempt-nested","execution":{"session_id":"session-nested","turn_id":"turn-nested","execution_id":"execution-nested"},"path":"safe/nested.txt","calls":[{"id":"write-nested","name":"file.write","arguments":{"path":"safe/nested.txt","content":"NESTED"}}]},
+    "answer_root":{"definition":{"invocation_id":"root","role":"Root","parent_invocation_id":null,"dependencies":[]},"admit_fact":"admit-root","attempt_id":"attempt-root","execution":{"session_id":"session-root","turn_id":"turn-root","execution_id":"execution-root"},"calls":[]},
+    "answer_child":{"definition":{"invocation_id":"child","role":"SelfCall","parent_invocation_id":"root","dependencies":[]},"admit_fact":"admit-child","attempt_id":"attempt-child","execution":{"session_id":"session-child","turn_id":"turn-child","execution_id":"execution-child"},"calls":[]}
+  },
+  "cases": [
+    {"name":"nested_approval_rebuild_and_changed_admission_rejected","scenario":"approval","policy":"AllInvocations","invocations":["root","child","nested"],"cancel":false,
+     "guards":[
+       {"name":"changed_revision","invocation":"nested","patch":{"agent":{"definition_id":"personal-agent","revision":"r2","instance_id":"instance-one"}}},
+       {"name":"changed_constraints","invocation":"nested","patch":{"constraints_digest":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+     ],
+     "resume":[{"invocation":"nested","allowed":true,"consume_by":"child","consume_fact":"consume-nested"},{"invocation":"child","allowed":true,"consume_by":"root","consume_fact":"consume-child"},{"invocation":"root","allowed":true}],"expected_state":"Ready"},
+    {"name":"all_invocations_cancel_blocks_original_approvals","scenario":"approval","policy":"AllInvocations","invocations":["root","child"],"cancel":true,"cancel_fact":"cancel-all","cancel_reason":"explicit stop all admitted work","guards":[],"resume":[{"invocation":"child","allowed":false},{"invocation":"root","allowed":false}],"expected_state":"Cancelled"},
+    {"name":"root_only_cancel_allows_already_admitted_child","scenario":"approval","policy":"RootOnly","invocations":["root","child"],"cancel":true,"cancel_fact":"cancel-root","cancel_reason":"stop root without propagating into child","guards":[],"resume":[{"invocation":"child","allowed":true},{"invocation":"root","allowed":false}],"expected_state":"Cancelled"},
+    {"name":"missing_bound_response_artifact_blocks_completion","scenario":"artifact","policy":"AllInvocations","invocations":["answer_root"],"invocation":"answer_root","criterion_id":"response-artifact","mutation":"missing","complete_fact":"complete-proof","allowed":false,"expected_state":"Ready"},
+    {"name":"corrupted_bound_response_artifact_blocks_completion","scenario":"artifact","policy":"AllInvocations","invocations":["answer_root"],"invocation":"answer_root","criterion_id":"response-artifact","mutation":"corrupt","corrupt_mask":1,"complete_fact":"complete-proof","allowed":false,"expected_state":"Ready"},
+    {"name":"intact_bound_response_artifact_allows_completion","scenario":"artifact","policy":"AllInvocations","invocations":["answer_root"],"invocation":"answer_root","criterion_id":"response-artifact","mutation":"intact","complete_fact":"complete-proof","allowed":true,"expected_state":"Completed"},
+    {"name":"shared_quota_blocks_next_invocation","scenario":"quota","policy":"AllInvocations","invocations":["answer_root","answer_child"],"first":"answer_child","blocked":"answer_root","max_tokens":15,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_tokens":null,"cache_write_tokens":null},"expected_error":"token budget exhausted","expected_state":"Waiting","expected_model_calls":1,"expected_unreported_steps":0},
+    {"name":"unknown_usage_blocks_budgeted_next_invocation","scenario":"quota","policy":"AllInvocations","invocations":["answer_root","answer_child"],"first":"answer_child","blocked":"answer_root","max_tokens":100,"usage":{"input_tokens":null,"output_tokens":null,"cache_read_tokens":null,"cache_write_tokens":null},"expected_error":"unknown usage blocks budgeted work","expected_state":"Failed","expected_model_calls":1,"expected_unreported_steps":1}
+  ]
+}

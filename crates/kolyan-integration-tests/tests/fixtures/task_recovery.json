@@ -1,0 +1,115 @@
+{
+  "definition":{"task_id":"recovery-task","objective":"Recover only from durable execution evidence","criteria":[{"ExecutionCompleted":{"id":"root-result","invocation_id":"root"}}],"agent":{"definition_id":"fixture-agent","revision":"r1","instance_id":"fixture-instance"},"constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","limits":{"max_depth":2,"max_invocations":2,"max_attempts":3,"max_steps_per_turn":4,"max_tokens":null},"cancellation_policy":"AllInvocations"},
+  "invocation":{"invocation_id":"root","agent":{"definition_id":"fixture-agent","revision":"r1","instance_id":"fixture-instance"},"constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","role":"Root","parent_invocation_id":null,"dependencies":[]},
+  "bindings":{
+    "original":{"attempt_id":"attempt-old","invocation_id":"root","execution":{"session_id":"session-old","turn_id":"turn-old","execution_id":"execution-old"},"agent":{"definition_id":"fixture-agent","revision":"r1","instance_id":"fixture-instance"},"constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},
+    "retry":{"attempt_id":"attempt-new","invocation_id":"root","execution":{"session_id":"session-new","turn_id":"turn-new","execution_id":"execution-new"},"agent":{"definition_id":"fixture-agent","revision":"r1","instance_id":"fixture-instance"},"constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+  },
+  "request":{"request_id":"initial","model":{"provider":"fixture","model":"offline-recovery"},"system":[],"messages":[{"role":"user","content":[{"type":"text","text":"Recover this deterministic operation"}]}],"tools":[{"name":"fixture.lookup","description":"Harmless deterministic lookup","input_schema":{"type":"object","properties":{"key":{"type":"string"}},"required":["key"],"additionalProperties":false}}],"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,"max_output_tokens":null,"extensions":{}},
+  "max_steps":4,
+  "providers":{
+    "final":{"answer":"RECOVERY_FINAL","call":null,"failure":null,"failure_when_observed":false},
+    "tool":{"answer":"LOOKUP_CONFIRMED","call":{"id":"recovery-call","name":"fixture.lookup","arguments":{"key":"recover-value"}},"failure":null,"failure_when_observed":false},
+    "failed":{"answer":"unused","call":null,"failure":"fixture fails before producing a model response","failure_when_observed":false},
+    "tool_then_failed":{"answer":"unused","call":{"id":"recovery-call","name":"fixture.lookup","arguments":{"key":"recover-value"}},"failure":"fixture fails after observing the actual committed tool result","failure_when_observed":true}
+  },
+  "tool_result":{"call_id":"recovery-call","content":"RECOVERY_TOOL_OUTPUT","is_error":false},
+  "effect_id":"seed-step/recovery-call",
+  "seed_groups":{
+    "execution":[
+      {"event_id":"${execution}/task-binding","kind":"execution_bound","payload":{"binding":{"task_id":"${task}","invocation_id":"${invocation}","attempt_id":"${attempt}","session_id":"${session}","turn_id":"${turn}","execution_id":"${execution}"}}},
+      {"event_id":"${execution}/execution-started","kind":"execution_started","payload":{"session_id":"${session}","turn_id":"${turn}","execution_id":"${execution}"}}
+    ],
+    "effect":[
+      {"event_id":"${execution}/effect/${effect}/prepared","kind":"effect_prepared","payload":{"effect_id":"${effect}","operation_kind":"fixture.lookup","input_digest":"{\"arguments\":{\"key\":\"recover-value\"},\"name\":\"fixture.lookup\"}","requirements":[],"policy_revision":"fixture-r1"}},
+      {"event_id":"${execution}/effect/${effect}/authorized","kind":"effect_authorized","payload":{"authorization_id":"${execution}/effect/${effect}/authorized","effect_id":"${effect}","input_digest":"{\"arguments\":{\"key\":\"recover-value\"},\"name\":\"fixture.lookup\"}","constraints_digest":"fixture-scope","authority_revision":"fixture-r1"}},
+      {"event_id":"${execution}/effect/${effect}/started","kind":"effect_started","payload":{"effect_id":"${effect}"}}
+    ]
+  },
+  "cases":[
+    {"name":"task_admitted_before_execution_journal","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"attempt_state":"RecoveryRequired"},
+      {"op":"reconcile","expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"retry-denied","reason":"missing execution identity is not safety evidence","expect_ok":false,"unchanged":true}
+    ],"expected":{"model_calls":0,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":0,"attempts":1,"state":"RecoveryRequired"}},
+    {"name":"execution_started_before_first_step","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"seed","group":"execution","expect_ok":true},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"attempt_state":"RecoveryRequired"},
+      {"op":"reconcile","expect_ok":true,"unchanged":true}
+    ],"expected":{"model_calls":0,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":0,"attempts":1,"state":"RecoveryRequired"}},
+    {"name":"started_without_receipt_and_unknown_inspection","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"seed","group":"execution","expect_ok":true},
+      {"op":"seed","group":"effect","expect_ok":true},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"attempt_state":"RecoveryRequired"},
+      {"op":"reconcile","expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"missing-inspection","reason":"absence of receipt alone is insufficient","expect_ok":false,"unchanged":true},
+      {"op":"inspect","id":"unknown-inspection","resolution":{"Unknown":{"evidence":"executor cannot determine external outcome"}},"expect_ok":true},
+      {"op":"inspect","id":"unknown-inspection","resolution":{"Unknown":{"evidence":"executor cannot determine external outcome"}},"expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"unknown-denied","reason":"unknown outcome must not rerun","expect_ok":false,"unchanged":true}
+    ],"expected":{"model_calls":0,"tool_calls":0,"inspections":1,"receipts":0,"retry_proofs":0,"attempts":1,"state":"RecoveryRequired"}},
+    {"name":"trusted_not_committed_authorizes_only_new_attempt","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"seed","group":"execution","expect_ok":true},
+      {"op":"seed","group":"effect","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"attempt_state":"RecoveryRequired"},
+      {"op":"inspect","id":"not-committed","resolution":{"NotCommitted":{"evidence":"executor verified rollback of the exact prepared operation"}},"expect_ok":true},
+      {"op":"retry","id":"authorize-new","reason":"verified rollback permits a fresh host-admitted attempt","expect_ok":true,"preserve_observation":true,"attempt_state":"Failed"},
+      {"op":"retry","id":"authorize-new","reason":"verified rollback permits a fresh host-admitted attempt","expect_ok":true,"unchanged":true},
+      {"op":"reopen","expect_ok":true},
+      {"op":"run","provider":"final","expect_ok":false,"unchanged":true},
+      {"op":"run","binding":"retry","provider":"final","expect_ok":true,"attempt_state":"Completed"},
+      {"op":"complete","id":"task-done","expect_ok":true}
+    ],"expected":{"model_calls":1,"tool_calls":0,"inspections":1,"receipts":0,"retry_proofs":1,"attempts":2,"state":"Completed"}},
+    {"name":"committed_receipt_before_task_observation","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"run","via":"session","provider":"tool","expect_ok":true,"attempt_state":"Running"},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"attempt_state":"Completed"},
+      {"op":"reconcile","expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"receipt-denied","reason":"committed receipt forbids whole-attempt replay","expect_ok":false,"unchanged":true},
+      {"op":"complete","id":"task-done","expect_ok":true},
+      {"op":"complete","id":"task-done","expect_ok":true,"unchanged":true}
+    ],"expected_receipt_outputs":["tool_result"],"expected":{"model_calls":2,"tool_calls":1,"inspections":0,"receipts":1,"retry_proofs":0,"attempts":1,"state":"Completed"}},
+    {"name":"committed_receipt_blocks_failed_attempt_retry","operations":[
+      {"op":"run","provider":"tool_then_failed","expect_ok":false,"attempt_state":"Failed"},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"receipt-denied","reason":"failure after a committed tool result must not replay the whole attempt","expect_ok":false,"error_contains":"committed effect receipt blocks whole-attempt retry","unchanged":true}
+    ],"expected_receipt_outputs":["tool_result"],"expected":{"model_calls":2,"tool_calls":1,"inspections":0,"receipts":1,"retry_proofs":0,"attempts":1,"state":"Ready"}},
+    {"name":"failed_provider_safe_retry_has_new_identities","operations":[
+      {"op":"run","provider":"failed","expect_ok":false,"attempt_state":"Failed"},
+      {"op":"reopen","expect_ok":true},
+      {"op":"reconcile","expect_ok":true,"unchanged":true},
+      {"op":"retry","id":"authorize-new","reason":"verified failed model attempt has no started effects","expect_ok":true,"preserve_observation":true},
+      {"op":"retry","id":"authorize-new","reason":"verified failed model attempt has no started effects","expect_ok":true,"unchanged":true},
+      {"op":"run","provider":"final","expect_ok":false,"unchanged":true},
+      {"op":"run","binding":"retry","provider":"final","expect_ok":true},
+      {"op":"complete","id":"task-done","expect_ok":true}
+    ],"expected":{"model_calls":2,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":1,"attempts":2,"state":"Completed"}},
+    {"name":"forged_completion_event_identity_rejected_physically","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"run","via":"session","provider":"final","expect_ok":true},
+      {"op":"forge","id":"forged-observation","source_patch":{"event_id":"nonexistent-final-fact"},"expect_ok":true,"attempt_state":"Completed"},
+      {"op":"reopen","expect_ok":true},
+      {"op":"complete","id":"must-not-complete","expect_ok":false,"unchanged":true}
+    ],"expected":{"model_calls":1,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":0,"attempts":1,"state":"Ready"}},
+    {"name":"forged_completion_cursor_rejected_physically","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"run","via":"session","provider":"final","expect_ok":true},
+      {"op":"forge","id":"forged-observation","source_patch":{"cursor":100000},"expect_ok":true,"attempt_state":"Completed"},
+      {"op":"complete","id":"must-not-complete","expect_ok":false,"unchanged":true}
+    ],"expected":{"model_calls":1,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":0,"attempts":1,"state":"Ready"}},
+    {"name":"forged_completion_result_digest_rejected_physically","operations":[
+      {"op":"admit","id":"start-old","expect_ok":true},
+      {"op":"run","via":"session","provider":"final","expect_ok":true},
+      {"op":"forge","id":"forged-observation","source_patch":{},"digest":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","expect_ok":true,"attempt_state":"Completed"},
+      {"op":"complete","id":"must-not-complete","expect_ok":false,"unchanged":true}
+    ],"expected":{"model_calls":1,"tool_calls":0,"inspections":0,"receipts":0,"retry_proofs":0,"attempts":1,"state":"Ready"}}
+  ]
+}
