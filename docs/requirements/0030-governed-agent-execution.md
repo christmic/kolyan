@@ -140,6 +140,13 @@ Grants bind call identity, prepared digest, tool revision, policy revision and
 constraints. The executor validates the complete binding before effects, including
 on resume. Missing grants, changed inputs, revisions or unavailable mandatory
 isolation are errors. Approval cannot expand static capability ceilings.
+The Runtime invocation binding additionally includes execution, Turn, Step and
+Agent snapshot identities: a model's raw call ID is not globally unique authority.
+The integrated grant must reject reuse across another invocation or Session.
+Policy revision must represent the effective trusted rule set, not a constant
+label surviving changes to registered manifests, static ceilings or constraints.
+Standalone preparation/grant primitives are not acceptance of those integrated
+scope and dynamic policy guarantees.
 
 Read is bounded. Write uses an atomic replacement where supported. Edit performs
 an exact unique replacement with optional expected content digest; missing,
@@ -235,17 +242,22 @@ the complete scope remains active until every gate above is proven.
 ## Implementation checkpoint on 2026 10 01
 
 Definition/catalog resolution, permission intersection and immutable snapshots
-are implemented. Agent module tests passed 13/13 at this checkpoint. This does
+are implemented. Agent module tests passed 40/40, including context preparation
+and Memory/SQLite invocation ownership restoration. This does
 not implement model-driven delegation, durable child waits or an Agent runner.
 Policy now accepts adapter-derived prepared claims and binds grants to input,
-implementation and policy revisions. Five new tests passed with ten existing
-policy tests. Approval evidence is typed and exact; its durable authority still
+implementation and policy revisions. Policy tests passed 17/17; a separate Core
+regression verifies that changed rules invalidate old approval even when the
+decision still requires approval. Revision hashes cover effective rules, and
+prepared JSON canonicalization sorts nested objects without reordering arrays.
+Approval evidence is typed and exact; its durable authority still
 has to be verified by the invoking host. The existing Turn dispatch has not yet
 been migrated to these preparation and grant contracts.
 
 File operations implement strict typed read/write/edit, bounded content,
 atomic replacement and stale/ambiguous edit rejection. Tools module tests passed
-23/23, preserving nine original tests. The trusted helper has three passing
+32/32, preserving nine original tests. This includes isolated shell argument,
+grant, actual process output and refusal tests. The trusted helper has three passing
 protocol tests. `IsolatedFileTools` reprepares the call, hashes the actual trusted
 worker binary, checks the exact grant and launches the worker through Seatbelt.
 No ambient fallback is present. Raw file operations remain explicitly separate
@@ -260,18 +272,25 @@ escape denial. This evidence applies to the tested host, not every macOS release
 The adapter denies process-group/session detachment and cleans up normal child
 groups; it is not a universal guarantee against an adversarial operating system.
 
-The new `file_worker_process` integration target passed two tests: eight fixture
+The new `file_worker_process` integration target passed three tests: eight fixture
 operations and refusal of changed arguments, policy revision and worker binary
-before file effects. It compares explicit failure semantics and actual read
+before file effects, and canonical symlink resource authorization/rebinding.
+It compares explicit failure semantics and actual read
 content after exporting JSONL. Cargo builds the exact production worker entrypoint
 for this test target; no manual pre-build or duplicate worker source is required.
 Final observed process artifacts at this checkpoint are:
 
-- `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-worker-KfloKr/actual.jsonl`
-- `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-bindings-GZY5O8/actual.jsonl`
+- `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-worker-8z0pst/actual.jsonl`
+- `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-file-bindings-S5hma0/actual.jsonl`
 - Sandbox output: `/tmp/kolyan-l5-sandbox-main.log`.
 
-These are real local subprocess tests, not actual-model Agent acceptance. Shell
-preparation, context preparation, loop integration, recursive/parallel Agent
+The default workspace test run passed at its intermediate checkpoint, with
+explicitly ignored network tests still unexecuted. A failed sandbox host-control
+probe and a shell bootstrap permission failure were retained in diagnostic logs;
+bounded host acceptance and the narrow root-owned shell selector read rule fixed
+them without removing the security assertions. The sandbox policy is version v2.
+
+These are real local subprocess tests, not actual-model Agent acceptance. Strict
+model-specific token counting, context reduction, loop integration, recursive/parallel Agent
 execution, durable child waits and the full real-model/long-task matrix remain
 in progress. L5 is not accepted.

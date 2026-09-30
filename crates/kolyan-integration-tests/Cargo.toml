@@ -6,6 +6,13 @@ license.workspace = true
 publish = false
 description = "Real-network live regression tests for Kolyan provider adapters (MiniMax China-region OpenAI-compatible and Anthropic-compatible endpoints)."
 
+# Cargo builds this exact production entrypoint for process integration tests;
+# no duplicate worker implementation or external build step is required.
+[[bin]]
+name = "kolyan-test-tool-worker"
+path = "../kolyan-tool-worker/src/main.rs"
+test = false
+
 [[test]]
 name = "provider_openai_compat"
 path = "tests/provider/openai_compat.rs"
@@ -74,6 +81,10 @@ name = "fact_journal"
 path = "tests/ledger/fact_journal.rs"
 
 [[test]]
+name = "file_worker_process"
+path = "tests/tools/file_worker_process.rs"
+
+[[test]]
 name = "linked_trajectory"
 path = "tests/runtime/linked_trajectory.rs"
 
@@ -139,6 +150,8 @@ kolyan-provider-openai = { path = "../kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
 kolyan-policy = { path = "../kolyan-policy" }
 kolyan-tools = { path = "../kolyan-tools" }
+kolyan-sandbox = { path = "../kolyan-sandbox" }
+kolyan-tool-worker = { path = "../kolyan-tool-worker" }
 kolyan-ledger = { path = "../kolyan-ledger" }
 kolyan-runtime = { path = "../kolyan-runtime" }
 kolyan-server = { path = "../kolyan-server" }

@@ -1,0 +1,10 @@
+[
+  {"id":"write","name":"file.write","arguments":{"path":"note.txt","content":"hello alpha"},"expected_error":false,"expected_content":null},
+  {"id":"read-before","name":"file.read","arguments":{"path":"note.txt"},"expected_error":false,"expected_content":"hello alpha"},
+  {"id":"edit","name":"file.edit","arguments":{"path":"note.txt","old_text":"alpha","new_text":"beta"},"expected_error":false,"expected_content":null},
+  {"id":"read-after","name":"file.read","arguments":{"path":"note.txt"},"expected_error":false,"expected_content":"hello beta"},
+  {"id":"missing-match","name":"file.edit","arguments":{"path":"note.txt","old_text":"absent","new_text":"corruption"},"expected_error":true,"expected_error_contains":"MissingMatch","expected_content":null},
+  {"id":"stale-edit","name":"file.edit","arguments":{"path":"note.txt","old_text":"beta","new_text":"corruption","expected_sha256":"0000000000000000000000000000000000000000000000000000000000000000"},"expected_error":true,"expected_error_contains":"StaleContent","expected_content":null},
+  {"id":"escape","name":"file.write","arguments":{"path":"../outside.txt","content":"denied"},"expected_error":true,"expected_error_contains":"below the configured tool root","expected_content":null},
+  {"id":"read-unchanged","name":"file.read","arguments":{"path":"note.txt"},"expected_error":false,"expected_content":"hello beta"}
+]
