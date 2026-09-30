@@ -4,7 +4,7 @@
 
 | 模块 | 职责 | 明确不负责 |
 | --- | --- | --- |
-| `kolyan-types` | 预留的跨模块基础类型，避免重复定义已有领域契约 | 执行流程、存储 |
+| `kolyan-types` | 共享执行坐标 `ExecutionKey`，避免 Policy 与 Runtime 重复定义身份 | 执行流程、存储 |
 | `kolyan-core` | Step、Turn、工具循环及执行边界 | Session 存储、供应商、数据库、UI |
 | `kolyan-runtime` | 执行生命周期、取消、重试、限制 | 具体模型实现 |
 | `crates/kolyan-server` | Server 门面、ExecutionCoordinator、ExecutionService 和 Server 核心适配器 | Turn/Step 逻辑、模型、租约实现 |

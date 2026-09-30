@@ -2,11 +2,54 @@
 //! deserialization and digests establish integrity, not independent authority.
 
 use kolyan_model::ToolCall;
+use kolyan_types::ExecutionKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{ExecutionConstraints, InvocationClaim, PolicyDecision, PolicyDecisionKind};
+
+/// Trusted execution coordinates, independent of reusable model tool-call IDs.
+/// Agent snapshots are optional only for non-Agent executions; scope is mandatory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ToolExecutionScope {
+    pub execution: ExecutionKey,
+    pub step_id: String,
+    pub agent_snapshot_digest: Option<String>,
+}
+
+impl ToolExecutionScope {
+    /// Coordinates must be 1..256 ASCII identifier bytes; snapshots are exact
+    /// 64-hex digests. Nothing is inferred from a tool-call ID or given a default.
+    pub fn validate(&self) -> Result<(), PreparedError> {
+        for value in [
+            &self.execution.session_id,
+            &self.execution.execution_id,
+            &self.execution.turn_id,
+            &self.step_id,
+        ] {
+            if value.is_empty()
+                || value.len() > 256
+                || !value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"._:-".contains(&byte))
+            {
+                return Err(PreparedError::Invalid(
+                    "execution coordinates must be 1..256 ASCII identifier bytes".into(),
+                ));
+            }
+        }
+        if let Some(digest) = &self.agent_snapshot_digest
+            && (digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        {
+            return Err(PreparedError::Invalid(
+                "Agent snapshot digest must be exactly 64 hex bytes".into(),
+            ));
+        }
+        Ok(())
+    }
+}
 
 /// Mandatory enforcement ceilings determined by the trusted tool adapter.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +75,7 @@ pub struct PreparedCall {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedGrant {
+    scope: ToolExecutionScope,
     call_id: String,
     tool_name: String,
     tool_revision: String,
@@ -47,6 +91,7 @@ pub struct PreparedGrant {
 pub enum ApprovalEvidence {
     NotConfirmed,
     Confirmed {
+        scope: ToolExecutionScope,
         prepared_digest: String,
         policy_revision: String,
         evidence_id: String,
@@ -176,15 +221,19 @@ impl PreparedGrant {
         prepared: &PreparedCall,
         decision: PolicyDecision,
         approval: ApprovalEvidence,
+        scope: ToolExecutionScope,
     ) -> Result<Self, PreparedError> {
         prepared.validate()?;
+        scope.validate()?;
         let approval_evidence_id = match approval {
             ApprovalEvidence::NotConfirmed => None,
             ApprovalEvidence::Confirmed {
+                scope: approval_scope,
                 prepared_digest,
                 policy_revision,
                 evidence_id,
-            } if prepared_digest == prepared.digest
+            } if approval_scope == scope
+                && prepared_digest == prepared.digest
                 && policy_revision == decision.policy_version
                 && !evidence_id.trim().is_empty()
                 && evidence_id.len() <= 1024 =>
@@ -215,6 +264,7 @@ impl PreparedGrant {
             return Err(PreparedError::Invalid("zero execution limit".into()));
         }
         Ok(Self {
+            scope,
             call_id: prepared.call.id.clone(),
             tool_name: prepared.call.name.clone(),
             tool_revision: prepared.tool_revision.clone(),
@@ -228,15 +278,21 @@ impl PreparedGrant {
         })
     }
 
-    /// Check exact input and current policy revision before any external effect.
+    /// Check exact input, current policy revision and host-owned execution scope
+    /// before any external effect. Expected scope must come from trusted admission,
+    /// not from the grant being checked or model-generated arguments.
     /// The caller must also enforce isolation and verify trusted grant provenance.
     pub fn validate(
         &self,
         prepared: &PreparedCall,
         current_policy_revision: &str,
+        expected_scope: &ToolExecutionScope,
     ) -> Result<(), PreparedError> {
         prepared.validate()?;
-        if self.call_id != prepared.call.id
+        self.scope.validate()?;
+        expected_scope.validate()?;
+        if self.scope != *expected_scope
+            || self.call_id != prepared.call.id
             || self.tool_name != prepared.call.name
             || self.tool_revision != prepared.tool_revision
             || self.prepared_digest != prepared.digest
@@ -257,6 +313,11 @@ impl PreparedGrant {
 
     pub fn constraints(&self) -> &ExecutionConstraints {
         &self.constraints
+    }
+
+    /// The exact scope bound at issuance; callers cannot mutate it in place.
+    pub fn scope(&self) -> &ToolExecutionScope {
+        &self.scope
     }
 }
 

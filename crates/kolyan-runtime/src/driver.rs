@@ -3,7 +3,7 @@ mod tools;
 use recorder::LedgerRecorder;
 use tools::DurableTools;
 
-use crate::{RuntimeError, Trajectory, TrajectoryRecord};
+use crate::{ExecutionKey as RuntimeTurnKey, RuntimeError, Trajectory, TrajectoryRecord};
 use kolyan_core::{
     ApprovalRequest, ResumableTurn, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
     TurnBoundaryKind, TurnError, TurnExecution, TurnExecutor, TurnRequest,
@@ -288,13 +288,6 @@ where
         }
         Ok(trajectory)
     }
-}
-
-#[derive(Clone, Debug, serde::Serialize)]
-struct RuntimeTurnKey {
-    session_id: String,
-    turn_id: String,
-    execution_id: String,
 }
 
 struct LedgerBoundaryControl<L> {

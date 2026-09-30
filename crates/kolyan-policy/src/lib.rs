@@ -3,8 +3,10 @@
 mod progress;
 pub use progress::ProgressPolicy;
 mod prepared;
+mod prepared_batch;
 pub use prepared::{
-    ApprovalEvidence, PreparedCall, PreparedError, PreparedGrant, ToolRequirements,
+    ApprovalEvidence, PreparedCall, PreparedError, PreparedGrant, ToolExecutionScope,
+    ToolRequirements,
 };
 
 use kolyan_model::ToolCall;
@@ -302,7 +304,7 @@ impl PolicyEngine {
         let mut manifests = self.manifests.values().collect::<Vec<_>>();
         manifests.sort_by(|left, right| left.tool_name.cmp(&right.tool_name));
         let rules = serde_json::json!({
-            "algorithm": "kolyan-policy-v2",
+            "algorithm": "kolyan-policy-v3",
             "manifests": manifests,
             "denied_tools": self.denied_tools,
             "workspace": self.workspace,
@@ -311,7 +313,7 @@ impl PolicyEngine {
             "default_timeout_ms": 30_000,
         });
         format!(
-            "kolyan-policy-v2/{:x}",
+            "kolyan-policy-v3/{:x}",
             Sha256::digest(rules.to_string().as_bytes())
         )
     }
@@ -363,14 +365,13 @@ impl PolicyEngine {
         {
             return PolicyDecision::denied("invocation exceeds the tool capability ceiling");
         }
-        let workspace = context
-            .workspace
-            .as_deref()
-            .map(PathScope::new)
-            .or_else(|| self.workspace.clone());
+        let invocation_workspace = context.workspace.as_deref().map(PathScope::new);
         if let Some(path) = claim.resource.path.as_deref()
             && (!manifest.allows_path(path)
-                || workspace.as_ref().is_some_and(|s| !s.contains(path)))
+                || self.workspace.as_ref().is_some_and(|s| !s.contains(path))
+                || invocation_workspace
+                    .as_ref()
+                    .is_some_and(|s| !s.contains(path)))
         {
             return PolicyDecision::denied("resource is outside the allowed path scope");
         }

@@ -4,12 +4,7 @@ use serde_json::{Value, json};
 use std::marker::PhantomData;
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExecutionKey {
-    pub session_id: String,
-    pub turn_id: String,
-    pub execution_id: String,
-}
+pub use kolyan_types::ExecutionKey;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EffectRequest {

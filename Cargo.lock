@@ -1142,6 +1142,9 @@ version = "0.1.0"
 [[package]]
 name = "kolyan-types"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "lazy_static"
