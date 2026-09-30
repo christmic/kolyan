@@ -270,11 +270,28 @@ fn anthropic_message(message: &kolyan_model::Message) -> Value {
 }
 
 fn request_messages(request: &ModelRequest) -> Vec<Value> {
-    let mut messages = request
-        .messages
-        .iter()
-        .map(anthropic_message)
-        .collect::<Vec<_>>();
+    let mut messages: Vec<Value> = Vec::with_capacity(request.messages.len());
+    for message in &request.messages {
+        let mapped = anthropic_message(message);
+        if let Some(previous) = messages.last_mut()
+            && previous["role"] == mapped["role"]
+        {
+            // Match the official ToolRunner's single user turn for a result batch.
+            // Flatten blocks only; signed reasoning, result IDs and order stay intact.
+            previous["content"]
+                .as_array_mut()
+                .expect("mapped message content is an array")
+                .extend(
+                    mapped["content"]
+                        .as_array()
+                        .expect("mapped message content is an array")
+                        .iter()
+                        .cloned(),
+                );
+        } else {
+            messages.push(mapped);
+        }
+    }
     if request.prompt_cache.as_ref().is_some_and(|cache| {
         cache
             .breakpoints

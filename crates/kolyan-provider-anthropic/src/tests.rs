@@ -1,6 +1,94 @@
 use super::*;
 
 #[test]
+fn parallel_tool_results_share_one_user_turn_with_exact_ids_and_errors() {
+    let request = batch_mapping_request(json!([
+        {"role":"assistant","content":[
+            {"type":"tool_call","call":{"id":"alpha-call","name":"file.read","arguments":{"path":"alpha.txt"}}},
+            {"type":"tool_call","call":{"id":"beta-call","name":"file.read","arguments":{"path":"beta.txt"}}}
+        ]},
+        {"role":"user","content":[{"type":"tool_result","result":{"call_id":"alpha-call","content":"ALPHA_7392","is_error":false}}]},
+        {"role":"user","content":[{"type":"tool_result","result":{"call_id":"beta-call","content":"BETA_8463","is_error":true}}]}
+    ]));
+    let wire = serde_json::to_value(AnthropicProvider::request(&request)).unwrap();
+    assert_eq!(
+        wire["messages"],
+        json!([
+            {"role":"assistant","content":[
+                {"type":"tool_use","id":"alpha-call","name":"file.read","input":{"path":"alpha.txt"}},
+                {"type":"tool_use","id":"beta-call","name":"file.read","input":{"path":"beta.txt"}}
+            ]},
+            {"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"alpha-call","content":"ALPHA_7392","is_error":false},
+                {"type":"tool_result","tool_use_id":"beta-call","content":"BETA_8463","is_error":true}
+            ]}
+        ])
+    );
+    assert_eq!(request.messages.len(), 3);
+}
+
+#[test]
+fn coalescing_retains_role_boundaries_block_order_and_opaque_reasoning() {
+    let signed = json!({"type":"thinking","thinking":"internal","signature":"signed-value","extra":{"keep":true}});
+    let redacted = json!({"type":"redacted_thinking","data":"opaque-value"});
+    let request = batch_mapping_request(json!([
+        {"role":"user","content":[{"type":"text","text":"first"}]},
+        {"role":"user","content":[{"type":"text","text":"second"}]},
+        {"role":"assistant","content":[{"type":"reasoning","text":"internal","opaque":signed}]},
+        {"role":"assistant","content":[{"type":"reasoning","text":"","opaque":redacted},{"type":"text","text":"reply"}]},
+        {"role":"user","content":[{"type":"text","text":"next"}]},
+        {"role":"assistant","content":[{"type":"text","text":"final"}]}
+    ]));
+    assert_eq!(
+        request_messages(&request),
+        vec![
+            json!({"role":"user","content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]}),
+            json!({"role":"assistant","content":[signed,redacted,{"type":"text","text":"reply"}]}),
+            json!({"role":"user","content":[{"type":"text","text":"next"}]}),
+            json!({"role":"assistant","content":[{"type":"text","text":"final"}]}),
+        ]
+    );
+}
+
+#[test]
+fn message_cache_marks_only_last_block_after_result_batch_coalescing() {
+    let mut request = batch_mapping_request(json!([
+        {"role":"assistant","content":[{"type":"text","text":"calls"}]},
+        {"role":"user","content":[{"type":"tool_result","result":{"call_id":"alpha","content":"first","is_error":false}}]},
+        {"role":"user","content":[{"type":"tool_result","result":{"call_id":"beta","content":"second","is_error":false}}]},
+        {"role":"user","content":[]}
+    ]));
+    request.prompt_cache = Some(
+        serde_json::from_value(json!({"key":null,"retention":null,"breakpoints":["messages"]}))
+            .unwrap(),
+    );
+    let mapped = request_messages(&request);
+    assert_eq!(
+        mapped,
+        vec![
+            json!({"role":"assistant","content":[{"type":"text","text":"calls"}]}),
+            json!({"role":"user","content":[
+                {"type":"tool_result","tool_use_id":"alpha","content":"first","is_error":false},
+                {"type":"tool_result","tool_use_id":"beta","content":"second","is_error":false,"cache_control":{"type":"ephemeral"}}
+            ]}),
+        ]
+    );
+    let mut empty = batch_mapping_request(json!([]));
+    empty.prompt_cache = request.prompt_cache;
+    assert!(request_messages(&empty).is_empty());
+}
+
+fn batch_mapping_request(messages: Value) -> ModelRequest {
+    serde_json::from_value(json!({
+        "request_id":"batch-regression","model":{"provider":"anthropic","model":"test"},
+        "system":[],"messages":messages,"tools":[],"tool_choice":"auto",
+        "max_output_tokens":8192,"extensions":null,"reasoning":null,
+        "output_format":null,"prompt_cache":null
+    }))
+    .unwrap()
+}
+
+#[test]
 fn terminal_does_not_poll_or_wait_for_the_next_network_event() {
     use futures_util::{FutureExt, stream};
     for finish in [true, false] {
