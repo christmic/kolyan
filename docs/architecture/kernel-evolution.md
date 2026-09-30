@@ -80,7 +80,7 @@ A reserved directory or enum variant is not a finished extension mechanism.
 | Execution admission | `TurnBoundaryControl::admit` | Available for cancellation and fail-closed boundary checks. It does not itself guarantee exactly-once external effects. |
 | Authorization | `PolicyResolver` exists, but `TurnExecutor` stores `Arc<PolicyEngine>` | Partial. The resolver trait alone is not a pluggable Turn policy boundary; batch planning, context and progress also need an explicit contract. |
 | Session context | `SessionStore`, immutable Turn input and `SessionContextPolicy` | Available for persistence and coarse projection. The enum is not a token-budget or compaction strategy interface. |
-| Durable execution | `LedgerStore`, `DurableTurnDriver`, effect receipts | Available for backend replacement. Indexed effect queries and external-effect reconciliation need additional contracts. |
+| Durable execution | `LedgerStore`, `LedgerQuery`, `DurableTurnDriver`, effect receipts | Scoped execution and exact-fact reads are integrated and indexed in SQLite. Validated fact relationships and external-effect reconciliation still need additional contracts; see requirement 0029. |
 | Observation | `StepEventRecorder`, `TurnEventRecorder`, `TraceSink` | Available. Optional observations must remain distinct from required recovery facts and must follow redaction/retention rules. |
 | Cross-process clients | Server service and execution protocol | Available boundary. Future transport adapters should reuse services rather than copy Turn or approval logic. |
 
@@ -145,10 +145,18 @@ for every policy decision.
 
 ## Implementation order and acceptance
 
-1. Context preparation and budget accounting.
-2. Prepared calls, replaceable policy resolution and exact authorization binding.
-3. Effect reconciliation and scoped Ledger queries/projections.
-4. Isolated executor support and stronger progress assessment.
+Implementation contracts and per-increment evidence are maintained in
+[Durable Task Foundation](../requirements/0029-durable-task-foundation.md).
+This assessment remains the rationale, not a second implementation status log.
+
+The following priority supersedes the initial context-first recommendation,
+following the user's long-task and governance direction on 2026-09-30:
+
+1. Validated Ledger facts, recovery contracts and scoped queries.
+2. Linked Trajectory records and distinct diagnostic Trace contracts.
+3. Minimal durable task coordination across bounded Turns.
+4. Prepared calls, replaceable policy and executor isolation as those tasks
+   require them. Context preparation remains supporting work, not the lead item.
 
 Each increment needs a requirement/design document before implementation,
 module-local tests, new data-driven integration cases and live-model scenarios.
@@ -197,3 +205,103 @@ isolation or provider names into the loop. Module boundaries leave space, but
 the context, preparation and policy gaps require local interface changes.
 This is an evolution plan, not a claim that all future enhancements are already
 plug-and-play or that live acceptance is complete.
+
+## Recursive calls and extensible execution topology
+
+This is a proposed design constraint, not an implemented multi-agent API.
+Keep the Session/Turn/Step execution units. Do not force every future task,
+agent invocation or coordination relationship into that containment hierarchy.
+The Ledger stores admitted facts; Server coordination interprets topology and
+decides scheduling. A topology edge never grants permission to execute.
+
+### Source update and limits
+
+DSH means the local `deepseek-tui` checkout, now publicly named Codewhale.
+On 2026-09-30 its clean main checkout was fast-forwarded from `9b34ab54b` to
+the fetched origin/main `4f6da02c2`. This is a source-update receipt, not build
+or live-test evidence. Relevant inspected files at the updated revision are:
+
+- `crates/tui/src/fleet/ledger.rs`: append-only fleet records, replay epochs,
+  cursor-based observation and bounded artifact metadata. Append notifications
+  prompt another read; they are not durable delivery or execution authority.
+- `crates/tui/src/tools/subagent/coord/ledger.rs`: versioned decisions, scope
+  claims, contention and context-projection receipts. Coordination claims are
+  not a substitute for approval or technical enforcement.
+- `crates/tui/src/tools/subagent/governor.rs`: launch admission responds to
+  rate-limit observations independently of retries inside model calls.
+- `crates/protocol/src/journal.rs`: tree journal shapes remain explicitly
+  described as a placeholder; do not claim mature topology support from them.
+
+The older TUI goal-loop path has moved to `crates/runtime/src/goal_loop.rs`.
+Future implementation must inspect actual consumers at the pinned revision.
+These mechanisms inform the proposal; they do not prove cross-process crash
+safety or complete feature coverage without running the relevant tests.
+
+### Identities and relationships
+
+Separate a versioned Agent definition from an Agent instance, a logical
+invocation from its execution attempts, and a long-lived task from its Turns.
+Calling the same Agent definition recursively creates a new invocation; it
+must not reuse the caller's execution identity, receipt keys or approval.
+Record the admitted definition/configuration revision for later recovery.
+
+Use explicit, versioned relationship facts with validated source and target
+references. Proposed relationship families include invocation, delegation,
+dependency, result consumption, continuation and supersession. An invocation
+may have one initiating caller while a join consumes several result references;
+one `parent_id` cannot express both relationships. Cancellation propagation,
+budget allocation and failure propagation require explicit admitted policy,
+not an inference from any parent or dependency edge.
+
+Allow linear chains, fan-out/fan-in, nested delegation and future graph-shaped
+workflows without a closed `TopologyKind` enum in the execution kernel. Keep
+their distinct rules: ancestry and causation must not cycle; a dependency DAG
+must not cycle; an iterative workflow creates new iteration/attempt identities
+instead of rewriting prior facts or creating a causal loop. Multiple executions
+of the same Agent definition do not themselves constitute a graph cycle.
+Conversation branching and execution dependency are separate relations.
+
+### Facts and extension types
+
+Keep a small validated fact envelope: identity, owning stream and position,
+subject reference, causal references, namespaced kind, schema version and
+payload or immutable content reference. Task, Agent, invocation, execution,
+model call and effect identities remain distinct. Timestamps describe
+observation; durable stream position orders commits. Do not infer global
+causality from wall clocks or independent stream cursors.
+
+Extension kinds require registered schema/reference/transition validation
+before they can mutate authoritative state. An unknown observational kind may
+be retained without driving execution; an unknown recovery-critical kind must
+block recovery rather than be silently skipped. Define version compatibility
+explicitly. Avoid both an ever-growing universal enum and unrestricted JSON
+whose meaning every consumer guesses. Introduce an extension contract only
+with its first concrete fact family and tests, not an empty plugin framework.
+
+Trajectory records retain actual admitted model inputs, outputs and tool
+observations, linked to the same invocation, attempt and durable facts. Trace
+adds diagnostic spans and timing but cannot recreate an authorization. Large
+or sensitive content needs bounded immutable references, integrity checks,
+access control and retention rules; hashes do not replace storage or authority.
+Compressed context and UI projections must not overwrite the source facts.
+
+### Long tasks and recovery acceptance
+
+Server task coordination owns objectives, success evidence, continuation,
+waiting reasons and admitted topology revisions. Runtime executes bounded
+attempts; Turn and Step do not acquire scheduling or multi-agent duties.
+Long approval waits persist a continuation rather than retaining a call stack.
+Resuming an approval, reconciling an uncertain effect, retrying an attempt and
+starting a subsequent Turn are different operations with different guards.
+
+The first implementation needs data-driven cases for self-call identity
+isolation; fan-out and multi-input joins; nested suspension and restart;
+duplicate result delivery; child completion before parent observation;
+changed definition/topology revisions; cancellation under explicit propagation
+rules; shared budget limits and recursion bounds; unknown critical fact kinds;
+and receipt-backed recovery without repeating an uncertain external effect.
+Offline tests prove these deterministic invariants. Live-model cases prove
+model-facing integration and preserve actual trajectories. General scheduling,
+distributed leases and all topology variants are not requirements for the
+first increment; their boundaries must remain possible without replacing the
+fact model.

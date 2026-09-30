@@ -37,9 +37,13 @@ kolyan-integration-tests/
 - Step 真实调用测试放在 `tests/core/step.rs`；
 - 所有真实网络用例必须显式 `#[ignore]`，普通 workspace 测试不能访问网络；
 - 已设置 API Key 的 live test 遇到 Provider 或聚合错误必须失败，不能静默跳过；
-- 缺少某个 Provider 的 API Key 时，只跳过该 Provider 的矩阵行。
+- 正式真实矩阵缺少某个 Provider 的 API Key 时，该矩阵行记为失败，不静默跳过；普通无网络测试仍通过显式 ignored 与网络套件分离。
 
 ## 逐层向外的真实场景原则
+
+账本、轨迹与长任务的新验收场景及阶段状态以
+[需求 0029](../requirements/0029-durable-task-foundation.md) 为唯一来源。
+每个阶段保留既有数据集并增加新场景，不靠修改旧断言隐藏回归。
 
 测试建设必须从核心逐层向外推进，而不是只验证孤立模块：
 
