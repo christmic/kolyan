@@ -33,11 +33,8 @@ pub fn turn(app: &App, key: &ExecutionRef, active: bool) -> Result<Value, Server
         .server()
         .coordinator()
         .ledger()
-        .events_after(0)
-        .map_err(kolyan_server::CoordinatorError::from)?
-        .into_iter()
-        .filter(|event| event.execution_id == key.execution_id)
-        .collect::<Vec<_>>();
+        .execution_events_after(&key.execution_id, 0)
+        .map_err(kolyan_server::CoordinatorError::from)?;
     project(key, &events, app.service.state(&key.execution_id)?, active)
 }
 

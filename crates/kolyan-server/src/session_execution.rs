@@ -36,19 +36,14 @@ where
     pub fn load_reconciled(&self, session_id: &str) -> Result<SessionRecord, ServerError> {
         let session = self.sessions.load(session_id)?;
         let coordinator = self.execution.server.coordinator();
-        let events = coordinator
-            .ledger()
-            .events_after(0)
-            .map_err(CoordinatorError::from)?;
         for turn in &session.turns {
             if coordinator.is_active(&turn.execution_id) {
                 continue;
             }
-            let facts = events
-                .iter()
-                .filter(|event| event.execution_id == turn.execution_id)
-                .cloned()
-                .collect::<Vec<_>>();
+            let facts = coordinator
+                .ledger()
+                .execution_events_after(&turn.execution_id, 0)
+                .map_err(CoordinatorError::from)?;
             let state = self.execution.state(&turn.execution_id)?;
             let suspension = facts
                 .iter()
@@ -202,7 +197,9 @@ where
             );
         }
         let ledger = self.execution.server.coordinator().ledger();
-        let events = ledger.events_after(0).map_err(CoordinatorError::from)?;
+        let events = ledger
+            .execution_events_after(&execution.execution_id, 0)
+            .map_err(CoordinatorError::from)?;
         let current = events.iter().rev().find(|event| {
             event.execution_id == execution.execution_id
                 && event.kind == LedgerEventKind::ApprovalRequested
@@ -294,11 +291,8 @@ where
             .ok_or_else(|| StorageError::NotFound(execution_id.into()))?;
         let ledger = self.execution.server.coordinator.ledger();
         let events = ledger
-            .events_after(0)
-            .map_err(CoordinatorError::from)?
-            .into_iter()
-            .filter(|event| event.execution_id == execution_id)
-            .collect::<Vec<_>>();
+            .execution_events_after(execution_id, 0)
+            .map_err(CoordinatorError::from)?;
         let state = self.execution.state(execution_id)?;
         let status = match terminal_status(&events) {
             Some(status) => status,
@@ -385,14 +379,13 @@ where
                 .clone();
             for event in coordinator
                 .ledger()
-                .events_after(0)
+                .execution_events_after(&execution.execution_id, 0)
                 .map_err(CoordinatorError::from)?
                 .into_iter()
                 .filter(|event| {
-                    event.execution_id == execution.execution_id
-                        && event
-                            .event_id
-                            .starts_with(&format!("{}/turn-event/", execution.execution_id))
+                    event
+                        .event_id
+                        .starts_with(&format!("{}/turn-event/", execution.execution_id))
                 })
             {
                 match event.kind {
@@ -477,11 +470,8 @@ where
                     .server
                     .coordinator()
                     .ledger()
-                    .events_after(0)
-                    .map_err(CoordinatorError::from)?
-                    .into_iter()
-                    .filter(|event| event.execution_id == turn.execution_id)
-                    .collect::<Vec<_>>();
+                    .execution_events_after(&turn.execution_id, 0)
+                    .map_err(CoordinatorError::from)?;
                 if let Some(status @ (SessionTurnStatus::Failed | SessionTurnStatus::Cancelled)) =
                     terminal_status(&events)
                 {
@@ -504,11 +494,6 @@ fn terminal_status(events: &[LedgerEvent]) -> Option<SessionTurnStatus> {
     })
 }
 
-#[cfg(test)]
-mod denial_tests;
-#[cfg(test)]
-mod tests;
-
 fn completed_messages(execution: &TurnExecution, input: Vec<Message>) -> Vec<Message> {
     let mut messages = input;
     let response = match &execution.result.outcome {
@@ -525,3 +510,6 @@ fn completed_messages(execution: &TurnExecution, input: Vec<Message>) -> Vec<Mes
     }
     messages
 }
+
+#[cfg(test)]
+mod tests;

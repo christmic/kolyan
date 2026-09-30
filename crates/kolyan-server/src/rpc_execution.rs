@@ -153,7 +153,9 @@ where
             }
             "execution.status" => {
                 let state = self.service.state(&key.execution_id).map_err(failed)?;
-                let events = ledger.events_after(0).map_err(failed)?;
+                let events = ledger
+                    .execution_events_after(&key.execution_id, 0)
+                    .map_err(failed)?;
                 let cancelled = events.iter().any(|event| {
                     event.execution_id == key.execution_id
                         && event.kind == kolyan_ledger::LedgerEventKind::ExecutionCancelled
@@ -185,12 +187,14 @@ where
                         .ok_or((-32602, "after_cursor must be unsigned".into()))?,
                 };
                 let events = ledger
-                    .events_after(cursor)
-                    .map_err(failed)?
-                    .into_iter()
-                    .filter(|event| event.execution_id == key.execution_id)
-                    .take(1000)
-                    .collect::<Vec<_>>();
+                    .query(&kolyan_ledger::LedgerQuery {
+                        execution_id: Some(key.execution_id.clone()),
+                        event_id: None,
+                        after: cursor,
+                        through: None,
+                        limit: 1000,
+                    })
+                    .map_err(failed)?;
                 let next = events.last().map_or(cursor, |event| event.cursor);
                 Ok(json!({"events":events, "next_cursor":next}))
             }

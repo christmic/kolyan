@@ -1,3 +1,5 @@
+mod scoped;
+
 use super::*;
 use futures_util::stream;
 use kolyan_ledger::InMemoryLedger;

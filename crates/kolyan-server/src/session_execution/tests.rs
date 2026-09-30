@@ -1,3 +1,5 @@
+mod denial;
+
 use super::*;
 use kolyan_ledger::InMemoryLedger;
 use kolyan_storage::FileSessionStore;

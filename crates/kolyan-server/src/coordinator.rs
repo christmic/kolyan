@@ -21,9 +21,8 @@ where
         let mut state = ExecutionState::New;
         for event in self
             .ledger
-            .events_after(0)?
+            .execution_events_after(execution_id, 0)?
             .into_iter()
-            .filter(|event| event.execution_id == execution_id)
         {
             if is_terminal(state) {
                 break;
@@ -177,12 +176,7 @@ where
         payload: Value,
     ) -> Result<(), CoordinatorError> {
         let event_id = format!("{}/{}", execution.execution_id, suffix);
-        if let Some(existing) = self
-            .ledger
-            .events_after(0)?
-            .into_iter()
-            .find(|event| event.event_id == event_id)
-        {
+        if let Some(existing) = self.ledger.event_by_id(&event_id)? {
             if existing.turn_id != execution.turn_id
                 || existing.execution_id != execution.execution_id
                 || existing.kind != kind
@@ -206,14 +200,17 @@ where
             Err(error @ LedgerError::Conflict(_)) => {
                 // A read can reconcile the same commit as the finishing driver.
                 // Only an identical winning fact makes this race idempotent.
-                let identical = self.ledger.events_after(0)?.iter().any(|existing| {
-                    existing.event_id == event.event_id
-                        && existing.turn_id == event.turn_id
-                        && existing.execution_id == event.execution_id
-                        && existing.kind == event.kind
-                        && existing.payload == event.payload
-                        && existing.idempotency_key == event.idempotency_key
-                });
+                let identical = self
+                    .ledger
+                    .event_by_id(&event.event_id)?
+                    .is_some_and(|existing| {
+                        existing.event_id == event.event_id
+                            && existing.turn_id == event.turn_id
+                            && existing.execution_id == event.execution_id
+                            && existing.kind == event.kind
+                            && existing.payload == event.payload
+                            && existing.idempotency_key == event.idempotency_key
+                    });
                 if !identical {
                     return Err(error.into());
                 }
@@ -226,10 +223,8 @@ where
     fn latest_cursor(&self, execution_id: &str) -> Result<u64, CoordinatorError> {
         Ok(self
             .ledger
-            .events_after(0)?
-            .iter()
-            .rev()
-            .find(|event| event.execution_id == execution_id)
+            .execution_events_after(execution_id, 0)?
+            .last()
             .map_or(0, |event| event.cursor))
     }
 }
