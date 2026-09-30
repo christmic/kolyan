@@ -15,6 +15,9 @@
 | `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-provider-anthropic` | Anthropic 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-tools` | Tool trait、注册、执行 | 长期记忆 |
+| `kolyan-agent` | Immutable definitions, named/inline resolution and permission snapshots; execution integration is in progress | HTTP transport, SDK or sandbox internals |
+| `kolyan-sandbox` | Host-admitted macOS process isolation and cleanup | Permission issuance or Agent scheduling |
+| `kolyan-tool-worker` | One-shot trusted file helper with bounded typed stdin | Authorization, ambient shell execution or self-established sandbox |
 | `kolyan-policy` | 权限、审批、治理策略 | 模型推理 |
 | `kolyan-trace` | 执行轨迹和观测 | 作为 Ledger 权威存储 |
 | `kolyan-ledger` | 执行事实、定向查询与存储适配器 | 任务调度、审批决策 |

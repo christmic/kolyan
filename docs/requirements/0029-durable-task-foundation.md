@@ -9,9 +9,10 @@ The source-backed rationale remains in [kernel evolution](../architecture/kernel
 No multi-agent capability is considered implemented merely because its identities
 or relationships appear in this design. New-project development retains no legacy
 format adapters, old-interface aliases or fallback reads hiding unsupported ports.
-The user expanded the completion request to L1-L5. This document originally
-defined only L1-L4; the fifth increment's substantive scope is awaiting explicit
-confirmation. It must not be silently substituted with documentation cleanup.
+The user expanded the completion request to L1-L5. This document defines L1-L4;
+the subsequently confirmed fifth increment is specified in
+[Governed Agent Execution](0030-governed-agent-execution.md). It must not be
+silently substituted with documentation cleanup.
 
 ## Source findings and decisions
 
@@ -236,7 +237,8 @@ live tests prove model-facing integration. Neither substitutes for the other.
 ## Verification record
 
 L1 accepted on 2026-09-30. L2-L4 accepted on 2026-10-01 against the contracts
-above and the inspected final evidence below. L5 has not been defined or accepted.
+above and the inspected final evidence below. L5 is specified in 0030 and is not
+yet accepted.
 The historical L1 results prove only scoped execution reads, not the later fact
 envelope, topology execution, artifact retention or task coordination.
 
@@ -318,7 +320,8 @@ driver verifies persisted final ModelResponse JSON bytes, not an arbitrary
 workspace-file claim. Token limits use observed usage and reject unknown usage;
 they are not pre-priced input-token reservations. Historical ignored Provider,
 SDK-oracle and other lower-level network suites were not all rerun; their ignored
-status is not counted as executed acceptance. L5 requires its own approved scope.
+status is not counted as executed acceptance. L5 scope is now specified in 0030;
+it requires separate implementation and acceptance evidence.
 
 | L1 gate | Inspected evidence |
 | --- | --- |
