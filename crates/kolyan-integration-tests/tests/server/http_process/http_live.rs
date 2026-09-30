@@ -3,7 +3,7 @@ use super::*;
 
 #[path = "../../common/matrix.rs"]
 #[allow(dead_code)]
-mod matrix;
+pub(super) mod matrix;
 
 #[tokio::test]
 #[ignore = "actual HTTP processes and all configured Provider credentials"]

@@ -448,3 +448,22 @@ Assertions also bind each receipt to an actual model call, compare fixture-owned
 tool arguments and output content, and require the identical result in the next
 ModelRequest. Process cleanup exports `ledger.jsonl` even when an earlier assertion
 fails; this diagnostic output does not turn a failed case into a pass.
+
+## Scoped Ledger recovery
+
+The design, increment boundaries and acceptance record are maintained in
+[requirement 0029](../../docs/requirements/0029-durable-task-foundation.md).
+New cases preserve the existing HTTP fixtures and test assertions.
+
+```sh
+cargo test -p kolyan-integration-tests --test ledger_scoped_recovery -- --nocapture
+cargo test -p kolyan-server-service --test server_http_process -- --nocapture
+cargo test -p kolyan-server-service --test server_http_process http_process_ledger_live_matrix -- --ignored --nocapture
+```
+
+Fixtures `ledger_scoped_recovery.json` and `server_ledger_live.json` define
+expected projection, query and real model behavior independently of runners.
+The network matrix verifies separate Sessions in one SQLite Ledger, persisted
+approval and completed-result restart, and an actual read in a subsequent Turn.
+Actual requests, output/reasoning and tool effects remain in temporary evidence;
+missing credentials or ordinary failures fail the planned row.

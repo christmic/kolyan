@@ -415,5 +415,7 @@ async fn http_process_error_matrix() {
 mod http_faults;
 #[path = "http_process/http_live.rs"]
 mod http_live;
+#[path = "http_process/ledger_live.rs"]
+mod ledger_live;
 #[path = "http_process/schema.rs"]
 mod schema;

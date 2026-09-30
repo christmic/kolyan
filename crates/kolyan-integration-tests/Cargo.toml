@@ -88,6 +88,10 @@ tempfile = "3"
 name = "request_planning"
 path = "tests/provider/request_planning.rs"
 
+[[test]]
+name = "ledger_scoped_recovery"
+path = "tests/ledger/scoped_recovery.rs"
+
 [dependencies]
 # Workspace tokio only enables the "time" feature, but #[tokio::test] and the
 # multi-thread runtime require "macros", "rt", and "rt-multi-thread". Declare a

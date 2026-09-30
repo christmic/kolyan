@@ -1,0 +1,8 @@
+{
+  "cases": [
+    {"name":"failed_target_with_completed_neighbor","target":"left","neighbor":"right","target_kind":"turn_failed","neighbor_kind":"turn_completed","expected_target":"failed"},
+    {"name":"cancelled_target_with_failed_neighbor","target":"right","neighbor":"left","target_kind":"turn_cancelled","neighbor_kind":"turn_failed","expected_target":"cancelled"}
+  ],
+  "expected_repair_commits":1,
+  "expected_query_limit":512
+}

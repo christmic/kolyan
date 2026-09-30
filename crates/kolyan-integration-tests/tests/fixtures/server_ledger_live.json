@@ -1,0 +1,59 @@
+{
+  "configured_combinations": 19,
+  "groups": [
+    {
+      "name": "ledger_isolation_restart",
+      "system": [
+        {
+          "text": "You are running a local integration test. The safe/ directory exists and is allowed. Perform exactly one requested tool operation per Turn, with a maximum of one tool operation in that Turn. WRITE TURN: call file.write once with the user's exact literal contents and user-specified ASCII byte count, without a newline, spaces or any added bytes; let the host handle approval and do not ask in text. Each ASCII character is one byte. A successful tool result with is_error=false and wrote N bytes matching the user-specified count is sufficient confirmation of the write. Then report the literal contents already provided by the user and finish the Turn immediately. Do not call file.read or any other tool to verify the write. READ TURN: call file.read once on the file written in the preceding Turn of this Session, even if its contents are already known; report the exact contents returned by this fresh read and finish immediately. Do not write, modify files or perform another read. Never perform unrelated operations.",
+          "cache": false
+        }
+      ],
+      "cases": [
+        {
+          "name": "first_write",
+          "session_id": "ledger_a",
+          "turn_id": "write_a",
+          "create": true,
+          "input": "This is a WRITE Turn with exactly one tool operation. Use file.write once to write exactly the ASCII literal LEDGER_ALPHA_7291 to safe/alpha.txt: exactly 17 bytes, with no newline, spaces or added bytes. Let the host handle tool approval. A successful is_error=false result saying wrote 17 bytes is sufficient confirmation. After that result, report the already provided literal LEDGER_ALPHA_7291 and finish immediately. Do not read the file for verification or call any further tool in this Turn.",
+          "approve": true,
+          "restart_pending": true,
+          "restart_completed": true,
+          "path": "safe/alpha.txt",
+          "marker": "LEDGER_ALPHA_7291",
+          "forbidden_marker": "LEDGER_BETA_8462",
+          "expected": {"state": "completed", "end_reason": "FinalAnswer", "minimum_steps": 2, "tool": "file.write", "calls": 1, "receipts": 1}
+        },
+        {
+          "name": "other_session_write",
+          "session_id": "ledger_b",
+          "turn_id": "write_b",
+          "create": true,
+          "input": "This is a WRITE Turn with exactly one tool operation. Use file.write once to write exactly the ASCII literal LEDGER_BETA_8462 to safe/beta.txt: exactly 16 bytes, with no newline, spaces or added bytes. Let the host handle tool approval. A successful is_error=false result saying wrote 16 bytes is sufficient confirmation. After that result, report the already provided literal LEDGER_BETA_8462 and finish immediately. Do not read the file for verification or call any further tool in this Turn.",
+          "approve": true,
+          "restart_pending": false,
+          "restart_completed": true,
+          "path": "safe/beta.txt",
+          "marker": "LEDGER_BETA_8462",
+          "forbidden_marker": "LEDGER_ALPHA_7291",
+          "expected": {"state": "completed", "end_reason": "FinalAnswer", "minimum_steps": 2, "tool": "file.write", "calls": 1, "receipts": 1}
+        },
+        {
+          "name": "first_session_read_next_turn",
+          "session_id": "ledger_a",
+          "turn_id": "read_a",
+          "create": false,
+          "input": "This is a new READ Turn with exactly one tool operation. Call file.read once now on the same file you wrote in the previous Turn of this Session. That preceding write specified exactly 17 ASCII bytes with no newline. Do not answer from memory or a preceding tool result: perform this fresh read, report the exact contents it returns, then finish immediately. Do not write, modify anything, repeat the read or call any further tool in this Turn.",
+          "approve": false,
+          "restart_pending": false,
+          "restart_completed": true,
+          "verify_context": true,
+          "path": "safe/alpha.txt",
+          "marker": "LEDGER_ALPHA_7291",
+          "forbidden_marker": "LEDGER_BETA_8462",
+          "expected": {"state": "completed", "end_reason": "FinalAnswer", "minimum_steps": 2, "tool": "file.read", "calls": 1, "receipts": 1}
+        }
+      ]
+    }
+  ]
+}
