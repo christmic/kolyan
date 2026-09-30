@@ -9,6 +9,9 @@ The source-backed rationale remains in [kernel evolution](../architecture/kernel
 No multi-agent capability is considered implemented merely because its identities
 or relationships appear in this design. New-project development retains no legacy
 format adapters, old-interface aliases or fallback reads hiding unsupported ports.
+The user expanded the completion request to L1-L5. This document originally
+defined only L1-L4; the fifth increment's substantive scope is awaiting explicit
+confirmation. It must not be silently substituted with documentation cleanup.
 
 ## Source findings and decisions
 
@@ -232,9 +235,42 @@ live tests prove model-facing integration. Neither substitutes for the other.
 
 ## Verification record
 
-L1 accepted on 2026-09-30. L2-L4 remain specified future increments, not implemented
-or accepted by these results. Scoped reads do not introduce the future fact
-envelope, topology execution, artifact retention or durable task scheduling.
+L1 accepted on 2026-09-30. L2-L4 production implementations and their initial
+module/data-driven tests are now committed, but final expanded acceptance is in
+progress. The L1 results below prove only scoped execution reads, not the later
+fact envelope, topology execution, artifact retention or task coordination.
+
+### Current L2-L4 verification checkpoint
+
+- Atomic coordination journal, linked trajectories, integrity-checked artifacts,
+  executor-owned effect reconciliation, task domain and host execution service
+  are implemented in focused main-branch commits through `7abeaba`.
+- The four-Turn task fixture passed all 19 configured model/protocol/provider
+  rows in `kolyan-r1-matrix-XxVZbE`. It exercises two approved child writes,
+  result consumption/join and a new Turn in the parent's retained Session.
+  Revision, constraint and foreign-approval rejection checks run before resume.
+- The fixture was subsequently expanded to five Turns with a third-level
+  delegated write and approval reconstruction. Its deterministic run passed in
+  `kolyan-task-offline-tOGWyq`; the expanded live matrix is running. Four-Turn
+  evidence does not prove this additional branch.
+- The scoped HTTP process matrix passed 19/19 in `kolyan-r1-matrix-9JGvaL`.
+  Workspace default tests and strict all-target Clippy passed at this checkpoint;
+  explicitly ignored historical network suites are not counted as executed.
+- Initial task report `HUwwPH` retained nine Anthropic failures. Actual neutral
+  inputs contained both tool results. Provider packaging was changed to one
+  user message per adjacent same-role result batch, matching the official Tool
+  Runner; three new mapping regressions passed. The next report `ag3nEa` passed
+  all nine Anthropic rows but retained a MiniMax/OpenAI tool-availability refusal.
+  Its wire body included tools. The new fixture clarifies that registered tools
+  are executed by the host; no call-count/content assertions were removed.
+- All evidence roots above are under
+  `/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/`.
+  Actual sending-body logs are temporary `/tmp/kolyan-task-live-*-wire.log`
+  files enabled by `KOLYAN_DUMP_MODEL_REQUESTS=1`; authentication headers are not
+  logged. Test code exports journal/execution JSONL even during assertion unwind.
+- Additional service recovery, nested governance, physical artifact completion
+  checks and live cancellation-policy cases remain under development. No L4
+  completion or L5 implementation is claimed by this checkpoint.
 
 | L1 gate | Inspected evidence |
 | --- | --- |
