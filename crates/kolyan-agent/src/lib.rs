@@ -2,6 +2,7 @@
 //! This library performs no model calls, scheduling or grant creation.
 //! Invocation bindings use a supplied journal; definitions remain pure values.
 
+pub mod binding;
 mod catalog;
 pub mod context;
 mod definition;
