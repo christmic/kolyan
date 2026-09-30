@@ -1,0 +1,29 @@
+{
+  "configured_combinations":19,
+  "planned_rows":38,
+  "task_id":"nested-cancellation-task",
+  "objective":"Verify cancellation policy at a durable nested tool approval without reviving the task.",
+  "agent":{"definition_id":"personal-agent","revision":"r1","instance_id":"root-instance"},
+  "constraints_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "limits":{"max_depth":3,"max_invocations":4,"max_attempts":4,"max_tokens":null,"max_steps_per_turn":12},
+  "invocations":[
+    {"invocation_id":"root","role":"Root","parent_invocation_id":null,"dependencies":[],"agent":{"definition_id":"personal-agent","revision":"r1","instance_id":"root-instance"}},
+    {"invocation_id":"self-child","role":"SelfCall","parent_invocation_id":"root","dependencies":[],"agent":{"definition_id":"personal-agent","revision":"r1","instance_id":"self-instance"}},
+    {"invocation_id":"nested-delegate","role":"Delegation","parent_invocation_id":"self-child","dependencies":[],"agent":{"definition_id":"file-agent","revision":"r1","instance_id":"nested-instance"}}
+  ],
+  "attempt_id":"nested-attempt",
+  "execution":{"session_id":"nested-session","turn_id":"nested-write","execution_id":"nested-execution"},
+  "workspace_scope":"safe",
+  "path":"safe/nested.txt",
+  "marker":"CANCEL_NESTED_7392",
+  "byte_count":18,
+  "system":"This host has genuinely registered and supplied file.write and file.read as callable tools. This is a local tool approval test with an existing safe/ directory. In this WRITE Turn invoke the registered file.write tool exactly once, let the host handle the approval, then finish after the successful tool result. Do not read back or repeat the write. The successful wrote 18 bytes result is enough. Report CANCEL_NESTED_7392 in your final answer.",
+  "input":"Invoke the supplied file.write tool now, exactly once: path safe/nested.txt, content CANCEL_NESTED_7392 (18 ASCII bytes, no newline). The host will pause for approval. Do not claim the file has been written before the tool succeeds. Once its result says wrote 18 bytes, report CANCEL_NESTED_7392 and finish immediately with no additional tools.",
+  "offline_call":{"id":"nested-write-call","name":"file.write","arguments":{"path":"safe/nested.txt","content":"CANCEL_NESTED_7392"}},
+  "offline_answer":"CANCEL_NESTED_7392 written after host approval.",
+  "cancel_reason":"User explicitly cancels root according to the admitted propagation policy.",
+  "cases":[
+    {"name":"cancel_all_nested_approval","policy":"AllInvocations","expected":{"resume_allowed":false,"file_exists":false,"calls":1,"receipts":0,"model_requests":1,"execution_cancelled":1,"resume_facts":0,"nested_state":"Suspended","minimum_steps":1}},
+    {"name":"cancel_root_keep_nested_approval","policy":"RootOnly","expected":{"resume_allowed":true,"file_exists":true,"calls":1,"receipts":1,"model_requests":2,"execution_cancelled":0,"resume_facts":1,"nested_state":"Completed","minimum_steps":2}}
+  ]
+}

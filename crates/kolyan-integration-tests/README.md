@@ -478,6 +478,8 @@ for the earlier HTTP, Turn or Provider suites.
 ```sh
 cargo test -p kolyan-integration-tests --test fact_journal --test linked_trajectory --test task_execution --test task_recovery --test task_governance -- --nocapture
 KOLYAN_DUMP_MODEL_REQUESTS=1 cargo test -p kolyan-integration-tests --test task_execution task_execution_live_matrix -- --ignored --nocapture
+cargo test -p kolyan-integration-tests --test task_cancellation -- --nocapture
+KOLYAN_DUMP_MODEL_REQUESTS=1 cargo test -p kolyan-integration-tests --test task_cancellation task_cancellation_live_matrix -- --ignored --nocapture
 ```
 
 `task_journal.json` and `linked_trajectory.json` cover atomic coordination batches
@@ -494,6 +496,14 @@ cancellation propagation, bound-artifact completion and budget/unknown-usage
 cases. `task_recovery.json` supplies explicit durable orchestration windows;
 injected execution facts are never described as real model outputs. Recovery
 must not invent permission or re-execute an uncertain effect.
+
+`task_cancellation.json` drives nested model-generated file-write approvals,
+reconstructs service state, cancels under AllInvocations or RootOnly, and checks
+that the original nested approval is respectively rejected or resumable without
+reviving the cancelled task. Its live matrix plans all 19 combinations times both
+policies (38 rows); the independent planning test checks the entire configured
+matrix before any network request. Different Agent instance/definition identities
+remain explicit in this fixture.
 
 Test code exports temporary journal/execution JSONL, preserves reasoning/text/tool
 content and compares fixture-owned counts, identities, tool inputs/results and

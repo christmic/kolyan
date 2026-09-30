@@ -89,6 +89,10 @@ path = "tests/server/task_recovery.rs"
 name = "task_governance"
 path = "tests/server/task_governance.rs"
 
+[[test]]
+name = "task_cancellation"
+path = "tests/server/task_cancellation.rs"
+
 
 [[test]]
 name = "r1_matrix"
