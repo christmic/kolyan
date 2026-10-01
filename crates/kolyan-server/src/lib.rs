@@ -1,8 +1,12 @@
 mod coordinator;
+mod instance_registry;
 mod rpc_execution;
 mod session_execution;
 mod task_driver;
 mod tasks;
+pub use instance_registry::{
+    InstanceOwner, InstanceRegistry, InstanceRegistryError, InstanceReservation,
+};
 pub use rpc_execution::ExecutionRpc;
 pub use task_driver::{TaskExecutionError, TaskExecutionService};
 pub use tasks::*;
