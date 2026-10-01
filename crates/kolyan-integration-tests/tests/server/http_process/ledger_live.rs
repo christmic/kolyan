@@ -218,7 +218,7 @@ async fn live_isolation(directory: &Path, cases: &[Value]) {
         }
         saved.push((case.clone(), result));
         if case["restart_completed"] == true {
-            let ledger_before = SqliteLedger::open(directory.join("ledger.sqlite"))
+            let ledger_before = SqliteLedger::open(directory.join("state/ledger.sqlite"))
                 .unwrap()
                 .events_after(0)
                 .unwrap();
@@ -255,7 +255,7 @@ async fn live_isolation(directory: &Path, cases: &[Value]) {
             );
             assert_eq!(
                 ledger_before,
-                SqliteLedger::open(directory.join("ledger.sqlite"))
+                SqliteLedger::open(directory.join("state/ledger.sqlite"))
                     .unwrap()
                     .events_after(0)
                     .unwrap(),
@@ -290,7 +290,7 @@ async fn live_isolation(directory: &Path, cases: &[Value]) {
 
 fn history(directory: &Path, case: &Value) -> Value {
     json!(
-        FileSessionStore::new(directory.join("sessions"))
+        FileSessionStore::new(directory.join("state/sessions"))
             .unwrap()
             .load(case["session_id"].as_str().unwrap())
             .unwrap()
@@ -301,7 +301,7 @@ fn execution_events(directory: &Path, case: &Value) -> Vec<LedgerEvent> {
     let session = case["session_id"].as_str().unwrap();
     let turn = case["turn_id"].as_str().unwrap();
     let execution = format!("http-{}-{session}-{turn}", session.len());
-    SqliteLedger::open(directory.join("ledger.sqlite"))
+    SqliteLedger::open(directory.join("state/ledger.sqlite"))
         .unwrap()
         .execution_events_after(&execution, 0)
         .unwrap()
@@ -401,9 +401,30 @@ fn verify_execution(directory: &Path, case: &Value, result: &Value) {
             .find(|event| event.payload["output"]["call_id"] == call.payload["call_id"])
             .unwrap();
         assert_eq!(
-            receipt.payload["input"],
-            json!({"name":call.payload["name"],"arguments":call.payload["arguments"]})
+            receipt.payload["input"]["prepared"]["call"],
+            json!({"id":call.payload["call_id"],"name":call.payload["name"],"arguments":call.payload["arguments"]})
         );
+        let scope: kolyan_policy::ToolExecutionScope =
+            serde_json::from_value(receipt.payload["input"]["scope"].clone()).unwrap();
+        assert_eq!(scope.execution.execution_id, receipt.execution_id);
+        assert_eq!(scope.execution.turn_id, receipt.turn_id);
+        assert_eq!(
+            scope.execution.session_id,
+            case["session_id"].as_str().unwrap()
+        );
+        let prepared: kolyan_policy::PreparedCall =
+            serde_json::from_value(receipt.payload["input"]["prepared"].clone()).unwrap();
+        let grant: kolyan_policy::PreparedGrant =
+            serde_json::from_value(receipt.payload["prepared_grant"].clone()).unwrap();
+        grant
+            .validate(
+                &prepared,
+                receipt.payload["authorization"]["authority_revision"]
+                    .as_str()
+                    .unwrap(),
+                &scope,
+            )
+            .unwrap();
         assert_eq!(receipt.payload["receipt"]["status"], "Completed");
         assert_eq!(receipt.payload["output"]["is_error"], false);
         assert!(

@@ -131,6 +131,7 @@ fn config(
     max_tokens: Option<u32>,
 ) -> PathBuf {
     fs::create_dir_all(directory.join("workspace/safe")).unwrap();
+    fs::create_dir_all(directory.join("state")).unwrap();
     let matrix_binary = directory.parent().unwrap().join("server.bin");
     if matrix_binary.is_file() {
         fs::hard_link(matrix_binary, directory.join("server.bin")).unwrap();
@@ -143,7 +144,8 @@ fn config(
     }
     let table = common::parameter_table(family, protocol, model);
     let value = json!({
-        "ledger_path":directory.join("ledger.sqlite"), "session_root":directory.join("sessions"),
+        "ledger_path":directory.join("state/ledger.sqlite"), "session_root":directory.join("state/sessions"),
+        "worker_path":env!("CARGO_BIN_EXE_kolyan-server-tool-worker"), "staging_root":directory.join("staging"), "allow_shell":false,
         "workspace":directory.join("workspace"), "tool_scope":"safe", "protocol":protocol,
         "base_url":url, "api_key_env":key_env, "timeout_secs":120, "parameter_table":table,
         "max_steps":12, "max_tool_calls":12, "progress":{"repeat_limit":2,"polling_tools":["file.read"]},

@@ -7,7 +7,7 @@ pub(super) fn save_ledger(directory: &std::path::Path) -> Result<(), Box<dyn std
     use kolyan_ledger::LedgerStore;
     use std::io::Write;
 
-    let ledger = kolyan_ledger::SqliteLedger::open(directory.join("ledger.sqlite"))?;
+    let ledger = kolyan_ledger::SqliteLedger::open(directory.join("state/ledger.sqlite"))?;
     let mut output = std::fs::File::create(directory.join("ledger.jsonl"))?;
     for event in ledger.events_after(0)? {
         writeln!(output, "{}", serde_json::to_string(&event)?)?;
@@ -28,16 +28,17 @@ pub(super) fn assert_effects(events: &[Value], scenario: &str) {
         .filter(|(_, event)| event["kind"] == "effect_receipt")
         .collect::<Vec<_>>();
     assert!(
-        receipts
-            .iter()
-            .all(|(_, event)| ranges
-                .contains_key(event["payload"]["input"]["name"].as_str().unwrap())),
+        receipts.iter().all(|(_, event)| ranges.contains_key(
+            event["payload"]["input"]["prepared"]["call"]["name"]
+                .as_str()
+                .unwrap()
+        )),
         "{scenario}: unexpected tool receipt"
     );
     for (name, range) in ranges {
         let count = receipts
             .iter()
-            .filter(|(_, event)| event["payload"]["input"]["name"] == *name)
+            .filter(|(_, event)| event["payload"]["input"]["prepared"]["call"]["name"] == *name)
             .count() as u64;
         assert!(
             count >= range["min"].as_u64().unwrap() && count <= range["max"].as_u64().unwrap(),
@@ -50,11 +51,59 @@ pub(super) fn assert_effects(events: &[Value], scenario: &str) {
         assert_eq!(payload["output"]["is_error"], false);
         assert_eq!(payload["receipt"]["status"], "Completed");
         assert!(!result.call_id.is_empty());
+        let prepared: kolyan_policy::PreparedCall =
+            serde_json::from_value(payload["input"]["prepared"].clone()).unwrap();
+        let scope: kolyan_policy::ToolExecutionScope =
+            serde_json::from_value(payload["input"]["scope"].clone()).unwrap();
+        let grant: kolyan_policy::PreparedGrant =
+            serde_json::from_value(payload["prepared_grant"].clone()).unwrap();
+        assert_eq!(scope.execution.execution_id, event["execution_id"]);
+        assert_eq!(scope.execution.turn_id, event["turn_id"]);
+        assert_eq!(prepared.call().id, result.call_id);
+        grant
+            .validate(
+                &prepared,
+                payload["authorization"]["authority_revision"]
+                    .as_str()
+                    .unwrap(),
+                &scope,
+            )
+            .unwrap();
         assert_receipt_is_in_model_context(events, index, payload, &result, scenario);
-        if payload["input"]["name"] != expected_name {
+        let operation: kolyan_tools::FileOperationResult =
+            serde_json::from_str(&result.content).unwrap();
+        assert_eq!(operation.path, prepared.call().arguments["path"]);
+        assert_eq!(operation.sha256.len(), 64);
+        assert!(
+            operation
+                .sha256
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit())
+        );
+        let observed_output = match prepared.call().name.as_str() {
+            "file.read" => {
+                let content = operation
+                    .content
+                    .as_ref()
+                    .expect("read must return content");
+                assert_eq!(operation.bytes, content.len());
+                content.clone()
+            }
+            "file.write" => {
+                assert!(operation.content.is_none());
+                assert_eq!(
+                    operation.bytes,
+                    prepared.call().arguments["content"].as_str().unwrap().len()
+                );
+                format!("wrote {} bytes", operation.bytes)
+            }
+            name => panic!("unexpected file operation: {name}"),
+        };
+        if prepared.call().name != expected_name {
             continue;
         }
-        let mut actual_input = payload["input"].clone();
+        let mut actual_input =
+            serde_json::json!({"name":prepared.call().name,"arguments":prepared.call().arguments});
         let mut expected_input = expected["input"].clone();
         if let Some(mode) = expected["content_match"].as_str() {
             let actual = actual_input["arguments"]["content"]
@@ -69,19 +118,15 @@ pub(super) fn assert_effects(events: &[Value], scenario: &str) {
             actual_input["arguments"]["content"] = Value::String(wanted.clone());
             expected_input["arguments"]["content"] = Value::String(wanted);
             assert_eq!(
-                payload["output"]["content"],
+                observed_output,
                 format!("wrote {} bytes", actual.len()),
                 "{scenario}: output must report actual bytes"
             );
         } else if let Some(mode) = expected["output_match"].as_str() {
-            assert_content(
-                payload["output"]["content"].as_str().unwrap(),
-                expected["output"].as_str().unwrap(),
-                mode,
-            );
+            assert_content(&observed_output, expected["output"].as_str().unwrap(), mode);
         } else {
             assert_eq!(
-                payload["output"]["content"], expected["output"],
+                observed_output, expected["output"],
                 "{scenario}: actual tool output"
             );
         }
@@ -103,8 +148,8 @@ fn assert_receipt_is_in_model_context(
             .filter(|event| event["kind"] == "step_completed")
             .any(|event| {
                 let step: kolyan_core::StepResult = serde_json::from_value(event["payload"]["step"].clone()).unwrap();
-                step.response.content.iter().any(|block| matches!(block, ContentBlock::ToolCall {call}
-                    if call.id == result.call_id && call.name == payload["input"]["name"] && call.arguments == payload["input"]["arguments"]))
+                step.step_id == payload["input"]["scope"]["step_id"] && step.response.content.iter().any(|block| matches!(block, ContentBlock::ToolCall {call}
+                    if call.id == result.call_id && call.name == payload["input"]["prepared"]["call"]["name"] && call.arguments == payload["input"]["prepared"]["call"]["arguments"]))
             });
     assert!(
         model_call_exists,

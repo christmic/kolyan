@@ -88,7 +88,7 @@ impl Drop for Process {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
-        let ledger = SqliteLedger::open(self.directory.join("ledger.sqlite")).unwrap();
+        let ledger = SqliteLedger::open(self.directory.join("state/ledger.sqlite")).unwrap();
         let mut file = fs::File::create(self.directory.join("ledger.jsonl")).unwrap();
         for event in ledger.events_after(0).unwrap() {
             writeln!(file, "{}", serde_json::to_string(&event).unwrap()).unwrap();
@@ -97,6 +97,7 @@ impl Drop for Process {
 }
 fn setup(directory: &Path, url: &str) {
     fs::create_dir_all(directory.join("workspace/safe")).unwrap();
+    fs::create_dir_all(directory.join("state")).unwrap();
     let immutable = directory.parent().unwrap().join("server.bin");
     if immutable.is_file() {
         fs::hard_link(immutable, directory.join("server.bin")).unwrap();
@@ -109,7 +110,8 @@ fn setup(directory: &Path, url: &str) {
     }
     let config = json!({
         "http":{"listen":"127.0.0.1:0","api_token_env":"KOLYAN_HTTP_TOKEN","max_active_turns":4},
-        "ledger_path":directory.join("ledger.sqlite"),"session_root":directory.join("sessions"),
+        "ledger_path":directory.join("state/ledger.sqlite"),"session_root":directory.join("state/sessions"),
+        "worker_path":env!("CARGO_BIN_EXE_kolyan-server-tool-worker"),"staging_root":directory.join("staging"),"allow_shell":false,
         "workspace":directory.join("workspace"),"tool_scope":"safe",
         "protocol":"openai_responses","base_url":url,"api_key_env":"KOLYAN_FIXTURE_KEY",
         "timeout_secs":120,"max_steps":12,"max_tool_calls":12,
@@ -255,7 +257,7 @@ async fn scenarios(directory: &Path, cases: &[Value]) {
             }
         }
         let execution = format!("http-{}-{session}-{turn}", session.len());
-        let events = SqliteLedger::open(directory.join("ledger.sqlite"))
+        let events = SqliteLedger::open(directory.join("state/ledger.sqlite"))
             .unwrap()
             .events_after(0)
             .unwrap()
@@ -401,7 +403,7 @@ async fn http_process_error_matrix() {
         }
     }
     assert!(
-        SqliteLedger::open(directory.join("ledger.sqlite"))
+        SqliteLedger::open(directory.join("state/ledger.sqlite"))
             .unwrap()
             .events_after(0)
             .unwrap()

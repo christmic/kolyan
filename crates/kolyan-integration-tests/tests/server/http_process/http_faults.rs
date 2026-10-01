@@ -56,7 +56,7 @@ fn assert_fields(actual: &Value, expected: &Value) {
     }
 }
 fn assert_facts(directory: &Path) {
-    let events = SqliteLedger::open(directory.join("ledger.sqlite"))
+    let events = SqliteLedger::open(directory.join("state/ledger.sqlite"))
         .unwrap()
         .events_after(0)
         .unwrap();

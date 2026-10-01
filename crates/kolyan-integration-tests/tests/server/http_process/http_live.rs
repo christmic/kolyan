@@ -204,7 +204,7 @@ async fn live_scenarios(directory: &Path, cases: &[Value]) {
             }
         }
         let execution = format!("http-{}-{session}-{turn}", session.len());
-        let events = SqliteLedger::open(directory.join("ledger.sqlite"))
+        let events = SqliteLedger::open(directory.join("state/ledger.sqlite"))
             .unwrap()
             .events_after(0)
             .unwrap()
