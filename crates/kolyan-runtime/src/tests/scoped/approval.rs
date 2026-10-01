@@ -1,13 +1,15 @@
 use super::*;
 use futures_util::stream;
-use kolyan_core::{ToolExecutor, ToolFuture, TurnExecutor};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture, TurnExecutor,
+};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ModelResponse,
     ProviderFuture, StopReason, TokenUsage, ToolCall, ToolResult,
 };
 use kolyan_policy::{
-    ApprovalMode, Capability, Effect, ExecutionGrant, Idempotency, PathScope, PolicyEngine,
-    ToolManifest,
+    ApprovalMode, Capability, Effect, Idempotency, InvocationClaim, PathScope, PolicyEngine,
+    PreparedCall, ResourceClaim, ToolManifest, ToolRequirements,
 };
 
 #[derive(Clone)]
@@ -52,15 +54,55 @@ impl ModelProvider for ApprovalProvider {
 
 struct ApprovedTool(Arc<AtomicUsize>);
 impl ToolExecutor for ApprovedTool {
-    fn execute_with_grant(&self, call: ToolCall, grant: ExecutionGrant) -> ToolFuture<'_> {
-        assert_eq!(grant.call_id, call.id);
-        assert_eq!(grant.tool_name, call.name);
-        self.execute(call)
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move {
+            if call.name != "file.write" {
+                return Err(ToolError::Unavailable { name: call.name });
+            }
+            let path = call.arguments["path"]
+                .as_str()
+                .ok_or_else(|| ToolError::Failed {
+                    message: "fixture path is required".into(),
+                })?
+                .to_owned();
+            let claim = InvocationClaim {
+                tool_name: "file.write".into(),
+                capabilities: [Capability::FilesystemWrite].into(),
+                effects: [Effect::Update].into(),
+                resource: ResourceClaim { path: Some(path) },
+                idempotency: Idempotency::NonIdempotent,
+            };
+            PreparedCall::new(
+                call,
+                "approval-fixture-v1".into(),
+                claim,
+                ToolRequirements {
+                    process_sandbox: false,
+                    max_output_bytes: 65536,
+                    timeout_ms: 30000,
+                },
+            )
+            .map_err(|error| ToolError::Failed {
+                message: error.to_string(),
+            })
+        })
     }
 
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        self.0.fetch_add(1, Ordering::SeqCst);
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
+            invocation
+                .grant
+                .validate(
+                    &invocation.prepared,
+                    &invocation.policy_revision,
+                    &invocation.scope,
+                )
+                .map_err(|error| ToolError::PolicyDenied {
+                    message: error.to_string(),
+                })?;
+            let call = invocation.prepared.call().clone();
+            assert_eq!(call.name, "file.write");
+            self.0.fetch_add(1, Ordering::SeqCst);
             Ok(ToolResult {
                 call_id: call.id,
                 content: "written".into(),

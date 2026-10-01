@@ -1,13 +1,19 @@
 //! Executor-owned evidence resolves uncertainty without repeating an effect.
+//! Saved preparation and scoped authority are validated as historical evidence;
+//! reconciliation never consults current policy to grant another operation.
+
+pub(crate) mod receipt;
 
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ToolResult;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::{EffectGrant, EffectReceipt, EffectRequest, ExecutionKey, ReceiptStatus, RuntimeError};
+use crate::{EffectGrant, EffectRequest, ExecutionKey, RuntimeError};
+use receipt::{PreparedEvidence, check_event};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReconciliationRequest {
     pub reconciliation_id: String,
     pub execution: ExecutionKey,
@@ -15,6 +21,7 @@ pub struct ReconciliationRequest {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum ReconciliationResolution {
     Committed {
         output: ToolResult,
@@ -30,8 +37,9 @@ pub enum ReconciliationResolution {
     },
 }
 
-/// Only an admitted executor adapter may attest external effect state.
-/// This port inspects evidence; it must not execute or retry the operation.
+/// Only a trusted admitted adapter may attest external effect state. Inspection
+/// must not execute/retry effects. The request and grants here are historical,
+/// already validated journal evidence, not newly issued execution authority.
 pub trait ToolEffectReconciler: Send + Sync {
     fn inspect(
         &self,
@@ -41,25 +49,16 @@ pub trait ToolEffectReconciler: Send + Sync {
     ) -> Result<ReconciliationResolution, RuntimeError>;
 }
 
-/// Persist verified reconciliation evidence. A recovered receipt is replayable,
-/// but neither unknown nor proven-not-committed evidence grants a retry.
+/// Persist exact evidence for an uncertain prepared tool effect. A committed
+/// receipt is recoverable; Unknown and NotCommitted never authorize retries.
+/// A decision alone cannot replace a missing/corrupt committed receipt. Repair
+/// after the receipt append uses its saved proof without calling the inspector.
 pub fn reconcile_tool_effect<L: LedgerStore, R: ToolEffectReconciler>(
     ledger: &L,
     request: &ReconciliationRequest,
     reconciler: &R,
 ) -> Result<ReconciliationResolution, RuntimeError> {
-    if [
-        &request.reconciliation_id,
-        &request.effect_id,
-        &request.execution.execution_id,
-        &request.execution.turn_id,
-        &request.execution.session_id,
-    ]
-    .iter()
-    .any(|id| id.is_empty() || id.len() > 512)
-    {
-        return Err(invalid("invalid reconciliation identity"));
-    }
+    validate_request(request)?;
     let prefix = format!(
         "{}/effect/{}",
         request.execution.execution_id, request.effect_id
@@ -73,128 +72,115 @@ pub fn reconcile_tool_effect<L: LedgerStore, R: ToolEffectReconciler>(
     if identity.payload != json!(request.execution) {
         return Err(invalid("execution binding differs"));
     }
-    let prepared: EffectRequest = serde_json::from_value(
-        required(
-            ledger,
-            request,
-            &format!("{prefix}/prepared"),
-            LedgerEventKind::EffectPrepared,
-        )?
-        .payload,
+    let prepared = required(
+        ledger,
+        request,
+        &format!("{prefix}/prepared"),
+        LedgerEventKind::EffectPrepared,
+    )?;
+    let authorized = required(
+        ledger,
+        request,
+        &format!("{prefix}/authorized"),
+        LedgerEventKind::EffectAuthorized,
+    )?;
+    let bound = PreparedEvidence::from_facts(
+        &request.execution,
+        &request.effect_id,
+        &prepared.payload,
+        &authorized.payload,
     )
-    .map_err(|error| invalid(error.to_string()))?;
-    let authorization: EffectGrant = serde_json::from_value(
-        required(
-            ledger,
-            request,
-            &format!("{prefix}/authorized"),
-            LedgerEventKind::EffectAuthorized,
-        )?
-        .payload,
-    )
-    .map_err(|error| invalid(error.to_string()))?;
+    .map_err(invalid)?;
     let started = required(
         ledger,
         request,
         &format!("{prefix}/started"),
         LedgerEventKind::EffectStarted,
     )?;
-    if started.payload["effect_id"] != request.effect_id {
-        return Err(invalid("started effect identity differs"));
+    if started.payload != bound.started_payload() {
+        return Err(invalid("started effect evidence binding differs"));
     }
-    if prepared.effect_id != request.effect_id
-        || authorization.effect_id != request.effect_id
-        || prepared.input_digest != authorization.input_digest
-        || prepared.policy_revision != authorization.authority_revision
-        || authorization.authorization_id != format!("{prefix}/authorized")
-    {
-        return Err(invalid("prepared input or authorization binding differs"));
+    let receipt_id = format!("{prefix}/receipt");
+    let receipt = ledger.event_by_id(&receipt_id)?;
+    if let Some(event) = &receipt {
+        check_event(
+            event,
+            &request.execution,
+            &receipt_id,
+            LedgerEventKind::EffectReceipt,
+        )
+        .map_err(invalid)?;
+        bound
+            .validate_receipt(&event.payload)
+            .map_err(invalid)?
+            .map_err(|_| invalid("failed receipt is not a committed reconciliation"))?;
     }
     let decision_id = format!("{prefix}/reconciliation/{}", request.reconciliation_id);
     if let Some(decision) = ledger.event_by_id(&decision_id)? {
-        check_identity(&decision, request, LedgerEventKind::EffectReconciled)?;
-        if decision.payload["request"] != json!(request) {
-            return Err(invalid("reconciliation request binding differs"));
+        check_event(
+            &decision,
+            &request.execution,
+            &decision_id,
+            LedgerEventKind::EffectReconciled,
+        )
+        .map_err(invalid)?;
+        let resolution: ReconciliationResolution =
+            serde_json::from_value(decision.payload["resolution"].clone()).map_err(invalid)?;
+        bound
+            .validate_resolution(request, &resolution)
+            .map_err(invalid)?;
+        if decision.payload != decision_payload(request, &resolution, &bound) {
+            return Err(invalid("reconciliation decision binding differs"));
         }
-        return serde_json::from_value(decision.payload["resolution"].clone())
-            .map_err(|error| invalid(error.to_string()));
+        validate_decision_receipt(&bound, request, &resolution, receipt.as_ref())?;
+        return Ok(resolution);
     }
-    if let Some(receipt) = ledger.event_by_id(&format!("{prefix}/receipt"))? {
-        check_identity(&receipt, request, LedgerEventKind::EffectReceipt)?;
-        let validated = validate_receipt(&receipt, &prepared, &authorization)?;
-        if receipt.payload["reconciliation"]["request"] == json!(request) {
+    if let Some(event) = receipt {
+        let output = bound
+            .validate_receipt(&event.payload)
+            .map_err(invalid)?
+            .map_err(|_| invalid("failed receipt is not a committed reconciliation"))?;
+        if let Some(metadata) = event.payload.get("reconciliation") {
+            let saved_request: ReconciliationRequest =
+                serde_json::from_value(metadata["request"].clone()).map_err(invalid)?;
             let resolution: ReconciliationResolution =
-                serde_json::from_value(receipt.payload["reconciliation"]["resolution"].clone())
-                    .map_err(|error| invalid(error.to_string()))?;
-            if let (
-                ReconciliationResolution::Committed { output: a, .. },
-                ReconciliationResolution::Committed { output: b, .. },
-            ) = (&validated, &resolution)
-            {
-                if a != b {
-                    return Err(invalid("reconciliation evidence and receipt differ"));
-                }
-            } else {
-                return Err(invalid("receipt reconciliation is not committed"));
+                serde_json::from_value(metadata["resolution"].clone()).map_err(invalid)?;
+            // A different inspection coordinate may observe the same committed
+            // result, but cannot claim ownership of the original saved proof.
+            if saved_request == *request {
+                append_identical(
+                    ledger,
+                    request,
+                    &decision_id,
+                    LedgerEventKind::EffectReconciled,
+                    decision_payload(request, &resolution, &bound),
+                )?;
+                return Ok(resolution);
             }
-            append_identical(
-                ledger,
-                request,
-                &decision_id,
-                LedgerEventKind::EffectReconciled,
-                json!({"request":request,"resolution":resolution}),
-            )?;
-            return Ok(resolution);
         }
-        return Ok(validated);
+        return Ok(ReconciliationResolution::Committed {
+            output,
+            executor_id: bound.executor_id(),
+            executor_revision: bound.prepared.tool_revision().to_owned(),
+            evidence: format!("durable receipt {}", event.event_id),
+        });
     }
-    let resolution = reconciler.inspect(request, &prepared, &authorization)?;
-    let evidence = match &resolution {
-        ReconciliationResolution::Committed { evidence, .. }
-        | ReconciliationResolution::NotCommitted { evidence }
-        | ReconciliationResolution::Unknown { evidence } => evidence,
-    };
-    if evidence.is_empty() || evidence.len() > 16_384 {
-        return Err(invalid("reconciliation requires bounded executor evidence"));
-    }
-    if let ReconciliationResolution::Committed {
-        output,
-        executor_id,
-        executor_revision,
-        ..
-    } = &resolution
-    {
-        let call_id = request
-            .effect_id
-            .rsplit('/')
-            .next()
-            .ok_or_else(|| invalid("missing call identity"))?;
-        if output.call_id != call_id || executor_id.is_empty() || executor_revision.is_empty() {
-            return Err(invalid("reconciled result identity differs"));
-        }
-        let input: Value = serde_json::from_str(&prepared.input_digest)
-            .map_err(|error| invalid(error.to_string()))?;
-        if input["name"] != prepared.operation_kind {
-            return Err(invalid("prepared tool identity differs"));
-        }
-        let receipt = EffectReceipt {
-            receipt_id: format!("{prefix}/receipt"),
-            effect_id: request.effect_id.clone(),
-            authorization_id: authorization.authorization_id.clone(),
-            input_digest: prepared.input_digest.clone(),
-            executor_id: executor_id.clone(),
-            executor_revision: executor_revision.clone(),
-            result_digest: json!(output).to_string(),
-            status: ReceiptStatus::Completed,
-        };
-        // The result, receipt and inspection evidence share one atomic append.
+    let resolution = reconciler.inspect(request, &bound.request, &bound.authorization)?;
+    bound
+        .validate_resolution(request, &resolution)
+        .map_err(invalid)?;
+    if let ReconciliationResolution::Committed { output, .. } = &resolution {
+        let mut payload = bound
+            .receipt_payload(&Ok(output.clone()))
+            .map_err(invalid)?;
+        payload["reconciliation"] = json!({"request": request, "resolution": resolution});
+        // Output, exact binding and external proof commit in one receipt append.
         append_identical(
             ledger,
             request,
-            &receipt.receipt_id,
+            &receipt_id,
             LedgerEventKind::EffectReceipt,
-            json!({"effect_id":request.effect_id,"input":input,"authorization":authorization,
-                "output":output,"receipt":receipt,"reconciliation":{"request":request,"resolution":resolution}}),
+            payload,
         )?;
     }
     append_identical(
@@ -202,46 +188,74 @@ pub fn reconcile_tool_effect<L: LedgerStore, R: ToolEffectReconciler>(
         request,
         &decision_id,
         LedgerEventKind::EffectReconciled,
-        json!({"request":request,"resolution":resolution}),
+        decision_payload(request, &resolution, &bound),
     )?;
     Ok(resolution)
 }
 
-fn validate_receipt(
-    event: &LedgerEvent,
-    prepared: &EffectRequest,
-    grant: &EffectGrant,
-) -> Result<ReconciliationResolution, RuntimeError> {
-    let receipt: EffectReceipt = serde_json::from_value(event.payload["receipt"].clone())
-        .map_err(|e| invalid(e.to_string()))?;
-    let output: ToolResult = serde_json::from_value(event.payload["output"].clone())
-        .map_err(|e| invalid(e.to_string()))?;
-    let result_digest =
-        serde_json::to_string(&json!(output)).map_err(|error| invalid(error.to_string()))?;
-    let input_digest = serde_json::to_string(&event.payload["input"])
-        .map_err(|error| invalid(error.to_string()))?;
-    if receipt.receipt_id != event.event_id
-        || receipt.effect_id != prepared.effect_id
-        || receipt.input_digest != prepared.input_digest
-        || receipt.authorization_id != grant.authorization_id
-        || receipt.status != ReceiptStatus::Completed
-        || receipt.result_digest != result_digest
-        || output.call_id != prepared.effect_id.rsplit('/').next().unwrap_or("")
-        || input_digest != prepared.input_digest
-        || event.payload["authorization"] != json!(grant)
-        || receipt.executor_id.is_empty()
-        || receipt.executor_revision.is_empty()
-    {
-        return Err(invalid(
-            "receipt evidence does not bind the prepared effect",
-        ));
+fn validate_request(request: &ReconciliationRequest) -> Result<(), RuntimeError> {
+    for id in [
+        &request.reconciliation_id,
+        &request.execution.session_id,
+        &request.execution.execution_id,
+        &request.execution.turn_id,
+    ] {
+        if id.is_empty()
+            || id.len() > 256
+            || !id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
+        {
+            return Err(invalid("invalid reconciliation identity"));
+        }
     }
-    Ok(ReconciliationResolution::Committed {
-        output,
-        executor_id: receipt.executor_id,
-        executor_revision: receipt.executor_revision,
-        evidence: format!("durable receipt {}", event.event_id),
-    })
+    if request.effect_id.is_empty()
+        || request.effect_id.len() > 1281
+        || request.effect_id.chars().any(char::is_control)
+    {
+        return Err(invalid("invalid reconciliation effect identity"));
+    }
+    Ok(())
+}
+
+fn decision_payload(
+    request: &ReconciliationRequest,
+    resolution: &ReconciliationResolution,
+    bound: &PreparedEvidence,
+) -> Value {
+    json!({"request": request, "resolution": resolution, "input_digest": bound.request.input_digest,
+        "authorization_digest": bound.authorization.constraints_digest, "scope": bound.scope})
+}
+
+fn validate_decision_receipt(
+    bound: &PreparedEvidence,
+    request: &ReconciliationRequest,
+    resolution: &ReconciliationResolution,
+    receipt: Option<&LedgerEvent>,
+) -> Result<(), RuntimeError> {
+    match resolution {
+        ReconciliationResolution::Committed { output, .. } => {
+            let event = receipt.ok_or_else(|| invalid("committed decision has no receipt"))?;
+            let actual = bound
+                .validate_receipt(&event.payload)
+                .map_err(invalid)?
+                .map_err(|_| invalid("committed decision has a failed receipt"))?;
+            if actual != *output
+                || event.payload["reconciliation"]
+                    != json!({"request": request, "resolution": resolution})
+            {
+                return Err(invalid("decision and committed receipt proof differ"));
+            }
+        }
+        ReconciliationResolution::NotCommitted { .. }
+        | ReconciliationResolution::Unknown { .. }
+            if receipt.is_some() =>
+        {
+            return Err(invalid("noncommitted decision conflicts with a receipt"));
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 fn required<L: LedgerStore>(
@@ -253,22 +267,8 @@ fn required<L: LedgerStore>(
     let event = ledger
         .event_by_id(id)?
         .ok_or_else(|| invalid(format!("missing fact {id}")))?;
-    check_identity(&event, request, kind)?;
+    check_event(&event, &request.execution, id, kind).map_err(invalid)?;
     Ok(event)
-}
-
-fn check_identity(
-    event: &LedgerEvent,
-    request: &ReconciliationRequest,
-    kind: LedgerEventKind,
-) -> Result<(), RuntimeError> {
-    if event.execution_id != request.execution.execution_id
-        || event.turn_id != request.execution.turn_id
-        || event.kind != kind
-    {
-        return Err(invalid("foreign reconciliation fact"));
-    }
-    Ok(())
 }
 
 fn append_identical<L: LedgerStore>(
@@ -304,9 +304,13 @@ fn append_identical<L: LedgerStore>(
     }
 }
 
-fn invalid(message: impl Into<String>) -> RuntimeError {
-    RuntimeError::Driver(message.into())
+fn invalid(message: impl std::fmt::Display) -> RuntimeError {
+    RuntimeError::Driver(message.to_string())
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+#[path = "reconciliation/tests/prepared.rs"]
+mod prepared_tests;

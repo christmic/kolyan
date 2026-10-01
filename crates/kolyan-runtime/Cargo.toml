@@ -16,9 +16,11 @@ kolyan-trace = { path = "../kolyan-trace" }
 kolyan-types = { path = "../kolyan-types" }
 serde_json.workspace = true
 serde.workspace = true
+sha2 = "0.10"
 thiserror.workspace = true
 tokio = { version = "1", features = ["macros", "rt", "time"] }
 
 [dev-dependencies]
 futures-util.workspace = true
+tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt"] }

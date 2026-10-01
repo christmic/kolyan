@@ -2,6 +2,9 @@ use super::*;
 use kolyan_ledger::InMemoryLedger;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+mod preparation;
+use preparation::{fixture_evidence, fixture_execution};
+
 struct Inspect {
     calls: AtomicUsize,
     resolution: ReconciliationResolution,
@@ -22,28 +25,10 @@ fn setup() -> (InMemoryLedger, ReconciliationRequest) {
     let ledger = InMemoryLedger::default();
     let request = ReconciliationRequest {
         reconciliation_id: "inspection-1".into(),
-        execution: ExecutionKey {
-            session_id: "s".into(),
-            turn_id: "t".into(),
-            execution_id: "e".into(),
-        },
+        execution: fixture_execution(),
         effect_id: "step-1/call-1".into(),
     };
-    let prepared = EffectRequest {
-        effect_id: request.effect_id.clone(),
-        operation_kind: "file.write".into(),
-        input_digest: json!({"name":"file.write","arguments":{"path":"safe/a","content":"done"}})
-            .to_string(),
-        requirements: vec![],
-        policy_revision: "1".into(),
-    };
-    let grant = EffectGrant {
-        authorization_id: "e/effect/step-1/call-1/authorized".into(),
-        effect_id: prepared.effect_id.clone(),
-        input_digest: prepared.input_digest.clone(),
-        constraints_digest: "scope-1".into(),
-        authority_revision: "1".into(),
-    };
+    let bound = fixture_evidence(&request.execution);
     for (id, kind, payload) in [
         (
             "e/execution-started",
@@ -53,17 +38,17 @@ fn setup() -> (InMemoryLedger, ReconciliationRequest) {
         (
             "e/effect/step-1/call-1/prepared",
             LedgerEventKind::EffectPrepared,
-            json!(prepared),
+            bound.prepared_payload().unwrap(),
         ),
         (
             "e/effect/step-1/call-1/authorized",
             LedgerEventKind::EffectAuthorized,
-            json!(grant),
+            bound.authorized_payload().unwrap(),
         ),
         (
             "e/effect/step-1/call-1/started",
             LedgerEventKind::EffectStarted,
-            json!({"effect_id":request.effect_id}),
+            bound.started_payload(),
         ),
     ] {
         ledger
@@ -82,6 +67,7 @@ fn setup() -> (InMemoryLedger, ReconciliationRequest) {
 }
 
 fn committed() -> Inspect {
+    let bound = fixture_evidence(&fixture_execution());
     Inspect {
         calls: AtomicUsize::new(0),
         resolution: ReconciliationResolution::Committed {
@@ -90,8 +76,8 @@ fn committed() -> Inspect {
                 content: "wrote 4 bytes".into(),
                 is_error: false,
             },
-            executor_id: "file-executor".into(),
-            executor_revision: "1".into(),
+            executor_id: bound.executor_id(),
+            executor_revision: bound.prepared.tool_revision().into(),
             evidence: "verified external operation receipt #73".into(),
         },
     }

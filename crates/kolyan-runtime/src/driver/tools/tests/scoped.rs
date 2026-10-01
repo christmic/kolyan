@@ -7,14 +7,14 @@ async fn scoped_tool_receipt_recovery_never_repeats_an_effect() {
     let count = Arc::new(AtomicUsize::new(0));
     let first = DurableTools::new(ledger.clone(), key(), CountingTool(count.clone()));
     let expected = first
-        .execute_invocation("step".into(), call(), None)
+        .execute_invocation(invocation_for(call()))
         .await
         .unwrap();
     drop(first);
     let rebuilt = DurableTools::new(ledger.clone(), key(), CountingTool(count.clone()));
     assert_eq!(
         rebuilt
-            .execute_invocation("step".into(), call(), None)
+            .execute_invocation(invocation_for(call()))
             .await
             .unwrap(),
         expected
@@ -24,7 +24,7 @@ async fn scoped_tool_receipt_recovery_never_repeats_an_effect() {
     changed.arguments = json!({"content": "changed"});
     assert!(
         rebuilt
-            .execute_invocation("step".into(), changed, None)
+            .execute_invocation(invocation_for(changed))
             .await
             .is_err()
     );
@@ -47,7 +47,7 @@ async fn scoped_tool_started_without_receipt_stays_uncertain() {
     let tools = DurableTools::new(ledger.clone(), key(), CountingTool(count.clone()));
     assert!(
         tools
-            .execute_invocation("step".into(), call(), None)
+            .execute_invocation(invocation_for(call()))
             .await
             .unwrap_err()
             .to_string()

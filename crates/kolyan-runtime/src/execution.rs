@@ -4,6 +4,8 @@ use serde_json::{Value, json};
 use std::marker::PhantomData;
 use thiserror::Error;
 
+use crate::reconciliation::receipt::{PreparedEvidence, check_event};
+
 pub use kolyan_types::ExecutionKey;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -170,11 +172,42 @@ where
         if self.status(key)? == Some(ExecutionStatus::Cancelled) {
             return Ok(EffectDisposition::Cancelled);
         }
+        let prepared_id = format!("{}/effect/{}/prepared", key.execution_id, effect.effect_id);
+        if let Some(saved) = self.ledger.event_by_id(&prepared_id)? {
+            check_event(&saved, key, &prepared_id, LedgerEventKind::EffectPrepared)
+                .map_err(|error| RuntimeExecutionError::Invalid(error.to_string()))?;
+            match saved.payload["binding_kind"].as_str() {
+                Some("prepared_tool_v1") => return self.recover_prepared_tool(key, effect, &saved),
+                Some("generic_effect_v1") => {}
+                _ => {
+                    return Err(RuntimeExecutionError::Invalid(
+                        "missing or unknown effect binding kind".into(),
+                    ));
+                }
+            }
+        } else {
+            for suffix in ["authorized", "started", "receipt"] {
+                if self
+                    .ledger
+                    .event_by_id(&format!(
+                        "{}/effect/{}/{suffix}",
+                        key.execution_id, effect.effect_id,
+                    ))?
+                    .is_some()
+                {
+                    return Err(RuntimeExecutionError::Invalid(
+                        "effect evidence has no prepared binding".into(),
+                    ));
+                }
+            }
+        }
+        let mut prepared_payload = json!(effect);
+        prepared_payload["binding_kind"] = json!("generic_effect_v1");
         self.append_once(
             key,
             &format!("effect/{}/prepared", effect.effect_id),
             LedgerEventKind::EffectPrepared,
-            json!(effect),
+            prepared_payload,
         )?;
         if let Some(existing) = self.terminal_effect(key, effect)? {
             return Ok(existing);
@@ -219,6 +252,94 @@ where
             }
             AdmissionDecision::Grant(grant) => self.dispatch(key, effect, grant),
         }
+    }
+
+    // A prepared tool's evidence belongs to the tool pipeline. Generic admission
+    // may observe its exact historical outcome, never replace or re-authorize it.
+    fn recover_prepared_tool(
+        &self,
+        key: &ExecutionKey,
+        effect: &EffectRequest,
+        saved: &LedgerEvent,
+    ) -> Result<EffectDisposition, RuntimeExecutionError> {
+        let invalid =
+            |error: kolyan_core::ToolError| RuntimeExecutionError::Invalid(error.to_string());
+        let identity_id = format!("{}/execution-started", key.execution_id);
+        let identity = self
+            .ledger
+            .event_by_id(&identity_id)?
+            .ok_or_else(|| RuntimeExecutionError::Invalid("missing execution identity".into()))?;
+        check_event(
+            &identity,
+            key,
+            &identity_id,
+            LedgerEventKind::ExecutionStarted,
+        )
+        .map_err(invalid)?;
+        if identity.payload != json!(key) {
+            return Err(RuntimeExecutionError::Invalid(
+                "execution binding differs".into(),
+            ));
+        }
+        let prefix = format!("{}/effect/{}", key.execution_id, effect.effect_id);
+        let authorization_id = format!("{prefix}/authorized");
+        let authorized = self.ledger.event_by_id(&authorization_id)?.ok_or_else(|| {
+            RuntimeExecutionError::Invalid("prepared tool has no scoped authorization".into())
+        })?;
+        check_event(
+            &authorized,
+            key,
+            &authorization_id,
+            LedgerEventKind::EffectAuthorized,
+        )
+        .map_err(invalid)?;
+        let bound = PreparedEvidence::from_facts(
+            key,
+            &effect.effect_id,
+            &saved.payload,
+            &authorized.payload,
+        )
+        .map_err(invalid)?;
+        if bound.request != *effect {
+            return Err(RuntimeExecutionError::Invalid(
+                "prepared tool request differs".into(),
+            ));
+        }
+        let started_id = format!("{prefix}/started");
+        let started = self.ledger.event_by_id(&started_id)?;
+        if let Some(event) = &started {
+            check_event(event, key, &started_id, LedgerEventKind::EffectStarted)
+                .map_err(invalid)?;
+            if event.payload != bound.started_payload() {
+                return Err(RuntimeExecutionError::Invalid(
+                    "started tool binding differs".into(),
+                ));
+            }
+        }
+        let receipt_id = format!("{prefix}/receipt");
+        if let Some(receipt) = self.ledger.event_by_id(&receipt_id)? {
+            check_event(&receipt, key, &receipt_id, LedgerEventKind::EffectReceipt)
+                .map_err(invalid)?;
+            if started.is_none() {
+                return Err(RuntimeExecutionError::Invalid(
+                    "tool receipt has no start evidence".into(),
+                ));
+            }
+            return Ok(
+                match bound.validate_receipt(&receipt.payload).map_err(invalid)? {
+                    Ok(output) => EffectDisposition::Completed {
+                        output: json!(output),
+                    },
+                    Err(error) => EffectDisposition::Failed {
+                        code: error.to_string(),
+                    },
+                },
+            );
+        }
+        Ok(EffectDisposition::Uncertain {
+            evidence: "prepared tool has no committed receipt; trusted reconciliation required"
+                .into(),
+        })
     }
 
     pub fn status(

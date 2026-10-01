@@ -112,6 +112,7 @@ where
             "start".into(),
         ));
         let controlled = executor
+            .with_execution_key(key.clone())
             .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
             .with_boundary_control(control)
             .with_event_recorder(recorder.clone())
@@ -168,6 +169,7 @@ where
             format!("resume/{approval_id}"),
         ));
         let controlled = executor
+            .with_execution_key(key.clone())
             .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
             .with_boundary_control(control)
             .with_event_recorder(recorder.clone())
