@@ -7,7 +7,12 @@ use thiserror::Error;
 
 mod driver;
 mod execution;
+mod external;
 mod reconciliation;
+
+pub use external::{
+    ExternalVerificationFuture, ExternalWaitContext, ExternalWaitVerifier, RefuseExternalWaits,
+};
 
 pub use reconciliation::{
     ReconciliationRequest, ReconciliationResolution, ToolEffectReconciler, reconcile_tool_effect,

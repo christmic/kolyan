@@ -206,6 +206,50 @@ cover every commit gap, serial tails, partial parallel completion, out-of-order
 children, duplicate consumption, foreign/corrupt waits and cancellation followed
 by late results. These are required implementation gates, not completed tests.
 
+## Unified suspension and resume interfaces
+
+The next breaking migration replaces approval-only continuations with
+`ResumableTurn::Suspended(TurnSuspension)`. A suspension contains one
+`TurnCheckpoint` and a derived `SuspensionSummary`, whose `approvals` and
+`external_waits` vectors may both be nonempty. Mutually exclusive approval or
+external reason variants cannot represent a mixed batch. The summary must match
+the checkpoint exactly after decoding and after every partial merge; it is not
+authority to approve work or accept results.
+
+`ApprovalRequest` becomes display metadata: approval, Turn and call identities,
+tool name, reason and explicitly present nullable expiration. Saved preparation,
+scope, revision and confirmation evidence live only in `CheckpointApproval`;
+its reason is required so the summary can be derived. Remove `TurnContinuation`
+and approval-only restore formats rather than maintaining parallel snapshots or
+historical fallbacks. All new envelopes reject unknown critical fields and
+missing required fields, including optional ceilings.
+
+`ResumeInput` carries either exact `ApprovalConfirmation` or a bounded vector of
+`ExternalResolution`. Confirmation binds approval identity, prepared digest,
+policy revision, execution scope and trusted evidence identity. The host verifies
+durable proof before invoking Core. Model tool-call IDs and policy revisions
+remain opaque payload values; encode durable host coordinates independently so
+slashes, Unicode and long native IDs do not become ambiguous journal keys.
+
+`merge_resume_with_control` performs pure validation and merging. It requests
+neither preparation nor tools nor models. Runtime persists its result before
+calling `resume_checkpoint_with_control`; the latter drives only Ready calls,
+refreshing preparation and current policy. Historical Completed calls retain
+their exact authority and results. Unresolved waits block later conflicting
+stages. Pending summaries are derived again rather than copied from an earlier
+attempt. The existing requested-tool-call budget semantics must be retained,
+including denied/preparation-failed calls; recovery must neither reset usage nor
+charge the same request batch twice.
+
+The Runtime host port is `ExternalWaitVerifier`. `verify_wait` resolves recognized
+admission evidence; `verify_result` resolves exact committed result evidence.
+Both receive `ExternalWaitContext` with the historical issued authority and exact
+wait binding. Runtime independently checks source scope, preparation, grant,
+call identity and original complete-result ceiling. A verifier cannot authorize
+new effects or bypass those checks. The default `RefuseExternalWaits` rejects both
+operations. This port exists with three passing module tests; it is not yet wired
+into dispatch, so durable external waiting and Agent execution are not accepted.
+
 ## Tool preparation and permission enforcement
 
 The environment inventory is `file.read`, `file.write`, `file.edit` and `shell`.

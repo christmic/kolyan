@@ -57,7 +57,11 @@ impl IssuedToolAuthority {
             .map_err(|error| CheckpointError::Invalid(error.to_string()))
     }
 
-    fn validate_result(&self, result: &ToolResult) -> Result<(), CheckpointError> {
+    /// Check exact call pairing and the complete serialized ToolResult against
+    /// the actually issued grant's output ceiling. Oversized results fail; they
+    /// are never truncated. Hosts must separately validate this authority against
+    /// independently admitted scope and verify trusted receipt provenance.
+    pub fn validate_result(&self, result: &ToolResult) -> Result<(), CheckpointError> {
         if result.call_id != self.prepared.call().id {
             return invalid("result call differs from issued preparation");
         }
