@@ -17,6 +17,13 @@ included.
   `resolve_child` additionally checks exact named target, inline or self authority,
   parent ceiling, current host allowance and child ceiling. Self calls preserve
   exact definition content and require a different instance ID.
+- `resolve_self(parent_snapshot, instance_id, host, requested)` is a pure,
+  catalog-independent self-admission function. It uses the saved parent's exact
+  definition, intersects parent/host/definition ceilings, requires self authority
+  and rejects requested expansion or reuse of the parent's instance. Restoring
+  a snapshot never selects replacement catalog content for this operation.
+  This is admission only: it creates no context, grants or running child and
+  does not implement an Agent Runner or globally unique instance allocator.
 - `AgentSnapshot` binds definition, existing Server identity, schema version and
   effective permissions using domain-separated SHA-256. Deserialization verifies
   the binding and rejects permission expansion. Digests provide content integrity,

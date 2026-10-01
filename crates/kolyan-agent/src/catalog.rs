@@ -134,5 +134,33 @@ impl AgentCatalog {
     }
 }
 
+/// Admit self-recursion from the authenticated saved snapshot, without consulting
+/// a catalog. The current host, parent and original definition all bound the
+/// request. A fresh host-issued instance is required; this function neither
+/// allocates globally unique identities nor runs or schedules the child.
+pub fn resolve_self(
+    parent: &AgentSnapshot,
+    instance_id: impl Into<String>,
+    host: &AgentPermissions,
+    requested: &AgentPermissions,
+) -> Result<AgentSnapshot, AgentError> {
+    let definition = parent.definition();
+    let ceiling = parent
+        .permissions()
+        .intersection(host)?
+        .intersection(definition.permissions())?;
+    if !ceiling.delegation.allow_self {
+        return Err(AgentError::PermissionDenied);
+    }
+    let instance_id = instance_id.into();
+    if instance_id == parent.identity().instance_id {
+        return Err(AgentError::Invalid(
+            "child must have a distinct instance identity".into(),
+        ));
+    }
+    requested.require_subset_of(&ceiling)?;
+    AgentSnapshot::new(definition.clone(), instance_id, requested.clone())
+}
+
 #[cfg(test)]
 mod tests;

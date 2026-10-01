@@ -5,6 +5,8 @@ use kolyan_model::ModelRef;
 use super::*;
 use crate::{AgentDefinitionInput, DelegationCeiling, EnvironmentTool};
 
+mod self_resolution;
+
 fn permissions() -> AgentPermissions {
     AgentPermissions {
         tools: [

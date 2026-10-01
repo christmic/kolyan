@@ -10,7 +10,7 @@ mod permission;
 pub mod provider;
 mod snapshot;
 
-pub use catalog::{AgentCatalog, AgentSelector, Registration};
+pub use catalog::{AgentCatalog, AgentSelector, Registration, resolve_self};
 pub use definition::{AgentDefinition, AgentDefinitionInput};
 pub use permission::{AgentKey, AgentPermissions, DelegationCeiling, EnvironmentTool};
 pub use snapshot::AgentSnapshot;
