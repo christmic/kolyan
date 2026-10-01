@@ -638,3 +638,18 @@ approval, restart, cancellation, exact receipts and parsed file-result/context
 comparisons. A new data-driven four-tool end-to-end target is being added; final
 workspace revalidation is pending. No actual-model Agent or long-task result is
 inferred from these local subprocess fixtures.
+
+### Boundary admission is not a committed suspension
+
+The new four-tool HTTP dataset detected two `execution_suspended` facts per
+approval: boundary admission and the subsequently saved approval checkpoint.
+The failing export remains under `kolyan-http-four-tools-OjG8tq`. This is a
+Runtime fact-classification defect, not justification to double the expected
+suspension count. Before a checkpoint exists, consumers cannot safely resume.
+
+Cancellation-checked entry into the approval boundary now records
+`execution_boundary_admitted`. Only the durable checkpoint publication records
+`execution_suspended`; it must follow the persisted approval request. Reducers
+must not infer saved waiting state from admission. The same distinction applies
+to future generic external waits. A dedicated Runtime regression checks that
+boundary admission alone publishes neither a suspension nor an approval snapshot.

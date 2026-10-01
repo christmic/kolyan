@@ -359,7 +359,7 @@ fn boundary_event(boundary: &TurnBoundary) -> (String, LedgerEventKind, Value) {
         ),
         TurnBoundaryKind::AwaitingApproval { approval_id } => (
             format!("approval/{approval_id}/boundary"),
-            LedgerEventKind::ExecutionSuspended,
+            LedgerEventKind::ExecutionBoundaryAdmitted,
             json!({"approval_id": approval_id}),
         ),
         TurnBoundaryKind::ResumeApproval { approval_id } => (

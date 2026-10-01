@@ -3,6 +3,35 @@ use kolyan_core::{StepEvent, StepEventRecorder, TurnEvent, TurnEventRecorder};
 use kolyan_ledger::{InMemoryLedger, LedgerError};
 use kolyan_model::{TokenUsage, ToolCall};
 
+#[tokio::test]
+async fn approval_boundary_admission_does_not_publish_a_saved_suspension() {
+    let ledger = InMemoryLedger::default();
+    let control = LedgerBoundaryControl::new(ledger.clone(), key());
+    control
+        .admit(TurnBoundary {
+            turn_id: "turn".into(),
+            kind: TurnBoundaryKind::AwaitingApproval {
+                approval_id: "approval".into(),
+            },
+        })
+        .await
+        .unwrap();
+    let events = ledger.execution_events_after("exec", 0).unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].kind, LedgerEventKind::ExecutionBoundaryAdmitted);
+    assert_eq!(events[0].payload, json!({"approval_id":"approval"}));
+    assert!(
+        events
+            .iter()
+            .all(|event| event.kind != LedgerEventKind::ExecutionSuspended)
+    );
+    assert!(
+        events
+            .iter()
+            .all(|event| event.kind != LedgerEventKind::ApprovalRequested)
+    );
+}
+
 #[test]
 fn attempt_events_preserve_content_and_cursor_across_reconstruction() {
     let ledger = InMemoryLedger::default();
