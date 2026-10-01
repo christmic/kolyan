@@ -1,6 +1,9 @@
 //! Real-model authorization scenarios. The model creates the ToolCall; the
 //! policy wrapper, not the fixture, decides whether the side effect happens.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 #[path = "../common/mod.rs"]
 mod common;
 
@@ -122,7 +125,8 @@ async fn run_allowed<P: ModelProvider + Clone + 'static>(
     config.deadline = Some(timeout);
     let control = kolyan_core::TurnControl::default();
     let task_control = control.clone();
-    let executor = authorized_executor(provider.clone(), root, ApprovalMode::Always);
+    let executor = authorized_executor(provider.clone(), root, ApprovalMode::Always)
+        .with_execution_key(trusted_tools::key(&turn_id));
     let task = tokio::spawn(async move {
         executor
             .execute_with_events(
@@ -192,6 +196,10 @@ async fn run_denied<P: ModelProvider + Clone>(
 ) {
     let fixture = load_fixture("turn_policy_denied");
     let execution = authorized_executor(provider.clone(), root, ApprovalMode::Always)
+        .with_execution_key(trusted_tools::key(&format!(
+            "policy-denied-{family}-{}",
+            entry.model
+        )))
         .with_tool_dispatch_policy(ToolDispatchPolicy {
             mode: ToolDispatchMode::Serial,
             on_error: ToolErrorPolicy::ContinueBatch,
@@ -239,12 +247,12 @@ fn authorized_executor<P>(
     policy.register(ToolManifest {
         tool_name: "file.write".into(),
         capabilities: [Capability::FilesystemWrite].into_iter().collect(),
-        effects: [Effect::Update].into_iter().collect(),
-        path_scopes: vec![PathScope::new("safe")],
+        effects: [Effect::Create, Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new(root.join("safe").to_string_lossy())],
         idempotency: kolyan_policy::Idempotency::NonIdempotent,
         approval,
     });
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     let policy = Arc::new(policy);
     TurnExecutor::with_tools(
         provider,

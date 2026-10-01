@@ -97,7 +97,7 @@ where
             ..TurnConfig::default()
         },
     };
-    let policy = live_policy();
+    let policy = live_policy(&root);
     let first_server = ExecutionServer::new(FileLedger::open(&ledger_path).unwrap());
     let execution = ExecutionRef {
         session_id: session_id.clone(),
@@ -179,17 +179,17 @@ where
     fs::remove_dir_all(&root).unwrap_or_else(|error| panic!("[{label}] cleanup failed: {error}"));
 }
 
-fn live_policy() -> Arc<PolicyEngine> {
+fn live_policy(root: &Path) -> Arc<PolicyEngine> {
     let mut policy = PolicyEngine::default();
     policy.register(ToolManifest {
         tool_name: "file.write".into(),
         capabilities: [Capability::FilesystemWrite].into_iter().collect(),
-        effects: [Effect::Update].into_iter().collect(),
-        path_scopes: vec![PathScope::new("safe")],
+        effects: [Effect::Create, Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new(root.join("safe").to_string_lossy())],
         idempotency: Idempotency::NonIdempotent,
         approval: ApprovalMode::Always,
     });
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     Arc::new(policy)
 }
 

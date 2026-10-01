@@ -1,4 +1,5 @@
 use super::common::*;
+use super::trusted_tools;
 use super::turn_resume_support::*;
 use kolyan_core::*;
 use kolyan_model::*;
@@ -93,7 +94,7 @@ async fn run<P: ModelProvider + 'static>(
         std::process::id()
     ));
     std::fs::create_dir_all(root.join("safe")).unwrap();
-    let policy = policy(&case.approval_tools, &[]);
+    let policy = file_policy(&root, &case.approval_tools, &[]);
     let build = || {
         TurnExecutor::with_tools(
             RecordingProvider {
@@ -105,6 +106,10 @@ async fn run<P: ModelProvider + 'static>(
                 records: records.clone(),
             },
         )
+        .with_execution_key(trusted_tools::key(&format!(
+            "live-{protocol}-{}-{}",
+            entry.model, case.name
+        )))
         .with_policy_engine(policy.clone())
         .with_boundary_control(gate.clone())
     };

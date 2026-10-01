@@ -1,6 +1,9 @@
 //! Real-provider durable approval tests. The checkpoint is persisted before
 //! the executor is dropped, then loaded by a newly constructed executor.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 #[path = "../common/mod.rs"]
 mod common;
 
@@ -124,7 +127,8 @@ async fn run_case<P>(
     };
 
     let awaiting = {
-        let executor = authorized_executor(provider.clone(), root);
+        let executor = authorized_executor(provider.clone(), root)
+            .with_execution_key(trusted_tools::key(&turn_id));
         executor
             .start_resumable(request)
             .await
@@ -156,7 +160,8 @@ async fn run_case<P>(
         )
     });
     let completed = {
-        let executor = authorized_executor(provider.clone(), root);
+        let executor = authorized_executor(provider.clone(), root)
+            .with_execution_key(trusted_tools::key(&turn_id));
         executor
             .resume_approval(restored, &approval_id)
             .await
@@ -210,6 +215,7 @@ where
     };
 
     let first = authorized_executor(provider.clone(), root)
+        .with_execution_key(trusted_tools::key(&make_request("reject").turn_id))
         .start_resumable(make_request("reject"))
         .await
         .unwrap_or_else(|error| panic!("[{family}/{}] reject start failed: {error}", entry.model));
@@ -217,6 +223,7 @@ where
         ResumableTurn::AwaitingApproval(value) => {
             let value = *value;
             authorized_executor(provider.clone(), root)
+                .with_execution_key(trusted_tools::key(&value.turn_id))
                 .reject_approval(value.clone(), &value.approval_id, "user rejected")
                 .expect("reject should be terminal")
         }
@@ -231,6 +238,7 @@ where
     assert!(!root.join("safe/allowed.txt").exists());
 
     let second = authorized_executor(provider.clone(), root)
+        .with_execution_key(trusted_tools::key(&make_request("expire").turn_id))
         .start_resumable(make_request("expire"))
         .await
         .unwrap_or_else(|error| panic!("[{family}/{}] expire start failed: {error}", entry.model));
@@ -243,6 +251,7 @@ where
     let approval_id = expired.approval_id.clone();
     expired.expires_at_ms = Some(0);
     let error = authorized_executor(provider.clone(), root)
+        .with_execution_key(trusted_tools::key(&expired.turn_id))
         .resume_approval(expired, &approval_id)
         .await
         .expect_err("expired approval must fail closed");
@@ -258,12 +267,12 @@ fn authorized_executor<P>(
     policy.register(ToolManifest {
         tool_name: "file.write".into(),
         capabilities: [Capability::FilesystemWrite].into_iter().collect(),
-        effects: [Effect::Update].into_iter().collect(),
-        path_scopes: vec![PathScope::new("safe")],
+        effects: [Effect::Create, Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new(root.join("safe").to_string_lossy())],
         idempotency: kolyan_policy::Idempotency::NonIdempotent,
         approval: ApprovalMode::Always,
     });
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     let policy = Arc::new(policy);
     TurnExecutor::with_tools(
         provider,

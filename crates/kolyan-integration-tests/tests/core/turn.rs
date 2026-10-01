@@ -4,6 +4,9 @@
 //! response, executes the restricted V0 shell tool, appends the ToolResult,
 //! and asks the model for the next response.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 #[path = "../common/mod.rs"]
 mod common;
 
@@ -641,6 +644,10 @@ async fn run_file_read_write<P, T>(
 {
     let fixture = load_fixture("turn_file_read_write");
     let execution = executor
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-file-read-write-{family}-{model}"
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .execute_with_events(
             TurnRequest {
                 turn_id: format!("turn-file-read-write-{family}-{model}"),
@@ -696,6 +703,11 @@ async fn run_parallel_file_writes<P>(
 {
     let fixture = load_fixture("turn_parallel_file_writes");
     let executor = TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root))
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-parallel-file-writes-{family}-{}",
+            entry.model
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .with_tool_dispatch_policy(policy);
     let execution = executor
         .execute_with_events(
@@ -752,6 +764,11 @@ async fn run_parallel_context<P>(
     let fixture = load_fixture("turn_parallel_file_writes");
     let (provider, requests) = RequestRecordingProvider::new(provider.clone());
     let execution = TurnExecutor::with_tools(provider, RestrictedFileTool::new(root))
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-parallel-context-{family}-{}",
+            entry.model
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .with_tool_dispatch_policy(policy)
         .execute_with_events(
             TurnRequest {
@@ -830,6 +847,11 @@ async fn run_multi_batch_file_writes<P>(
 {
     let fixture = load_fixture("turn_multi_batch_file_writes");
     let executor = TurnExecutor::with_tools(provider.clone(), RestrictedFileTool::new(root))
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-multi-batch-{family}-{}",
+            entry.model
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .with_tool_dispatch_policy(policy);
     let execution = executor
         .execute_with_events(
@@ -1000,6 +1022,11 @@ async fn run_openai_multi_step(
     let fixture = load_fixture("turn_ten_step");
     let (provider, records) = RecordingProvider::new(provider.clone());
     let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-ten-step-{family}-{}",
+            entry.model
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .execute(TurnRequest {
             turn_id: format!("turn-ten-step-{family}-{}", entry.model),
             model_request: build_request(
@@ -1042,6 +1069,11 @@ async fn run_anthropic_multi_step(
     let fixture = load_fixture("turn_ten_step");
     let (provider, records) = RecordingProvider::new(provider.clone());
     let result = TurnExecutor::with_tools(provider, RestrictedShellTool::new(root))
+        .with_execution_key(trusted_tools::key(&format!(
+            "turn-ten-step-{family}-{}",
+            entry.model
+        )))
+        .with_policy_engine(trusted_tools::policy())
         .execute(TurnRequest {
             turn_id: format!("turn-ten-step-{family}-{}", entry.model),
             model_request: build_request(

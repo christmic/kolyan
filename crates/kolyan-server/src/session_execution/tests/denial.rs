@@ -70,6 +70,14 @@ fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
             tool_name: "file.write".into(),
             args_fingerprint: "args".into(),
             policy_version: "v1".into(),
+            // Denial consumes an opaque checkpoint without preparing or executing tools.
+            prepared_calls: Vec::new(),
+            preparation_errors: Vec::new(),
+            execution_scope: serde_json::from_value(json!({
+                "execution": {"session_id":"s", "turn_id":"t", "execution_id":"e"},
+                "step_id":"t-step-0", "agent_snapshot_digest":null
+            }))
+            .unwrap(),
             approved_call_ids: vec![],
             max_tool_calls: Some(3),
             tool_calls_used: 0,

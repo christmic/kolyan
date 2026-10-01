@@ -1,6 +1,9 @@
 //! Offline data-driven integration through the real Core and durable driver.
 //! Scripted provider/tool data is explicit, not presented as real-model evidence.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 use std::collections::{BTreeMap, VecDeque};
 use std::fs::File;
 use std::io::Write;
@@ -9,7 +12,8 @@ use std::sync::{Arc, Mutex};
 
 use futures_util::stream;
 use kolyan_core::{
-    ToolError, ToolExecutor, ToolFuture, TurnConfig, TurnExecutor, TurnOutcome, TurnRequest,
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture, TurnConfig,
+    TurnExecutor, TurnOutcome, TurnRequest,
 };
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore, SqliteLedger};
 use kolyan_model::{
@@ -93,7 +97,22 @@ struct FixtureTools {
     expected_calls: Vec<ToolCall>,
 }
 impl ToolExecutor for FixtureTools {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move {
+            if !self.expected_calls.contains(&call) {
+                return Err(ToolError::Failed {
+                    message: "unexpected fixture input".into(),
+                });
+            }
+            trusted_tools::prepare(call)
+        })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        let call = match trusted_tools::validate(&invocation) {
+            Ok(call) => call,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
         assert!(self.expected_calls.contains(&call), "unexpected tool input");
         self.calls.lock().unwrap().push(call.clone());
         let result = self
@@ -194,7 +213,8 @@ async fn run_case(root: &Path, case: Case) {
                     results: case.tool_results.clone(),
                     expected_calls: expected_calls.clone(),
                 },
-            ),
+            )
+            .with_policy_engine(trusted_tools::policy()),
             TurnRequest {
                 turn_id: case.binding.turn_id.clone(),
                 model_request: request,

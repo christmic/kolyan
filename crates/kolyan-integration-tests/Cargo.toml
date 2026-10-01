@@ -85,6 +85,10 @@ name = "file_worker_process"
 path = "tests/tools/file_worker_process.rs"
 
 [[test]]
+name = "exact_file_boundary"
+path = "tests/tools/exact_file_boundary.rs"
+
+[[test]]
 name = "linked_trajectory"
 path = "tests/runtime/linked_trajectory.rs"
 
@@ -144,6 +148,7 @@ serde_json.workspace = true
 # the model crate is the neutral contract; the protocol crates carry the
 # OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
 kolyan-core = { path = "../kolyan-core" }
+kolyan-types = { path = "../kolyan-types" }
 kolyan-storage = { path = "../kolyan-storage" }
 kolyan-model = { path = "../kolyan-model" }
 kolyan-provider-openai = { path = "../kolyan-provider-openai" }

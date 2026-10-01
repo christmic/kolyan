@@ -2,11 +2,18 @@
 //! dropped Rust object. The parent reopens storage in a different process.
 
 use futures_util::stream;
-use kolyan_core::{ToolError, ToolExecutor, ToolFuture, TurnConfig, TurnExecutor, TurnRequest};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture, TurnConfig,
+    TurnExecutor, TurnRequest,
+};
 use kolyan_ledger::{FileLedger, LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ModelResponse,
     ProviderFuture, StopReason, ToolCall, ToolResult,
+};
+use kolyan_policy::{
+    ApprovalMode, Capability, Effect, Idempotency, InvocationClaim, PathScope, PolicyEngine,
+    PreparedCall, ResourceClaim, ToolManifest, ToolRequirements,
 };
 use kolyan_runtime::{
     AdmissionDecision, AdmissionPort, DurableTurnDriver, EffectDisposition, EffectExecutor,
@@ -15,6 +22,7 @@ use kolyan_runtime::{
 };
 use kolyan_trace::NoopTraceSink;
 use serde_json::{Value, json};
+use std::sync::Arc;
 use std::{fs, path::PathBuf, process::Command};
 
 #[derive(Clone)]
@@ -89,9 +97,79 @@ impl ModelProvider for Provider {
 }
 
 struct EffectTool(PathBuf);
+impl EffectTool {
+    fn manifest(&self) -> ToolManifest {
+        ToolManifest {
+            tool_name: "effect.write".into(),
+            capabilities: [Capability::FilesystemWrite].into(),
+            effects: [Effect::Create].into(),
+            path_scopes: vec![PathScope::new(self.0.to_string_lossy())],
+            idempotency: Idempotency::NonIdempotent,
+            approval: ApprovalMode::Never,
+        }
+    }
+
+    fn policy(&self) -> Arc<PolicyEngine> {
+        let mut policy = PolicyEngine::default();
+        policy.register(self.manifest());
+        Arc::new(policy)
+    }
+}
+
 impl ToolExecutor for EffectTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
         Box::pin(async move {
+            if call.name != "effect.write" {
+                return Err(ToolError::Unavailable { name: call.name });
+            }
+            if call.arguments != json!({"value":"once"}) {
+                return Err(ToolError::Failed {
+                    message: "crash fixture only writes the literal once".into(),
+                });
+            }
+            let declared = self.manifest();
+            PreparedCall::new(
+                call,
+                "integration-fixture-v1".into(),
+                InvocationClaim {
+                    tool_name: declared.tool_name,
+                    capabilities: declared.capabilities,
+                    effects: declared.effects,
+                    resource: ResourceClaim {
+                        path: Some(self.0.to_string_lossy().into_owned()),
+                    },
+                    idempotency: declared.idempotency,
+                },
+                ToolRequirements {
+                    process_sandbox: false,
+                    max_output_bytes: 1024 * 1024,
+                    timeout_ms: 30000,
+                },
+            )
+            .map_err(|error| ToolError::Failed {
+                message: error.to_string(),
+            })
+        })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            invocation
+                .grant
+                .validate(
+                    &invocation.prepared,
+                    &invocation.policy_revision,
+                    &invocation.scope,
+                )
+                .map_err(|error| ToolError::PolicyDenied {
+                    message: error.to_string(),
+                })?;
+            let call = invocation.prepared.call().clone();
+            if self.prepare(call.clone()).await? != invocation.prepared {
+                return Err(ToolError::PolicyDenied {
+                    message: "crash fixture target or implementation changed".into(),
+                });
+            }
             use std::io::Write;
             let mut file = fs::OpenOptions::new()
                 .write(true)
@@ -128,9 +206,11 @@ async fn crash_worker() {
         "prompt_cache":null,"reasoning":null,"max_output_tokens":null,"extensions":{}
     }))
     .unwrap();
+    let tool = EffectTool(root.join("effect.txt"));
+    let policy = tool.policy();
     let result = DurableTurnDriver::new(ledger, NoopTraceSink)
         .start(
-            TurnExecutor::with_tools(Provider, EffectTool(root.join("effect.txt"))),
+            TurnExecutor::with_tools(Provider, tool).with_policy_engine(policy),
             TurnRequest {
                 turn_id: "turn".into(),
                 model_request,

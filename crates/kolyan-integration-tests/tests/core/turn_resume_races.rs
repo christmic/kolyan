@@ -32,6 +32,8 @@ async fn cancellation_preserves_completed_tool_events() {
                 stats: Arc::default(),
             },
         )
+        .with_execution_key(trusted_tools::key(&case.name))
+        .with_policy_engine(policy(&case.approvals, &case.denied))
         .with_boundary_control(gate)
         .with_tool_dispatch_policy(ToolDispatchPolicy {
             mode,
@@ -110,8 +112,17 @@ async fn denied_batch_has_no_tool_started_event() {
         batches: Mutex::new(case.batches.clone().into()),
         delay: 0,
     };
-    let executor =
-        TurnExecutor::new(provider).with_policy_engine(policy(&case.approvals, &case.denied));
+    let executor = TurnExecutor::with_tools(
+        provider,
+        FixtureTool {
+            fail_calls: vec![],
+            failure_kind: None,
+            delay: 0,
+            stats: Arc::default(),
+        },
+    )
+    .with_execution_key(trusted_tools::key(&case.name))
+    .with_policy_engine(policy(&case.approvals, &case.denied));
     let events = executor
         .execute_event_stream(request(&case), TurnControl::default())
         .await

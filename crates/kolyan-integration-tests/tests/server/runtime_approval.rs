@@ -93,17 +93,17 @@ fn execution(case: &Case) -> ExecutionRef {
     }
 }
 
-fn policy() -> Arc<PolicyEngine> {
+fn policy(root: &Path) -> Arc<PolicyEngine> {
     let mut policy = PolicyEngine::default();
     policy.register(ToolManifest {
         tool_name: "file.write".into(),
         capabilities: [Capability::FilesystemWrite].into_iter().collect(),
-        effects: [Effect::Update].into_iter().collect(),
-        path_scopes: vec![PathScope::new("safe")],
+        effects: [Effect::Create, Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new(root.join("safe").to_string_lossy())],
         idempotency: Idempotency::NonIdempotent,
         approval: ApprovalMode::Always,
     });
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     Arc::new(policy)
 }
 
@@ -160,7 +160,7 @@ async fn server_runtime_multi_step_approval_survives_server_rebuild() {
     let safe = root.join("safe");
     fs::create_dir_all(&safe).expect("test workspace should exist");
     let ledger_path = root.join("ledger.jsonl");
-    let policy = policy();
+    let policy = policy(&root);
     let provider = ApprovalProvider {
         calls: Arc::default(),
         tool_call: ToolCall {

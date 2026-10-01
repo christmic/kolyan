@@ -4,6 +4,9 @@ mod turn_resume_live;
 mod turn_resume_races;
 mod turn_resume_support;
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 use futures_util::stream;
 use kolyan_core::*;
 use kolyan_model::*;
@@ -113,8 +116,18 @@ struct FixtureTool {
     stats: Arc<Mutex<ToolStats>>,
 }
 impl ToolExecutor for FixtureTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
         Box::pin(async move {
+            if !matches!(call.name.as_str(), "file.read" | "file.write") {
+                return Err(ToolError::Unavailable { name: call.name });
+            }
+            trusted_tools::prepare(call)
+        })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            let call = trusted_tools::validate(&invocation)?;
             {
                 let mut stats = self.stats.lock().unwrap();
                 stats.active += 1;
@@ -198,6 +211,7 @@ async fn data_driven_resume_and_boundary_contracts() {
                     records: records.clone(),
                 },
             )
+            .with_execution_key(trusted_tools::key(&case.name))
             .with_policy_engine(policy.clone())
             .with_boundary_control(gate.clone())
         };

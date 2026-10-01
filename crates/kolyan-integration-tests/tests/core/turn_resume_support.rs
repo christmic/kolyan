@@ -215,22 +215,25 @@ pub struct RecordingTool<T> {
     pub records: Records,
 }
 impl<T: ToolExecutor> ToolExecutor for RecordingTool<T> {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        self.run(call, None)
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        self.inner.prepare(call)
     }
-    fn execute_with_grant(&self, call: ToolCall, grant: ExecutionGrant) -> ToolFuture<'_> {
-        self.run(call, Some(grant))
-    }
-}
-impl<T: ToolExecutor> RecordingTool<T> {
-    fn run(&self, call: ToolCall, grant: Option<ExecutionGrant>) -> ToolFuture<'_> {
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
+            invocation
+                .grant
+                .validate(
+                    &invocation.prepared,
+                    &invocation.policy_revision,
+                    &invocation.scope,
+                )
+                .map_err(|error| ToolError::PolicyDenied {
+                    message: error.to_string(),
+                })?;
+            let call = invocation.prepared.call().clone();
             self.records.push(json!({"event":"tool_start","call":call}));
             let id = call.id.clone();
-            let result = match grant {
-                Some(grant) => self.inner.execute_with_grant(call, grant).await,
-                None => self.inner.execute(call).await,
-            };
+            let result = self.inner.execute_invocation(invocation).await;
             match &result {
                 Ok(result) => self
                     .records
@@ -245,6 +248,18 @@ impl<T: ToolExecutor> RecordingTool<T> {
 }
 
 pub fn policy(approvals: &[String], denied: &[String]) -> Arc<PolicyEngine> {
+    policy_with_scope(approvals, denied, "safe")
+}
+
+pub fn file_policy(
+    root: &std::path::Path,
+    approvals: &[String],
+    denied: &[String],
+) -> Arc<PolicyEngine> {
+    policy_with_scope(approvals, denied, &root.join("safe").to_string_lossy())
+}
+
+fn policy_with_scope(approvals: &[String], denied: &[String], scope: &str) -> Arc<PolicyEngine> {
     let mut policy = PolicyEngine::default();
     for (name, capability, effect) in [
         ("file.write", Capability::FilesystemWrite, Effect::Update),
@@ -253,8 +268,12 @@ pub fn policy(approvals: &[String], denied: &[String]) -> Arc<PolicyEngine> {
         policy.register(ToolManifest {
             tool_name: name.into(),
             capabilities: [capability].into_iter().collect(),
-            effects: [effect].into_iter().collect(),
-            path_scopes: vec![PathScope::new("safe")],
+            effects: if name == "file.write" {
+                [Effect::Create, Effect::Update].into()
+            } else {
+                [effect].into()
+            },
+            path_scopes: vec![PathScope::new(scope)],
             idempotency: Idempotency::Unknown,
             approval: if approvals.iter().any(|item| item == name) {
                 ApprovalMode::Always

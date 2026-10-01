@@ -1,9 +1,13 @@
 //! Deterministic public-API integration tests for Turn failure contracts.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
 use futures_util::stream;
 use kolyan_core::{
     ToolDispatchMode, ToolDispatchPolicy, ToolError, ToolErrorPolicy, ToolExecutor, ToolFuture,
-    TurnConfig, TurnControl, TurnError, TurnExecutor, TurnOutcome, TurnRequest,
+    ToolInvocation, ToolPreparationFuture, TurnConfig, TurnControl, TurnError, TurnExecutor,
+    TurnOutcome, TurnRequest,
 };
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelEvent, ModelEventStream, ModelProvider, ModelRef,
@@ -88,13 +92,28 @@ struct SelectiveTool {
 struct HangingTool;
 
 impl ToolExecutor for HangingTool {
-    fn execute(&self, _call: ToolCall) -> ToolFuture<'_> {
-        Box::pin(async { std::future::pending::<Result<ToolResult, ToolError>>().await })
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { trusted_tools::prepare(call) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            trusted_tools::validate(&invocation)?;
+            std::future::pending::<Result<ToolResult, ToolError>>().await
+        })
     }
 }
 
 impl ToolExecutor for SelectiveTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { trusted_tools::prepare(call) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        let call = match trusted_tools::validate(&invocation) {
+            Ok(call) => call,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
         let fail_call_id = self.fail_call_id.clone();
         Box::pin(async move {
             if fail_call_id.as_deref() == Some(call.id.as_str()) {
@@ -122,7 +141,9 @@ async fn fail_turn_stops_before_the_next_model_request() {
         SelectiveTool {
             fail_call_id: Some("call-1".into()),
         },
-    );
+    )
+    .with_execution_key(trusted_tools::key("turn-fail-fast"))
+    .with_policy_engine(trusted_tools::policy());
 
     let error = executor
         .execute(TurnRequest {
@@ -158,6 +179,8 @@ async fn continue_batch_returns_success_and_error_results_together() {
             fail_call_id: Some("call-2".into()),
         },
     )
+    .with_execution_key(trusted_tools::key("turn-continue-batch"))
+    .with_policy_engine(trusted_tools::policy())
     .with_tool_dispatch_policy(ToolDispatchPolicy {
         mode: ToolDispatchMode::Serial,
         on_error: ToolErrorPolicy::ContinueBatch,
@@ -224,7 +247,9 @@ async fn invalid_empty_batch_is_a_tool_error() {
 #[tokio::test]
 async fn max_steps_stops_an_unfinished_tool_loop() {
     let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
-    let executor = TurnExecutor::with_tools(provider.clone(), SelectiveTool { fail_call_id: None });
+    let executor = TurnExecutor::with_tools(provider.clone(), SelectiveTool { fail_call_id: None })
+        .with_execution_key(trusted_tools::key("turn-max-steps"))
+        .with_policy_engine(trusted_tools::policy());
 
     let result = executor
         .execute(TurnRequest {
@@ -287,7 +312,9 @@ async fn provider_failure_does_not_start_a_tool_or_second_step() {
 #[tokio::test]
 async fn cancellation_interrupts_a_running_tool() {
     let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
-    let executor = TurnExecutor::with_tools(provider, HangingTool);
+    let executor = TurnExecutor::with_tools(provider, HangingTool)
+        .with_execution_key(trusted_tools::key("turn-tool-cancelled"))
+        .with_policy_engine(trusted_tools::policy());
     let control = TurnControl::default();
     let task_control = control.clone();
     let task = tokio::spawn(async move {
@@ -320,6 +347,8 @@ async fn cancellation_interrupts_a_running_tool() {
 async fn tool_timeout_interrupts_a_running_tool() {
     let provider = ScriptedProvider::new(vec![tool_response(vec![tool_call("call-1")])]);
     let executor = TurnExecutor::with_tools(provider, HangingTool)
+        .with_execution_key(trusted_tools::key("turn-tool-timeout"))
+        .with_policy_engine(trusted_tools::policy())
         .with_tool_timeout(Duration::from_millis(10));
 
     let error = executor
