@@ -68,6 +68,7 @@ pub struct PreparedCall {
     tool_revision: String,
     claim: InvocationClaim,
     requirements: ToolRequirements,
+    execution_binding: serde_json::Value,
     digest: String,
 }
 
@@ -122,6 +123,7 @@ impl PreparedCall {
             tool_revision,
             claim,
             requirements,
+            execution_binding: serde_json::Value::Null,
             digest: String::new(),
         };
         prepared.validate_fields()?;
@@ -143,6 +145,26 @@ impl PreparedCall {
 
     pub fn requirements(&self) -> &ToolRequirements {
         &self.requirements
+    }
+
+    /// Bind an adapter-owned execution plan without changing model arguments or
+    /// conflating resource identity with implementation revision. Null explicitly
+    /// means no additional plan; otherwise a bounded JSON object is required.
+    /// Policy preserves this opaque plan and hashes it, but only the trusted
+    /// adapter can interpret and enforce its semantics.
+    pub fn with_execution_binding(
+        mut self,
+        binding: serde_json::Value,
+    ) -> Result<Self, PreparedError> {
+        self.validate()?;
+        self.execution_binding = binding;
+        self.validate_fields()?;
+        self.digest = self.compute_digest()?;
+        Ok(self)
+    }
+
+    pub fn execution_binding(&self) -> &serde_json::Value {
+        &self.execution_binding
     }
 
     pub fn digest(&self) -> &str {
@@ -170,6 +192,7 @@ impl PreparedCall {
             || self.claim.effects.is_empty()
             || self.requirements.max_output_bytes == 0
             || self.requirements.timeout_ms == 0
+            || (!self.execution_binding.is_null() && !self.execution_binding.is_object())
         {
             return Err(PreparedError::Invalid(
                 "inconsistent semantics or limits".into(),
@@ -180,11 +203,12 @@ impl PreparedCall {
 
     fn compute_digest(&self) -> Result<String, PreparedError> {
         let value = canonical(serde_json::json!({
-            "schema_version": 1,
+            "schema_version": 2,
             "call": self.call,
             "tool_revision": self.tool_revision,
             "claim": self.claim,
             "requirements": self.requirements,
+            "execution_binding": self.execution_binding,
         }));
         let bytes = serde_json::to_vec(&value)
             .map_err(|error| PreparedError::Invalid(error.to_string()))?;

@@ -5,6 +5,8 @@ use crate::{
 };
 use serde_json::json;
 
+mod execution_binding;
+
 fn scope() -> ToolExecutionScope {
     ToolExecutionScope {
         execution: ExecutionKey {

@@ -285,6 +285,7 @@ pub enum PolicyError {
 
 pub trait PolicyResolver: Send + Sync {
     fn decide(&self, call: &ToolCall) -> PolicyDecision;
+    fn decide_prepared(&self, call: &PreparedCall, context: &PolicyContext) -> PolicyDecision;
 }
 
 #[derive(Debug, Clone, Default)]
@@ -464,6 +465,10 @@ fn claims_conflict(left: &InvocationClaim, right: &InvocationClaim) -> bool {
 impl PolicyResolver for PolicyEngine {
     fn decide(&self, call: &ToolCall) -> PolicyDecision {
         self.decide(call)
+    }
+
+    fn decide_prepared(&self, call: &PreparedCall, context: &PolicyContext) -> PolicyDecision {
+        self.decide_prepared(call, context)
     }
 }
 
