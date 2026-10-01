@@ -1,6 +1,6 @@
-//! Lossless context preparation with semantic validation and explicit uncertainty.
-//! No source content is discarded or summarized. Strict budget admission requires
-//! a trusted model-specific counter supplied by the host, not byte estimates.
+//! Lossless preparation and explicit host-selected whole-message projection.
+//! Source history is immutable; projection runs before Turn admission, never
+//! invisibly inside a Provider. Strict budgets require a trusted model counter.
 
 mod projection;
 mod validation;
@@ -78,7 +78,7 @@ impl ContextTokenCounter for SerializedByteEstimator {
     }
 }
 
-/// Half-open source message indices. No ranges are omitted in this implementation.
+/// Half-open source message indices for preparation and explicit projection.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RetainedMessageRange {

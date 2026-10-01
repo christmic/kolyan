@@ -7,8 +7,11 @@ cd "$repo_root"
 
 # This is a lightweight source check, not a Rust parser. Rustdoc examples remain
 # legal; only actual attribute/module lines in production files are checked.
-find crates apps services -type f -name '*.rs' \
-    ! -path '*/tests/*' ! -name 'tests.rs' |
+if [ "$#" -eq 0 ]; then
+    set -- crates apps services
+fi
+find "$@" -type f -name '*.rs' \
+    ! -path '*/tests/*' ! -name 'tests.rs' ! -name '*_tests.rs' |
 while IFS= read -r source_file; do
     awk '
         /^[[:space:]]*mod[[:space:]]+tests[[:space:]]*\{/ ||

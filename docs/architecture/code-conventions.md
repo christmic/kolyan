@@ -42,6 +42,10 @@ mod tests;
 遵循 Rust 默认模块路径，不重复声明同一测试模块。测试文件可通过 `use super::*`
 访问所属模块的私有实现。共享测试辅助代码放测试子树，避免依赖生产代码的测试实现。
 同样原则适用于后续其他语言：遵循该语言惯用的独立测试目录/文件名。
+独立 Rust 测试文件可使用 `tests.rs`、职责明确的 `*_tests.rs` 或 `tests/`
+子树；生产父模块只通过 `#[cfg(test)]` 声明引用。布局检查识别这些命名，
+不得把已独立的测试误判成生产文件内的测试。检查脚本的正反例放在
+`scripts/fixtures/source-layout/`，不改变生产文件禁止 inline tests 的规则。
 
 - 局部单测：模块自己的独立测试文件。
 - 跨 crate、真实 Provider、进程级测试：`kolyan-integration-tests/tests/`，按模块分类。
