@@ -1129,3 +1129,216 @@ correct results but root finalization was rejected by the existing strict Task
 success guard (`/tmp/kolyan-agent-delegation-offline-v4.log`). Preserve those
 assertions and add durable finalization/reconstruction coverage; do not relax
 the success guard, swallow the failure or synthesize successful child terminals.
+
+### Immutable test executables across approval waits
+
+A test host must fix its trusted tool executable before the first admission and
+reuse that exact version across all Turns, child invocations and rebuilt hosts.
+The mutable Cargo build output is a build input, not a long-lived execution
+identity. Put a verified test-owned executable snapshot outside model-writable
+workspace roots, record its path and digest, and reject missing or changed
+snapshots on reconstruction. Do not recopy the current build output at resume,
+alter an active pinned binary or weaken the production revision comparison.
+
+The first long-task matrix exposed this fixture gap at Qwen 3.7 Max's inline
+eighth Turn. `kolyan-agent-long-task-ZeP9S6/actual.jsonl` exports both actual
+preparations for call `call_aefa9ca023334094aaf80b24`. Their complete scalar
+comparison differs only in `tool_revision` and the derived preparation digest:
+the worker hash changed from `7a01c3413f7a1e6bff6e6735a26b7c278208cd016602fd4b67c9c80f9a4fe128`
+to `90e9319dd4b0b9da401182f6fc2f0733e61540b48391d266e9739defa24ff194`.
+Arguments, target identity, directory identities and sandbox requirements match.
+The fixture currently reloads `CARGO_BIN_EXE_kolyan-test-tool-worker` when
+rebuilding tools, so a concurrent integration build can change the preparation
+version. Approval correctly refused that mismatch; this is not evidence of a
+model error or lost context.
+
+New fixture tests must simulate replacing the build input while a task is
+waiting, then rebuild against the original private executable and verify exact
+preparation and one effect. Replacing the actual pinned executable must still
+fail closed. Preserve the existing failed matrix and export its failure; do not
+replace it with a retry or change the cases in an already running matrix.
+
+### Explicit projection local verification
+
+The projection API's two unit tests passed, including 18 data rows exported to
+`kolyan-context-projection-ZTM9kD/actual.jsonl` before comparison. Positive
+selection retains four of ten messages and removes only completed historical
+messages. Original tool-pair membership is checked even when call IDs recur in
+later Steps, avoiding accidental cross-Step pairing. Source/plan round trips
+reproduce identical output and evidence; unknown token counts remain unverified.
+The full Agent module passed 78 tests and strict all-target Clippy in
+`/tmp/kolyan-l5-agent-with-context-projection-full.log` and
+`/tmp/kolyan-l5-agent-with-context-projection-clippy.log`. These local gates do not
+establish positive network long-task projection acceptance. The pure API and
+its tests were committed as `456e631` with normal hooks.
+
+### Recovery authority and execution admission
+
+Every child-driving entry point, including approval resume and parent pump,
+must verify the persisted definition and permission snapshot against the current
+host ceiling before polling a model, executing a tool or consuming a child
+result. Revocation fails closed; do not silently attenuate the saved definition
+or rewrite an admitted request. Apply this check at the common owner-validation
+boundary, not only when assembling the parent's resumed executor.
+
+Actual child execution uses a host-owned, shared admission budget across initial
+dispatch, approval resume and nested pump. Multiple Runner instances using that
+host budget share its bound. The original invocation's prepared bound also
+applies after suspension. These ephemeral permits are scheduling controls, not
+persisted authority, distributed leases or Runtime ownership. Release them on
+suspension, failure and completion. Do not hold a parent's execution permit
+while waiting for descendants; a bound of one must not deadlock recursion.
+Check durable cancellation while waiting and again before execution admission.
+Writable or unattested executors remain serial. Shared finite Task budgets must
+not become oversubscribed by independently admitted sibling groups.
+
+Data-driven tests must cover revocation after child completion and before pump,
+both root and recursive owners; simultaneous approval confirmations; nested
+pump competing with fresh dispatch; and two Runner instances sharing a host
+budget. Export complete requests, preparations, ledger facts and measured active
+execution counts before assertions, including failure paths. Verify no new
+model polls, effects or consumption facts after refused authority checks.
+
+### Independently recoverable Task finalization
+
+Provide a host entry point that finalizes a Task from already durable invocation
+evidence without executing another Turn. Restore and verify exact scope,
+bindings, root terminal and policy-required child terminals and consumption
+proofs. A completed root with a missing Task terminal is a commit gap, not a
+reason to rerun the root. Repeated finalization is idempotent and returns the
+persisted Task verdict; it does not fabricate a new Turn result.
+
+Root completion alone never establishes Task success. Verified child failures
+and cancellations are evaluated under the existing completion policy. Root
+failure and cancellation retain their original typed causes. Explicit Task
+policy decides retry eligibility, recovery-required state or terminal failure;
+there is no implicit model retry or conversion of failure into success. User
+cancellation of the whole Task remains distinct from a child-only cancellation.
+Missing or contradictory evidence refuses finalization without new effects.
+
+Tests inject a gap after root terminal persistence and before Task finalization,
+rebuild the host and finalize twice. Assert exactly one Task terminal commit,
+unchanged invocation evidence and zero additional model/tool calls. Cover both
+success and policy-derived failure, missing proofs and current host revocation.
+
+### Remaining topology acceptance boundaries
+
+Preflight recursion limits and authority before persisting a new child identity
+or binding. Test exact-limit and over-limit recursion, nested attenuation,
+deep failure propagation, concurrent admission conflicts and late child results
+after parent cancellation. Cancellation must not resurrect the parent or permit
+new result consumption. Dependency ordering requires explicit topology data and
+durable dependency evidence; a serial loop is not proof of a dependency graph.
+Multiple waiting children, mixed approval/external waits and partial-consumption
+commit gaps require independent cases rather than a single happy-path case.
+
+The recovery gaps above were identified by source audit; that audit is not a
+passing regression test or a reproduced network failure. Implementation and
+offline/network acceptance evidence must be recorded separately.
+
+### Optional display-name comparison
+
+The definition's optional display name may be omitted or explicitly null; both
+deserialize to the same validated domain value. Integration comparisons use
+strict validated AgentDefinition equality, retaining all identity, revision,
+model, instruction and permission checks. Do not compare raw JSON spelling of
+that optional field or normalize required fields. Preserve the earlier failed
+network trace and add an omitted/null parity regression before a fresh run.
+
+### New delegation timeout evidence
+
+The fresh v3 matrix's `kolyan-agent-delegation-13k7qt/actual.jsonl` identifies
+itself as `single-self`; trace paths printed before execution must not be
+attributed to the preceding case's result line. For file.read call
+`call_32bad7a9470d438c9d0a7e9f`, both preparation observations returned the same
+digest `71a90808a4d0246537797e310bfddee4f25a43eb9247207dfe8e4c24d0f43f45`
+in approximately 114 ms and 108 ms. The execution was polled, then dropped after
+30,003,982,667 ns while its inner future had not returned and its control was
+not cancelled. This establishes an outer execution timeout, not a returned
+worker error or an approval revision mismatch. The trace alone does not locate
+the stalled inner stage. Keep this distinction and the failed evidence while
+investigating; do not increase the deadline or assign a model/SDK cause without
+the missing execution-stage evidence.
+
+The v3 delegation matrix completed all 76 rows in
+`kolyan-r1-matrix-ILxIiA/report.json`: 59 Passed and 17 Failed, with one attempt
+per row. Its test log ends in FAILED after 1,801.74 seconds. Failure details
+comprise seven child tool timeouts, three permission-ceiling refusals, three
+invalid sequence arguments, two optional-display-name JSON comparisons and two
+read-receipt count mismatches. These are observed categories, not confirmed
+root causes. In particular, the seven timeouts are not automatically the same
+inner-stage defect. The original report remains failed after fixture corrections;
+only a separately recorded fresh execution can supply new acceptance evidence.
+
+### Repeated child read diagnosis
+
+The Qwen 3.8 Flash OpenAI self-call trace
+`kolyan-agent-delegation-Ovgubz/actual.jsonl` contains two successful child reads
+with distinct call IDs, `call_2167878b32ac4993964e062c` and
+`call_b9e4d947691444a29a1f1bbe`. Deduplicating the exported ledger by event ID
+still leaves both requested calls and both successful receipts. This is not
+replay of one admitted effect.
+
+The child's actual neutral Step 1 request includes the original read-once input,
+the first assistant call and its complete successful ToolResult containing
+`CHILD-REAL-PROOF`, 16 bytes and the matching SHA-256. The following response
+first recognizes that content, then incorrectly describes a tool syntax marker
+and generates a new verification read. Step 2 includes both complete results.
+The final model response acknowledges the inaccurate description and the extra
+read. Thus this trace disproves missing ToolResult context in the recorded
+neutral request as the cause of that extra call. It does not independently
+capture the outgoing HTTP request body or explain other receipt failures.
+
+Keep the read-once assertion and failed matrix row. Do not hide the extra call
+with receipt filtering, argument-based effect deduplication or implicit retries.
+Any future operation-count policy must be explicit host governance and tested
+as such, not an undeclared patch to make this behavioral case pass.
+
+### Continuation artifact verification before successor admission
+
+The initial live continuation trace `kolyan-long-continuation-mmVhDt/actual.jsonl`
+identifies Qwen 3.8 Flash with a named Agent. Its fifth invocation requests an
+edit from TURN04 to TURN04 followed by TURN05, then a read. The observed tool
+events contain only a read at that stage, returning the unchanged four-marker
+file. The framework records the invocation as completed with 27 physical bytes
+and admits invocation six, whose requested TURN05 replacement cannot match that
+file. The worker correctly returns MissingMatch for the generated edit call
+`call_16b2bd7089324c9f8c67d667`. This trace does not show a lost fifth write: no
+fifth edit call was requested or receipted.
+
+Model completion and invocation termination are not proof that a requested
+artifact transition occurred. Extend data-driven acceptance with independently
+verified per-invocation expected physical state and receipt milestones, recorded
+before successor admission. Retain complete failure evidence and distinguish
+the earliest unmet artifact obligation from a later correctly refused edit.
+Do not replace final verification or weaken existing assertions. Production
+hosts that require artifact completion must use an explicit trusted verifier;
+the generic Runner must not infer objective success from natural-language claims
+or hardcode this test's marker sequence.
+
+### Stack bounded preparation digest serialization
+
+The focused recovery gate aborted with stack overflow. The macOS crash report
+`kolyan_agent-4c6b0c6ab6099703-2026-10-02-035308.ips` places the fault in the
+recursive policy preparation canonicalizer while validating issued authority
+inside actual child dispatch. The report contains the digest validation and
+Runtime/Core/Agent pump call chain; it is not evidence of model recursion beyond
+the configured topology depth.
+
+Replace recursive canonicalization with an explicit traversal that emits the
+same compact JSON bytes, sorting object keys and preserving array order and
+scalar serialization. Keep the existing one-MiB prepared-input ceiling and
+refuse overflow while writing. No digest schema change, permissive validation,
+stack-limit increase or special recovery-test bypass is allowed. Add independent
+golden-byte/digest, deep-input and small-stack regressions, then rerun the actual
+recovery gate. A crash location alone does not prove this replacement fixes all
+remaining stack pressure in the execution path.
+
+Policy local verification passed all 32 tests, including four new independent
+regressions, in `/tmp/kolyan-l5-policy-iterative-canonical-tests.log`. The 96-level
+borrowed input serializes on a 128-KiB worker stack without changing the normal
+test/runtime stack limit. The fixed schema-two payload produces its expected
+digest; exact byte ceilings and overflow refusal are checked. Strict all-target
+Policy Clippy passed in `/tmp/kolyan-l5-policy-iterative-canonical-clippy.log`.
+These checks establish the serializer's local contract, not full Agent recovery
+or network acceptance.
