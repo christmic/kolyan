@@ -1074,3 +1074,58 @@ delegation, missing catalog revisions and narrower host ceilings. Reconstructed
 Runner advertisements must retain the saved identity constraints. Network cases
 still require actual models to generate calls; adding discovery information
 does not permit scripted insertion or retroactive changes to the running matrix.
+
+### Explicit context projection before Turn admission
+
+The trusted host may propose ordered, nonempty, disjoint half-open message ranges
+from an immutable complete source request. The first implementation selects whole
+messages; it does not invent a summary or rewrite retained contents. A versioned
+projection policy and exact expected source digest bind this proposal. The host
+must retain the first user input carrying non-tool-result content and the complete
+tail beginning at the latest such user input. If either anchor is absent, refuse
+projection rather than guess the objective or current input.
+
+Validate the complete source under a separately bounded source policy before
+selection. Validate the selected request again, including tool-call/result
+pairing, under the target context policy and model descriptor. Governing system
+instructions, tool schemas, model, extensions, cache configuration and explicit
+output/reasoning limits are unchanged. Omitting only a call or only its result,
+changing source identity, unordered or overlapping ranges, removing either
+anchor and exceeding the target bound fail explicitly. The caller retains the
+entire original trajectory; no source or checkpoint is modified.
+
+Return the selected request with source and selected digests, policy identity,
+retained and omitted ranges, source/selected byte sizes and normal context
+budget evidence. A missing output limit is a separate preparation change and
+must not be silently accepted by this projection operation. Unknown model token
+counts remain unknown in Inspect mode and fail in Strict mode; smaller UTF-8
+size is not proof that a token budget is satisfied.
+
+This pure operation runs before Turn or continuation admission. The host must
+persist its complete source and projection evidence before admitting the exact
+selected neutral request. Core, its Ledger and the Provider observe that same
+selected request. Provider-side preparation continues to reject invisible
+request rewrites. Rebuilding the host from persisted source and the same proposal
+must reproduce the same request and evidence, without reentering old effects.
+Tests require positive reduction, unchanged/no-reduction, tool-pair failures,
+anchor removal, digest mismatch, bounds and unknown-count behavior, with actual
+JSONL written before comparison. This API alone is not long-task integration or
+proof of an automatic summarizer.
+
+### Parent completion after typed child failure
+
+Turn completion and Task success are distinct. A parent may finish an honest
+answer after consuming a verified Failed or Cancelled child result. Under the
+current all-invocations-success completion policy, that does not satisfy Task
+success. The host must derive a typed Task terminal from verified graph evidence
+instead of attempting unconditional success solely because the root invocation
+completed. Keep the child's failure/cancellation and original consumption proof
+unchanged. A child-only cancellation must not masquerade as user cancellation of
+the whole Task; the applicable Task policy determines its conclusion.
+
+The new offline delegation matrix exposed the unconditional-success gap: four
+normal cases passed, while typed Failed and Cancelled child cases consumed their
+correct results but root finalization was rejected by the existing strict Task
+success guard (`/tmp/kolyan-agent-delegation-offline-v4.log`). Preserve those
+assertions and add durable finalization/reconstruction coverage; do not relax
+the success guard, swallow the failure or synthesize successful child terminals.

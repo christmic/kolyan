@@ -2,7 +2,13 @@
 //! No source content is discarded or summarized. Strict budget admission requires
 //! a trusted model-specific counter supplied by the host, not byte estimates.
 
+mod projection;
 mod validation;
+
+pub use projection::{
+    ContextProjectionPlan, ProjectedContext, ProjectionProvenance, context_source_digest,
+    project_context,
+};
 
 use kolyan_model::{ModelDescriptor, ModelRequest};
 use serde::{Deserialize, Serialize};
@@ -74,6 +80,7 @@ impl ContextTokenCounter for SerializedByteEstimator {
 
 /// Half-open source message indices. No ranges are omitted in this implementation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RetainedMessageRange {
     pub start: usize,
     pub end: usize,
