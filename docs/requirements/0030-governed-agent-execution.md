@@ -653,3 +653,16 @@ Cancellation-checked entry into the approval boundary now records
 must not infer saved waiting state from admission. The same distinction applies
 to future generic external waits. A dedicated Runtime regression checks that
 boundary admission alone publishes neither a suspension nor an approval snapshot.
+
+The corrected Runtime module passed 40/40 and Ledger 28/28. The registered
+`server_http_environment_tools` target then passed all eleven data rows
+(`/tmp/kolyan-http-environment-tools-v3.log`). Its retained report is
+`/private/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-http-four-tools-MaazbW/report.jsonl`.
+Per-case HTTP, model request/output and complete Ledger JSONL are written by the
+test before comparisons. The matrix checks actual four-tool effects, approval
+restart, cross-Turn context, cross-Session isolation, changed preparation,
+cancellation and control-path protection. Each persisted approval has exactly
+one earlier boundary admission and one later committed suspension. The three
+write/edit/shell approvals remain three, not six, suspension facts. This is real
+local subprocess/OS/HTTP evidence with scripted Provider responses, not actual
+model-network or autonomous recursive Agent acceptance.

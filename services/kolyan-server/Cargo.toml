@@ -48,3 +48,7 @@ path = "../../crates/kolyan-integration-tests/tests/server/process.rs"
 [[test]]
 name = "server_http_process"
 path = "../../crates/kolyan-integration-tests/tests/server/http_process.rs"
+
+[[test]]
+name = "server_http_environment_tools"
+path = "../../crates/kolyan-integration-tests/tests/server/http_environment_tools.rs"

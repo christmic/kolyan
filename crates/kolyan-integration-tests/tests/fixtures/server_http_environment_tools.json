@@ -1,0 +1,1247 @@
+[
+  {
+    "id": "four_tools_restart_and_context",
+    "files": {
+      "seed.txt": "seed-value"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-read",
+          "call_id": "read",
+          "name": "file.read",
+          "arguments": "{\"path\":\"seed.txt\"}"
+        }
+      ],
+      [
+        {
+          "type": "function_call",
+          "id": "item-write",
+          "call_id": "write",
+          "name": "file.write",
+          "arguments": "{\"path\":\"proof.txt\",\"content\":\"alpha\"}"
+        }
+      ],
+      [
+        {
+          "type": "function_call",
+          "id": "item-edit",
+          "call_id": "edit",
+          "name": "file.edit",
+          "arguments": "{\"path\":\"proof.txt\",\"old_text\":\"alpha\",\"new_text\":\"beta\"}"
+        }
+      ],
+      [
+        {
+          "type": "function_call",
+          "id": "item-shell",
+          "call_id": "shell",
+          "name": "shell",
+          "arguments": "{\"command\":\"printf 'shell-proof' > shell.txt; printf 'out'; printf 'err' >&2\",\"path\":\".\"}"
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "four-tool-secret-context"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "function_call",
+          "id": "item-next",
+          "call_id": "next",
+          "name": "file.read",
+          "arguments": "{\"path\":\"proof.txt\"}"
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "beta"
+            }
+          ]
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "message",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "isolated session"
+            }
+          ]
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "shared"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "shared"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/shared/turns",
+        "body": {
+          "turn_id": "first",
+          "input": "Read seed.txt, write alpha to proof.txt, edit alpha to beta, then create shell.txt with shell. Report four-tool-secret-context."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": null,
+          "shell.txt": null
+        },
+        "results": []
+      },
+      {
+        "kind": "restart"
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/shared/turns/first/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "alpha",
+          "shell.txt": null
+        },
+        "results": [
+          {
+            "call_id": "write",
+            "is_error": false,
+            "content": {
+              "path": "proof.txt",
+              "bytes": 5
+            }
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/shared/turns/first/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "beta",
+          "shell.txt": null
+        },
+        "results": [
+          {
+            "call_id": "edit",
+            "is_error": false,
+            "content": {
+              "path": "proof.txt",
+              "bytes": 4
+            }
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/shared/turns/first/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "beta",
+          "shell.txt": "shell-proof"
+        },
+        "results": [
+          {
+            "call_id": "read",
+            "is_error": false,
+            "content": {
+              "content": "seed-value",
+              "path": "seed.txt"
+            }
+          },
+          {
+            "call_id": "shell",
+            "is_error": false,
+            "content": {
+              "exit_code": 0,
+              "stdout": {
+                "encoding": "utf8",
+                "data": "out"
+              },
+              "stderr": {
+                "encoding": "utf8",
+                "data": "err"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/shared/turns",
+        "body": {
+          "turn_id": "next",
+          "input": "Read the previous Turn file."
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "beta"
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "unrelated"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "unrelated"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/unrelated/turns",
+        "body": {
+          "turn_id": "first",
+          "input": "Reply without tools."
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {},
+        "results": []
+      }
+    ],
+    "expected_effects": 5,
+    "request_contains": [
+      [
+        "seed.txt"
+      ],
+      [
+        "read",
+        "seed-value"
+      ],
+      [
+        "write",
+        "alpha"
+      ],
+      [
+        "edit",
+        "beta"
+      ],
+      [
+        "shell",
+        "out",
+        "err"
+      ],
+      [
+        "four-tool-secret-context",
+        "write",
+        "alpha",
+        "edit",
+        "beta"
+      ],
+      [
+        "next",
+        "beta"
+      ],
+      [
+        "Reply without tools."
+      ]
+    ],
+    "request_excludes": [
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [],
+      [
+        "four-tool-secret-context",
+        "seed-value"
+      ]
+    ],
+    "ledger_counts": {
+      "effect_receipt": 5,
+      "execution_suspended": 3,
+      "turn_completed": 6
+    },
+    "host_files": {},
+    "expected_approvals": 3
+  },
+  {
+    "id": "changed_resource_approval",
+    "files": {
+      "proof.txt": "original"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-changed",
+          "call_id": "changed",
+          "name": "file.write",
+          "arguments": "{\"path\":\"proof.txt\",\"content\":\"forbidden\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Write forbidden to proof.txt."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "original"
+        },
+        "results": []
+      },
+      {
+        "kind": "restart"
+      },
+      {
+        "kind": "replace",
+        "path": "proof.txt",
+        "content": "host-replacement"
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "Failed",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": "host-replacement"
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "Write forbidden"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0,
+      "effect_receipt": 0,
+      "turn_failed": 1
+    },
+    "host_files": {},
+    "expected_approvals": 1
+  },
+  {
+    "id": "wrong_context_approval",
+    "files": {},
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-scoped",
+          "call_id": "scoped",
+          "name": "file.write",
+          "arguments": "{\"path\":\"proof.txt\",\"content\":\"forbidden\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "owner"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "owner"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "other"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "other"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/owner/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Write forbidden to proof.txt."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "proof.txt": null
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/other/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 404,
+        "expected": {
+          "code": "not_found"
+        },
+        "files": {
+          "proof.txt": null
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/owner/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "deny"
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "ApprovalRejected"
+        },
+        "files": {
+          "proof.txt": null
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "Write forbidden"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0
+    },
+    "host_files": {},
+    "expected_approvals": 1
+  },
+  {
+    "id": "cancel_waiting_shell",
+    "files": {},
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-cancelled",
+          "call_id": "cancelled",
+          "name": "shell",
+          "arguments": "{\"command\":\"printf 'forbidden' > cancelled.txt\",\"path\":\".\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Write cancelled.txt through shell."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true,
+          "recovery_required": false
+        },
+        "files": {
+          "cancelled.txt": null
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/cancel",
+        "body": {},
+        "status": 200,
+        "expected": {
+          "state": "cancelled",
+          "end_reason": "Cancelled"
+        },
+        "files": {
+          "cancelled.txt": null
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 409,
+        "expected": {
+          "code": "conflict"
+        },
+        "files": {
+          "cancelled.txt": null
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "Write cancelled.txt"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0
+    },
+    "host_files": {},
+    "expected_approvals": 1
+  },
+  {
+    "id": "git_control_read",
+    "files": {
+      ".git/config": "host-control"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-git_control_read",
+          "call_id": "git_control_read",
+          "name": "file.read",
+          "arguments": "{\"path\":\".git/config\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Execute the requested operation without expanding permission."
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "Failed",
+          "execution_stopped": true
+        },
+        "files": {
+          ".git/config": "host-control"
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "without expanding permission"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0,
+      "approval_requested": 0,
+      "effect_receipt": 0
+    },
+    "host_files": {},
+    "expected_approvals": 0
+  },
+  {
+    "id": "kolyan_control_write",
+    "files": {
+      ".kolyan/control": "host-control"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-kolyan_control_write",
+          "call_id": "kolyan_control_write",
+          "name": "file.write",
+          "arguments": "{\"path\":\".kolyan/control\",\"content\":\"forbidden\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Execute the requested operation without expanding permission."
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "Failed",
+          "execution_stopped": true
+        },
+        "files": {
+          ".kolyan/control": "host-control"
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "without expanding permission"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0,
+      "approval_requested": 0,
+      "effect_receipt": 0
+    },
+    "host_files": {},
+    "expected_approvals": 0
+  },
+  {
+    "id": "state_escape_write",
+    "files": {},
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-state_escape_write",
+          "call_id": "state_escape_write",
+          "name": "file.write",
+          "arguments": "{\"path\":\"../state/forbidden\",\"content\":\"forbidden\"}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Execute the requested operation without expanding permission."
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "Failed",
+          "execution_stopped": true
+        },
+        "files": {},
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "without expanding permission"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0,
+      "approval_requested": 0,
+      "effect_receipt": 0
+    },
+    "host_files": {},
+    "expected_approvals": 0
+  },
+  {
+    "id": "unknown_fields",
+    "files": {
+      "seed.txt": "unchanged"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-unknown_fields",
+          "call_id": "unknown_fields",
+          "name": "file.read",
+          "arguments": "{\"path\":\"seed.txt\",\"unexpected\":true}"
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Execute the requested operation without expanding permission."
+        },
+        "status": 200,
+        "expected": {
+          "state": "failed",
+          "end_reason": "Failed",
+          "execution_stopped": true
+        },
+        "files": {
+          "seed.txt": "unchanged"
+        },
+        "results": []
+      }
+    ],
+    "expected_effects": 0,
+    "request_contains": [
+      [
+        "without expanding permission"
+      ]
+    ],
+    "request_excludes": [
+      []
+    ],
+    "ledger_counts": {
+      "effect_started": 0,
+      "approval_requested": 0,
+      "effect_receipt": 0
+    },
+    "host_files": {},
+    "expected_approvals": 0
+  },
+  {
+    "id": "shell_state_control",
+    "files": {},
+    "host_files": {
+      "state/sentinel": "host-control"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-shell_state_control",
+          "call_id": "shell_state_control",
+          "name": "shell",
+          "arguments": "{\"command\":\"if printf 'corrupted' > '$ROOT/state/sentinel' 2>/dev/null; then printf 'unexpected'; else printf 'denied'; fi\",\"path\":\".\"}"
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "final",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "sandbox refused protected resource"
+            }
+          ]
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Attempt to modify a protected host resource with shell; report denial."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true
+        },
+        "files": {
+          "../state/sentinel": "host-control"
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer"
+        },
+        "files": {
+          "../state/sentinel": "host-control"
+        },
+        "results": [
+          {
+            "call_id": "shell_state_control",
+            "is_error": false,
+            "content": {
+              "exit_code": 0,
+              "stdout": {
+                "encoding": "utf8",
+                "data": "denied"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "expected_effects": 1,
+    "request_contains": [
+      [
+        "protected host resource"
+      ],
+      [
+        "shell_state_control",
+        "denied"
+      ]
+    ],
+    "request_excludes": [
+      [],
+      []
+    ],
+    "ledger_counts": {
+      "effect_receipt": 1,
+      "execution_suspended": 1,
+      "turn_completed": 2
+    },
+    "expected_approvals": 1
+  },
+  {
+    "id": "shell_staging_control",
+    "files": {},
+    "host_files": {
+      "staging/sentinel": "host-control"
+    },
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-shell_staging_control",
+          "call_id": "shell_staging_control",
+          "name": "shell",
+          "arguments": "{\"command\":\"if printf 'corrupted' > '$ROOT/staging/sentinel' 2>/dev/null; then printf 'unexpected'; else printf 'denied'; fi\",\"path\":\".\"}"
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "final",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "sandbox refused protected resource"
+            }
+          ]
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Attempt to modify a protected host resource with shell; report denial."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true
+        },
+        "files": {
+          "../staging/sentinel": "host-control"
+        },
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer"
+        },
+        "files": {
+          "../staging/sentinel": "host-control"
+        },
+        "results": [
+          {
+            "call_id": "shell_staging_control",
+            "is_error": false,
+            "content": {
+              "exit_code": 0,
+              "stdout": {
+                "encoding": "utf8",
+                "data": "denied"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "expected_effects": 1,
+    "request_contains": [
+      [
+        "protected host resource"
+      ],
+      [
+        "shell_staging_control",
+        "denied"
+      ]
+    ],
+    "request_excludes": [
+      [],
+      []
+    ],
+    "ledger_counts": {
+      "effect_receipt": 1,
+      "execution_suspended": 1,
+      "turn_completed": 2
+    },
+    "expected_approvals": 1
+  },
+  {
+    "id": "shell_loaded_config",
+    "files": {},
+    "host_files": {},
+    "outputs": [
+      [
+        {
+          "type": "function_call",
+          "id": "item-shell_loaded_config",
+          "call_id": "shell_loaded_config",
+          "name": "shell",
+          "arguments": "{\"command\":\"if printf 'corrupted' > '$ROOT/config.json' 2>/dev/null; then printf 'unexpected'; else printf 'denied'; fi\",\"path\":\".\"}"
+        }
+      ],
+      [
+        {
+          "type": "message",
+          "id": "final",
+          "role": "assistant",
+          "content": [
+            {
+              "type": "output_text",
+              "text": "sandbox refused protected resource"
+            }
+          ]
+        }
+      ]
+    ],
+    "actions": [
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions",
+        "body": {
+          "session_id": "s"
+        },
+        "status": 201,
+        "expected": {
+          "session_id": "s"
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns",
+        "body": {
+          "turn_id": "t",
+          "input": "Attempt to modify a protected host resource with shell; report denial."
+        },
+        "status": 200,
+        "expected": {
+          "state": "suspended",
+          "execution_stopped": true
+        },
+        "files": {},
+        "results": []
+      },
+      {
+        "kind": "http",
+        "method": "POST",
+        "path": "/v1/sessions/s/turns/t/approvals/$APPROVAL/decision",
+        "body": {
+          "decision": "approve"
+        },
+        "status": 200,
+        "expected": {
+          "state": "completed",
+          "end_reason": "FinalAnswer"
+        },
+        "files": {},
+        "results": [
+          {
+            "call_id": "shell_loaded_config",
+            "is_error": false,
+            "content": {
+              "exit_code": 0,
+              "stdout": {
+                "encoding": "utf8",
+                "data": "denied"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "expected_effects": 1,
+    "request_contains": [
+      [
+        "protected host resource"
+      ],
+      [
+        "shell_loaded_config",
+        "denied"
+      ]
+    ],
+    "request_excludes": [
+      [],
+      []
+    ],
+    "ledger_counts": {
+      "effect_receipt": 1,
+      "execution_suspended": 1,
+      "turn_completed": 2
+    },
+    "expected_approvals": 1
+  }
+]
