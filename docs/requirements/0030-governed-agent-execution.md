@@ -17,8 +17,8 @@ legacy adapters, a general workflow language or additional environment tools.
 
 The prepared loop, exact four-tool adapters, macOS sandbox, durable instance
 reservation and self-definition resolution are implemented and locally verified.
-Default service assembly still needs correction after the latest HTTP subprocess
-failure. Generic durable child waits, Agent Runner, recursive/parallel model calls
+Default service assembly and the local HTTP four-tool matrix have been corrected
+and verified. Generic durable child waits, Agent Runner, recursive/parallel model calls
 and the complete real-model long-task matrix are not accepted. Detailed gate
 evidence and limitations are retained in the implementation checkpoints below.
 
@@ -134,6 +134,24 @@ Task's predeclared success criteria. A verified bounded result loader checks the
 exact invocation, attempt, execution, terminal state and artifact/result digest
 before returning an envelope for parent consumption.
 
+`SessionStore::initialize(session_id, SessionInitialization)` atomically persists
+the complete selected message projection and an immutable host binding digest.
+The digest is computed and authenticated by Server from logical Session, Task,
+invocation, snapshot and projection identities. Storage treats it as an opaque
+comparison key, not authorization, and does not duplicate Agent definitions or
+interpret topology. Initial messages populate both conversation and full-context
+views before any child Turn is registered.
+
+The FileSessionStore adapter serializes initialization across independent handles
+with its filesystem lock, writes and synchronizes a complete snapshot, then
+atomically publishes it. Identical retries verify the saved initialization and
+return the current Session without resetting subsequent Turns or history. A
+different digest or projection, a pre-existing ordinary Session, corrupt committed
+data or an oversized initialization is rejected without overwriting it. The
+initialization field is explicitly present and nullable for ordinary Sessions;
+missing fields are not a legacy fallback. Server must separately verify owner
+facts before creating or reopening a private context.
+
 ## Durable child waiting and recovery
 
 Waiting for a child, an approval or external confirmation must release the
@@ -157,8 +175,8 @@ revive a cancelled root through a late child result.
 
 The implementation must distinguish `ToolOutcome::Completed` from
 `ToolOutcome::AwaitingExternal`. An external wait carries a bounded host-generated
-identity, kind, schema version and exact opaque binding. This is a planned contract,
-not an existing capability. Runtime validates recognized kind/version and durable
+identity, kind, schema version and exact opaque binding. Core's unified contract
+is implemented; end-to-end Agent acceptance is still pending. Runtime validates recognized kind/version and durable
 admission evidence; Core retains the binding without interpreting child semantics.
 
 Runtime requires an explicit trusted host verifier for external-wait kind/version,
@@ -196,6 +214,41 @@ wait evidence remains uncertain. Ledger and Server FactJournal are distinct
 storage contracts; no cross-storage transaction is claimed. Deterministic admission
 keys, exact fact references and recoverable commit steps bridge their boundaries.
 
+Runtime persists an immutable `ExecutionInputAdmitted` fact before model dispatch.
+It binds the original request and message boundary, execution and Agent snapshot,
+dispatch policy, maximum Steps and calls, tool timeout and absolute deadline.
+Recovered checkpoints must match this independent source and cannot widen limits.
+Core's per-Step request ID is validated as a derived coordinate, not compared as
+though it were an unauthorized change to model configuration. Suspension does not
+restart the original deadline clock.
+
+Core calls `TurnEventRecorder::record_checkpoint` after fresh preparation and
+stage validation but before any effect admission in that stage. Runtime overrides
+this port to save `TurnCheckpointPrepared` through cancellation-aware publication.
+Persistence failure blocks effects. Core's default no-op means only that Core
+does not own storage; it provides no durable guarantee. A prepared checkpoint is
+an execution recovery barrier, not approval authority or a public Suspended state.
+Recovery selects the latest prepared, merged or suspended checkpoint, validates
+its Steps against committed model responses, and hydrates only historical entered
+effects from exact authority and result evidence.
+
+The host verifier exposes a read-only `recover_wait` operation for the window
+between committed external admission and Runtime wait publication. It accepts
+historical issued authority and may return only an already admitted exact wait;
+Runtime verifies that wait before publication. It must not launch work, make a
+model request, issue a grant or infer admission from an untrusted notification.
+The default returns no proven wait. Missing or unverifiable entered-effect evidence
+produces fatal `ToolError::Uncertain`, not ordinary model tool-error feedback.
+
+A committed effect receipt repairs an older checkpoint without repeating
+preparation, authorization or execution. Runtime verifies preparation,
+authorization, entry, receipt, scope and complete output size, and retains charged
+usage. A merged checkpoint is published before driving the next Ready call or
+Step. Compound publications contain a required source ledger cursor and content
+identity, so publishing unchanged waiting state after a new lifecycle transition
+does not incorrectly reuse an earlier suspension event. This cursor identifies
+causal publication; it is neither a lease nor a cross-storage transaction.
+
 Server validates child completion and join evidence, records the exact final tool
 receipt, consumes the child result idempotently, and commits merged resume state
 before continuing. Recovery retains the same attempt and budget. A permanent
@@ -231,6 +284,13 @@ durable proof before invoking Core. Model tool-call IDs and policy revisions
 remain opaque payload values; encode durable host coordinates independently so
 slashes, Unicode and long native IDs do not become ambiguous journal keys.
 
+An approval resume boundary is not an `ApprovalResolved` decision. Runtime
+requires an independently persisted affirmative decision matching checkpoint,
+approval, prepared digest, policy revision, scope and evidence identity. The
+canonical decision payload is shared with Server; encoding it alone grants no
+authority. Approval display facts contain metadata, not executable continuation
+state or a second checkpoint copy.
+
 `merge_resume_with_control` performs pure validation and merging. It requests
 neither preparation nor tools nor models. Runtime persists its result before
 calling `resume_checkpoint_with_control`; the latter drives only Ready calls,
@@ -247,12 +307,19 @@ Both receive `ExternalWaitContext` with the historical issued authority and exac
 wait binding. Runtime independently checks source scope, preparation, grant,
 call identity and original complete-result ceiling. A verifier cannot authorize
 new effects or bypass those checks. The default `RefuseExternalWaits` rejects both
-operations. This port exists with three passing module tests; it is not yet wired
-into dispatch, so durable external waiting and Agent execution are not accepted.
+operations. The port is now wired into Runtime dispatch and read-only recovery,
+with local proof and replay tests passing. Full child admission, result consumption
+and commit-gap acceptance remain pending; this does not establish autonomous Agent
+execution or real-model acceptance.
 
 ## Tool preparation and permission enforcement
 
 The environment inventory is `file.read`, `file.write`, `file.edit` and `shell`.
+Delegation uses independent `Capability::AgentDelegate` and `Effect::Delegate`;
+Shell process permission cannot authorize child admission. Unknown delegation
+resource footprints conflict conservatively at the Turn batch layer. Explicit
+independent children inside a validated invocation are scheduled by Server,
+subject to child permission ceilings and its bounded concurrency policy.
 Trusted adapters validate arguments and derive canonical resources, effects,
 implementation revision and mandatory isolation requirements. A prepared digest
 binds exact arguments and requirements. Policy evaluates this prepared call with
@@ -748,3 +815,262 @@ parsing rather than being silently ignored while polling a partial final line.
 The eight-test transport/scenario target passed, retaining all eleven scenario
 reports under `kolyan-http-four-tools-VeeRXH`. This local target result does not
 replace final workspace or actual-model Agent acceptance.
+
+### Agent root verification and cancellation barriers
+
+The current workspace all-target compilation passed. The first Agent-root
+integration run failed for both named and inline definitions: write, edit and
+read completed, but the shell call was refused because its prepared workspace
+claim exceeded the fixture's narrower `safe` authorization scope. This is a
+host-fixture authorization mismatch, not a Provider failure. The original
+failure, requests, tool outcomes and authoritative facts remain in
+`/tmp/kolyan-l5-agent-root-offline-main.log` and its referenced `actual.jsonl`
+exports. The subsequent workspace test encountered the same failure; compilation
+alone does not establish workspace acceptance. Shell authorization must describe
+its real workspace boundary, not imply that its working directory is a sandbox.
+
+Two additional Runtime tests enforce the execution-specific cancellation
+boundary before any tool effect: committed cancellation refuses checkpoint
+publication with typed Cancelled and leaves the Ledger unchanged; cancellation
+of another execution cannot block a valid checkpoint. Both tests passed along
+with the two existing prepared-barrier tests in
+`/tmp/kolyan-l5-cancel-barrier-tests.log`. These four local tests do not establish
+actual-model delegation, recursive calls, parallel joins or long-task acceptance.
+
+The corrected root dataset now declares separate file and shell authorization
+scopes. File manifests retain the `safe` boundary; the host explicitly authorizes
+Shell's real workspace claim. The named and inline offline cases both passed,
+each executing four production isolated tools across two independent Turns in
+one logical Session (`/tmp/kolyan-agent-root-offline-v2.log`). Existing assertions
+were retained. The actual-model root matrix has been started separately for all
+19 configured combinations and both selectors; its result remains pending and
+must not be counted from the offline pass.
+
+### Repeated recovery of a waiting checkpoint
+
+A new regression recovered the same pending external wait three times and
+exposed a production defect: the second attempt reused the fixed resume boundary
+event identity, causing a Ledger conflict and an incorrect failed terminal.
+The failing gate is `/tmp/kolyan-l5-cancel-barrier-tests-v2.log`; the assertion
+remains in the suite.
+
+Resume lifecycle admissions now include the committed Ledger cursor captured for
+that attempt. This identifies an observation and admission attempt, not a lease
+or execution authority. Step and tool-effect identities remain stable; completed
+effects must never be entered again. Each admission still atomically checks
+cancellation. A new attempt cannot widen the original budget, replace saved
+authority or interpret a boundary admission as a published suspension.
+
+The corrected Runtime module passed 57/57 in
+`/tmp/kolyan-l5-runtime-repeat-resume-fixed.log`. The repeated-recovery regression
+checks three suspensions, two entered effects, one receipt, one admitted external
+wait, unchanged charges and conflict tail, and no model request. Cancellation
+after a saved prepared checkpoint also refuses repeated recovery without polling
+model/tool ports or appending facts.
+
+Server commit-gap tests passed for consumption committed before either the
+Runtime receipt or merged checkpoint publication, with exact proof rereading and
+no second consumption (`/tmp/kolyan-l5-server-consumed-runtime-gap-v2.log`). Named
+and inline root approval restarts passed through rebuilt production services and
+isolated tools (`/tmp/kolyan-agent-root-restart-offline-v2.log`). These are local
+domain/OS tests; neither establishes actual Agent delegation or live-model
+approval acceptance.
+
+### Cached input in actual model acceptance
+
+The actual-model root matrix exposed a test expectation error on the
+MiniMax Anthropic-compatible surface. The fixture summed only
+`TokenUsage.input_tokens`, while Task accounting also includes reported cache
+read and cache write inputs. One exported run reported 3562 ordinary input tokens
+and 1664 cache-read tokens; its Task input total was correctly 5226. The original
+assertion failure is retained in `/tmp/kolyan-l5-agent-root-live-main.log` and
+`kolyan-agent-root-LXn117/actual.jsonl`.
+
+Root and approval-restart acceptance must independently sum ordinary input,
+cache-read input and cache-write input with overflow checks. Missing ordinary
+input or output remains an unreported Step; optional cache omissions do not
+invent cache measurements. Reasoning tokens are not added to output twice.
+This corrects the expected measurement contract, not production accounting or
+the assertion strength. The current matrix remains a failed run even after the
+fixture source is corrected; only a new complete run can establish acceptance.
+
+### Actual model diagnostics and remaining sandbox failure
+
+The completed root matrix passed 20 of 38 rows; nine rows failed the old cache
+assertion and nine independently failed with ToolTimedOut. The completed approval
+restart matrix passed 14 of 38 rows; fourteen failed cache assertions and ten
+failed with ToolTimedOut. Both failed reports remain authoritative for their
+runs (`kolyan-r1-matrix-yzYmjM/report.json` and
+`kolyan-r1-matrix-UjszSP/report.json`). Fixture corrections do not change them.
+
+The recorded MiniMax cache fixture now preserves all five exact Step usage
+objects from `kolyan-agent-root-LXn117/actual.jsonl`, rather than inventing a
+distribution with the same aggregate. Deep equality against that export was
+verified. All ten accounting cases passed with JSONL written before assertions
+(`/tmp/kolyan-l5-agent-recorded-usage-tests.log`).
+
+A separately registered diagnostic selects Qwen's Anthropic-compatible
+`qwen3.7-plus` named root from the existing configuration. It uses the original
+two-Turn dataset, real isolated tools and unchanged root assertions. It passed
+(`/tmp/kolyan-l5-agent-tool-timeout-diagnostic.log`), exporting requests,
+responses, tool timings and facts to `kolyan-agent-root-HiIOqE/actual.jsonl`.
+This proves that selected run only, not either full matrix or recursion.
+
+The workspace gate independently failed `exact_file_boundary` at its
+`read_baseline` row with a sandbox timeout. This test has no model dependency;
+its original five-second deadline and exact success assertion remain unchanged.
+Evidence is `kolyan-exact-file-boundary-BmSKzm/actual.jsonl` and
+`/tmp/kolyan-l5-workspace-tests-after-repeat-fix.log`. This establishes a
+model-independent timeout, not its lower-level cause. Parent process samples
+and test adapter timings do not by themselves prove a native worker startup,
+stdin EOF or filesystem failure. Do not mask it with retries or larger deadlines.
+
+An independent invocation reproduced the same baseline timeout
+(`kolyan-exact-file-boundary-KW1yr7/actual.jsonl`). A subsequent invocation of
+the same compiled test passed all twelve rows in 0.63 seconds
+(`kolyan-exact-file-boundary-H4sNNy/actual.jsonl`). Neither replaces the failed
+workspace gate nor identifies a repair. A sample of the new matrix test process
+also captured `_dyld_start` before Rust test entry, followed by normal test
+startup; this confirms that startup delay for that test process only, not the
+cause of the unsampled file-worker timeout.
+
+### Worker startup security evaluation
+
+The system log now links the reproduced timeout to the actual worker PID 15446.
+At 00:32:34.102 on 2026-10-02, AMFI inspected the trusted helper. At
+00:32:39.097, AppleSystemPolicy recorded the process as disallowed. At
+00:32:39.142, syspolicyd completed its evaluation for the same helper identifier
+and recorded provenance tracking for PID 15446. That last event was about
+45 milliseconds after the sandbox's five-second deadline. The exact evidence
+is `/tmp/kolyan-l5-native-worker-system-diagnostics.log` and
+`/tmp/kolyan-l5-worker-15446-security-evaluation.log`.
+
+The helper has an ad-hoc linker signature, and `codesign --verify --strict`
+succeeded. It has provenance metadata but no quarantine attribute. Consequently,
+the AMFI message alone does not prove corrupt binary contents. The matched
+startup evaluation timing supports cold trusted-execution assessment exhausting
+the deadline; it does not prove that every earlier tool timeout has this cause.
+There is still no worker stack proving a file-operation or stdin deadlock.
+Apple's [trusted execution troubleshooting guidance](https://developer.apple.com/forums/thread/766466)
+uses system policy logs to distinguish launch admission from application faults;
+disk signature verification is not a claim that an execution policy will admit
+every launch.
+
+Independent data-driven stdin tests passed for 0, 1, 4096, 65536 and 1048576 bytes
+with the original five-second deadline, alongside all three existing input-limit
+tests (`/tmp/kolyan-l5-sandbox-stdin-eof-v2.log`, four tests). The large inputs
+exercise pipe backpressure and require EOF before `wc` can complete. This rules
+out a reproducible EOF failure in those cases, not every possible process fault.
+
+Do not disable Gatekeeper, remove trust metadata or sign an active pinned worker
+in place to make a test green. Executable packaging and host startup diagnostics
+are separate from model retries, tool authority and uncertain-effect recovery.
+No entered effect is automatically replayed because a startup fault is suspected.
+Normal tool deadlines and fail-closed sandbox enforcement remain unchanged.
+
+### Corrected complete actual model matrices
+
+Both corrected matrices finished with every planned row executed. Root execution
+passed 36 of 38 rows (`kolyan-r1-matrix-cPOpzj/report.json`); approval restart
+passed 37 of 38 rows (`kolyan-r1-matrix-sZS84L/report.json`). Neither is a green
+matrix. This run had no cache expectation failures or ToolTimedOut rows, but that
+does not retroactively repair earlier runs or prove cold startup reliability.
+
+The failed inline Qwen 3.8 Flash root first response claimed write and edit had
+already completed, then requested read and shell. Its single observed request
+contains the full ordered write/edit/read/shell instructions and no assistant or
+tool-result history. Reading the nonexistent proof returned errno 2 in about
+130 milliseconds (`kolyan-agent-root-jzirSh/actual.jsonl`). This is distinct from
+the five-second startup timeout and remains a failed requested scenario.
+
+The other failed rows are the named DeepSeek v4 Pro root and inline Qwen 3.8 Max
+approval restart on the Anthropic-compatible surface. The transport reported
+peer closure without TLS close_notify after 879 and 5709 response bytes,
+respectively (`kolyan-agent-root-TBg7ia/actual.jsonl` and
+`kolyan-agent-restart-dQtX7N/actual.jsonl`). Partial streaming observations are
+not synthesized into a complete response or permission to replay tools.
+
+An additive, data-driven diagnostic selects these three exact deployments and
+flows. It preserves their requests and assertions but creates new stores and
+workspaces for every new execution. All three diagnostic outcomes are reported,
+including failures; this is not a hidden retry policy or full-matrix acceptance.
+Its case file is `tests/fixtures/agent/observed_failures_diagnostic.json` under
+`kolyan-integration-tests`. The complete Sandbox module passed 32 of 32 tests
+after the additional EOF cases (`/tmp/kolyan-l5-sandbox-full-after-eof.log`).
+
+The three fresh diagnostics subsequently all passed, with their independent
+report at `kolyan-r1-matrix-D3j94H/report.json` and log at
+`/tmp/kolyan-l5-observed-failures-fresh-diagnostic-v2.log`. A credential-free
+selection test also passed, verifying nonempty unique case IDs and exactly one
+configured deployment for each selector. These results show the three failures
+are not reproduced on that fresh run; they do not convert either original
+complete matrix into a pass. No production retry, altered prompt, changed
+tool-error policy or looser assertion was introduced to obtain these passes.
+
+### Child recovery and bounded parallel verification
+
+The updated Agent module passed all 73 unit tests and its strict all-target
+Clippy gate (`/tmp/kolyan-agent-hook-ready-tests-v2.log` and
+`/tmp/kolyan-agent-hook-ready-clippy-v2.log`). These tests use scripted Provider
+responses; they are not network-model acceptance. The routing schema includes
+the complete named, inline and self-call target shapes and permission fields,
+with 19 data scenarios checking schema, serde and preparation separately.
+
+Checkpoint restoration accepts Provider-native call IDs containing slashes,
+Unicode and more than 256 bytes; host definition-name constraints must not be
+applied to these IDs. The child approval scenario rebuilds its Runner from saved
+ownership, enters no effect before confirmation, enters one effect afterward,
+and resumes the exact parent to Completed. Evidence is exported before comparison
+in `kolyan-agent-pump-g3bSHY/actual.jsonl`.
+
+Parallel scheduling requires both explicit preparation and a trusted factory's
+read-only enforcement claim. A Runner-wide semaphore bounds active children;
+the original prepared invocation bound may narrow it further. Tests observed
+actual concurrent peaks of two and four, and a peak of two when preparation
+narrowed the bound to two. They also verify zero active work afterward. Evidence
+is `kolyan-agent-children-vEwSMB/actual.jsonl`.
+
+Writable or shell-capable children, factories without the enforcement claim,
+and Tasks with a finite shared token ceiling remain serial. Concurrent token
+reservation and safe writable resource isolation are not implemented; unknown
+usage must not be treated as zero or a configured ceiling removed to enable
+fanout. This conservative fallback is an explicit current boundary, not evidence
+that all parallel topologies are supported. Deep recursive, network delegation
+and single-Task long-continuation acceptance remain separate pending gates.
+
+The additional Sandbox EOF cases were committed as `a244c4f` with normal hooks.
+The hook passed workspace formatting and strict all-target Clippy. This commit
+does not establish a passing workspace test run or full Agent acceptance.
+
+### Discoverable admitted targets
+
+Agent invocation advertisement must expose the exact named definition keys
+available under the saved parent snapshot and current host ceiling. A generic
+string schema is not a registry discovery mechanism. Derive named-target choices
+from the intersection of those ceilings and the current exact catalog entries;
+do not advertise inaccessible definitions or substitute a display name for a
+stable definition ID and revision. Inline and self-call branches are advertised
+only when their respective capabilities permit them. An empty named set must
+not leave an unrestricted named branch in the advertised schema.
+
+This advertisement helps models construct valid inputs; it does not grant
+authority. Preparation must independently resolve and validate exact definitions
+and attenuated permissions. Unknown keys, invented versions and authority
+expansion remain explicit failures. The advertisement must be derived from the
+same saved snapshot used by dispatch, including after an approval or child-wait
+restart; it must not use mutable display labels as identity.
+
+The first actual-model delegation matrix remains an independent historical run.
+Its MiniMax named case requested `child-definition/r1` but the actual response
+selected `child/r1` and added that unregistered key to child delegation rights.
+Preparation rejected it before child execution. The complete request, response
+and failed preparation are preserved in
+`kolyan-agent-delegation-dRlAFw/actual.jsonl`. This proves that specific invalid
+selection, not a Provider decoder defect. Do not loosen registry validation or
+rewrite model output to make the case pass.
+
+Tests must compare advertisements for named-only, inline-only, self-only, no
+delegation, missing catalog revisions and narrower host ceilings. Reconstructed
+Runner advertisements must retain the saved identity constraints. Network cases
+still require actual models to generate calls; adding discovery information
+does not permit scripted insertion or retroactive changes to the running matrix.
