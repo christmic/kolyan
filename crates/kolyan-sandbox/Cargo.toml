@@ -13,6 +13,8 @@ nix = { version = "0.30", features = ["signal", "process"] }
 rustix = { version = "1", features = ["process"] }
 
 [dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
 tempfile = "3"
 tokio = { workspace = true, features = ["macros", "rt", "time"] }
 

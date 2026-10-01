@@ -67,3 +67,34 @@ async fn zero_input_ceiling_permits_only_empty_stdin() {
     assert_eq!(output.stdout, b"x");
     assert!(output.stderr.is_empty());
 }
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EofCase {
+    id: String,
+    bytes: usize,
+}
+
+#[tokio::test]
+async fn stdin_eof_completes_empty_small_and_backpressured_inputs() {
+    let cases: Vec<EofCase> =
+        serde_json::from_str(include_str!("input_limits_tests/eof_cases.json")).unwrap();
+    let (root, sandbox) = setup();
+    for case in cases {
+        let mut input = request(root.path());
+        input.stdin = vec![b'x'; case.bytes];
+        input.max_input_bytes = case.bytes;
+        let output = sandbox
+            .execute(input, SandboxCancellation::default())
+            .await
+            .unwrap_or_else(|error| panic!("{}: {error}", case.id));
+        assert_eq!(output.exit_code, Some(0), "{}", case.id);
+        assert_eq!(
+            String::from_utf8(output.stdout).unwrap().trim(),
+            case.bytes.to_string(),
+            "{}: wc must receive EOF after the complete input",
+            case.id
+        );
+        assert!(output.stderr.is_empty(), "{}", case.id);
+    }
+}

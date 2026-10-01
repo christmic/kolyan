@@ -1,0 +1,7 @@
+[
+  { "id": "empty_eof", "bytes": 0 },
+  { "id": "small_eof", "bytes": 1 },
+  { "id": "existing_size_eof", "bytes": 4096 },
+  { "id": "pipe_backpressure_eof", "bytes": 65536 },
+  { "id": "large_backpressure_eof", "bytes": 1048576 }
+]
