@@ -9,6 +9,7 @@ workspace = true
 
 [dependencies]
 cap-std = "4.0.3"
+cap-fs-ext = "4.0.3"
 futures-util.workspace = true
 kolyan-core = { path = "../kolyan-core" }
 kolyan-model = { path = "../kolyan-model" }
@@ -19,6 +20,4 @@ serde_json.workspace = true
 serde.workspace = true
 sha2 = "0.10"
 tokio = { workspace = true, features = ["rt"] }
-
-[dev-dependencies]
 tempfile = "3"
