@@ -11,6 +11,10 @@ workspace = true
 name = "kolyan-server"
 path = "src/main.rs"
 
+[[bin]]
+name = "kolyan-server-tool-worker"
+path = "../../crates/kolyan-tool-worker/src/main.rs"
+
 [dependencies]
 kolyan-server = { path = "../../crates/kolyan-server" }
 kolyan-ledger = { path = "../../crates/kolyan-ledger" }
@@ -18,6 +22,7 @@ kolyan-core = { path = "../../crates/kolyan-core" }
 kolyan-model = { path = "../../crates/kolyan-model" }
 kolyan-policy = { path = "../../crates/kolyan-policy" }
 kolyan-tools = { path = "../../crates/kolyan-tools" }
+kolyan-tool-worker = { path = "../../crates/kolyan-tool-worker" }
 kolyan-storage = { path = "../../crates/kolyan-storage" }
 kolyan-trace = { path = "../../crates/kolyan-trace" }
 kolyan-protocol-openai = { path = "../../crates/kolyan-protocol-openai" }

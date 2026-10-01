@@ -1,6 +1,6 @@
 # Kolyan Server 服务进程
 
-本机 JSONL / JSON-RPC 执行服务，装配 Provider、受限文件工具、Policy、Runtime、
+本机 JSONL / JSON-RPC 执行服务，装配 Provider、默认 macOS 隔离四工具、Policy、Runtime、
 SQLite Ledger 和文件 SessionStore。模型请求运行在独立任务中，状态与取消请求
 不等待模型结束。协议见 [Server v1](../../protocols/server-execution.md)。
 
@@ -13,6 +13,71 @@ KOLYAN_SERVER_CONFIG=/absolute/path/server.json target/debug/kolyan-server
 环境变量名，真实值由进程环境提供；不要把个人配置或密钥提交到仓库。
 先创建工作区及允许访问的子目录；文件工具不会替用户任意创建目录。
 常驻 Server 使用完整执行上下文投影，保留前一 Turn 的工具调用、结果及签名思考内容。
+
+## 默认隔离装配
+
+生产环境只装配 `IsolatedToolSet` 的 `file.read`、`file.write`、`file.edit`、
+`shell`，不提供 RestrictedFileTool、旧 shell.query 或无沙箱 fallback。
+基础 inventory 保持四工具；Service 的 template.tools 只在 allow_shell=true
+且物理 scope 等于整个 workspace 时广告 Shell，否则只广告三个文件工具。
+广告过滤不替代实际执行 deny；未来 Agent 更细 permissions 也须同时过滤广告
+并在执行时检查独立宿主权限，不能以模型未见 schema 当作安全边界。
+不支持 macOS Seatbelt、缺失 backend/worker 或不安全布局时启动失败。
+`cargo build -p kolyan-server-service` 同时构建 `kolyan-server` 和
+`kolyan-server-tool-worker`；后者直接引用真实 tool-worker 生产入口，不复制实现。
+
+必填宿主配置如下（路径均由可信宿主选择，不由模型提供）：
+
+```json
+{
+  "workspace": "/host/agent/workspace",
+  "tool_scope": "safe",
+  "ledger_path": "/host/agent/state/ledger.sqlite",
+  "session_root": "/host/agent/state/sessions",
+  "worker_path": "/host/bin/kolyan-server-tool-worker",
+  "staging_root": "/host/agent/staging",
+  "allow_shell": false
+}
+```
+
+这是配置片段；Provider、请求、预算与 progress 字段仍须提供。
+工作区、scope 子目录、state 目录及 staging parent 必须预先存在。
+worker_path 必填，没有 PATH、当前可执行文件旁目录或环境变量发现 fallback。
+worker 必须在 workspace、staging 和持久 state 之外。
+staging 不存在时以 0700 创建；已存在时必须是 0700 目录，与 workspace
+同设备。state 从 ledger_path 的物理 parent 推导，Session 必须位于其中。
+workspace、state、staging 两两不可包含。保护整棵 state，因此新生成的
+SQLite WAL/SHM/journal 和 Session 文件也受保护，不依赖 sidecar 预先存在。
+宿主将实际加载的配置路径传入 `App::new(config, config_path)`，只保护该
+配置文件自身，不以其 parent 扩大 deny。配置文件必须存在，不能位于 staging。
+
+tool_scope 必须是非空 workspace-relative 现存目录；绝对路径、父路径遍历、
+控制路径以及解析到 workspace 外的 symlink 均拒绝。它转换为物理绝对路径，
+与工具准备出的绝对资源使用同一 policy namespace；模型文件路径仍相对 workspace。
+Read 声明 Read；Write 同时声明 Create/Update；Edit 声明 Read/Update 及读写
+capabilities。Read 无需审批，Write/Edit 始终需审批。目录外资源不会因审批而放行。
+
+allow_shell 可省略，默认 false；增加四工具库存不会扩张旧 safe 配置的执行权限。
+开启后 Shell 仍需审批，并保守声明整个 workspace 的读/创建/更新/删除/执行能力。
+因此仅授权 safe 子目录时，Shell 即便 cwd=safe 也拒绝；只有显式授权整个 workspace
+（tool_scope="."）才可能执行。不能通过解析 command 或缩小 cwd 假称 Shell 只影响子目录。
+所有工具实际执行均受沙箱网络、控制路径、输入/输出上限和取消清理约束；
+路径 pinning、原子 staging 和 sandbox 是不同防线，不宣称 profile 单独解决 TOCTOU。
+
+生产装配的固定宿主限额：Read/Write 内容各 1,048,576 bytes，完整 ToolResult
+envelope 至多 1,048,576 bytes（不只是 pipe 内容），Shell command 至多
+65,536 bytes；每次工具执行 timeout 为 30 秒。Shell stdin ceiling 为 0，
+只接受空输入。文件 worker 协议输入有独立 67,108,864-byte 宿主 ceiling，
+它不提升或消费 output grant。上述值是宿主代码选择的上限，不是模型可提升的参数；
+实际执行还取 policy/grant 与 adapter requirements 的更窄约束。Provider 的
+timeout_secs 是另一条模型请求 timeout，不放宽工具 timeout。
+
+新增装配校验仅执行准备与 policy 判断，不以伪 worker 响应冒充真实 effects。
+实际 worker/HTTP/stdio effects 继续由进程 fixture 验证。本装配不等于 AgentRunner 完成。
+
+```sh
+cargo test -p kolyan-server-service --bin kolyan-server assembly::tests
+```
 
 `execution.start` 返回本次执行完成或审批挂起的结果；可同时发送其他 RPC。
 挂起检查点已持久化，可以关闭进程，重启后用原执行身份和 approval_id 确认。

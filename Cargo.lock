@@ -1092,6 +1092,7 @@ dependencies = [
  "kolyan-runtime",
  "kolyan-server",
  "kolyan-storage",
+ "kolyan-tool-worker",
  "kolyan-tools",
  "kolyan-trace",
  "reqwest",

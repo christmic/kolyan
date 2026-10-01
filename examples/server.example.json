@@ -1,7 +1,10 @@
 {
-  "ledger_path": ".kolyan/ledger.sqlite",
-  "session_root": ".kolyan/sessions",
-  "workspace": ".",
+  "ledger_path": "/host/agent/state/ledger.sqlite",
+  "session_root": "/host/agent/state/sessions",
+  "workspace": "/host/agent/workspace",
+  "worker_path": "/host/bin/kolyan-server-tool-worker",
+  "staging_root": "/host/agent/staging",
+  "allow_shell": false,
   "tool_scope": "safe",
   "protocol": "openai_responses",
   "base_url": "https://api.openai.com",

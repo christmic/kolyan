@@ -16,6 +16,12 @@ pub struct Config {
     pub ledger_path: PathBuf,
     pub session_root: PathBuf,
     pub workspace: PathBuf,
+    /// Trusted production executable; no PATH/sibling-binary discovery.
+    pub worker_path: PathBuf,
+    pub staging_root: PathBuf,
+    /// Shell's additional execute/delete ceiling must be explicitly enabled.
+    #[serde(default)]
+    pub allow_shell: bool,
     pub tool_scope: String,
     pub protocol: String,
     pub base_url: String,

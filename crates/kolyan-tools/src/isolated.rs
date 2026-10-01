@@ -41,6 +41,7 @@ impl std::error::Error for IsolatedToolSetError {}
 
 /// Default environment inventory for Agent assembly. This does not issue grants,
 /// select Agent permissions, register policy ceilings or schedule child Agents.
+#[derive(Clone)]
 pub struct IsolatedToolSet {
     files: IsolatedFileTools,
     shell: IsolatedShellTool,

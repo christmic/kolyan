@@ -10,9 +10,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path =
         std::env::var_os("KOLYAN_SERVER_CONFIG").ok_or("KOLYAN_SERVER_CONFIG is required")?;
-    let config: config::Config = serde_json::from_slice(&std::fs::read(path)?)?;
+    let path = std::path::PathBuf::from(path);
+    let config: config::Config = serde_json::from_slice(&std::fs::read(&path)?)?;
     let transport = config.http.clone();
-    let app = assembly::App::new(config)?;
+    let app = assembly::App::new(config, &path)?;
     if let Some(transport) = transport {
         return http::serve(app, transport).await;
     }
