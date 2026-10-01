@@ -1,0 +1,12 @@
+{
+  "id": "exact-worker-binding-v1",
+  "expected_rows": 6,
+  "cases": [
+    {"id":"matching-plan","mutation":"none","expected_success":true,"expected_content":"after"},
+    {"id":"foreign-host-workspace","mutation":"workspace","expected_success":false,"expected_content":"before"},
+    {"id":"changed-parent-identity","mutation":"parent_identity","expected_success":false,"expected_content":"before"},
+    {"id":"changed-target-identity","mutation":"target_identity","expected_success":false,"expected_content":"before"},
+    {"id":"missing-required-binding","mutation":"missing_binding","expected_success":false,"expected_content":"before"},
+    {"id":"raw-operation-refused","mutation":"raw_operation","expected_success":false,"expected_content":"before"}
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "id":"file-operation-permission-ceilings-v1",
+  "expected_rows":7,
+  "scope":{
+    "execution":{"session_id":"permissions-session","turn_id":"permissions-turn","execution_id":"permissions-execution"},
+    "step_id":"permissions-step",
+    "agent_snapshot_digest":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  "cases":[
+    {
+      "id":"new-write-missing-create","initial_content":null,
+      "call":{"id":"new-write-missing-create","name":"file.write","arguments":{"path":"new-write-missing-create.txt","content":"created"}},
+      "manifest":{"capabilities":["filesystem_write"],"effects":["update"]},
+      "expected":{"decision":"deny","refused":true,"execution_attempted":false,"effect_changed":false,"final_content":null,"error_contains":"capability ceiling"}
+    },
+    {
+      "id":"existing-write-missing-create","initial_content":"original",
+      "call":{"id":"existing-write-missing-create","name":"file.write","arguments":{"path":"existing-write-missing-create.txt","content":"replaced"}},
+      "manifest":{"capabilities":["filesystem_write"],"effects":["update"]},
+      "expected":{"decision":"deny","refused":true,"execution_attempted":false,"effect_changed":false,"final_content":"original","error_contains":"capability ceiling"}
+    },
+    {
+      "id":"edit-missing-read-capability","initial_content":"alpha keep",
+      "call":{"id":"edit-missing-read-capability","name":"file.edit","arguments":{"path":"edit-missing-read-capability.txt","old_text":"alpha","new_text":"beta"}},
+      "manifest":{"capabilities":["filesystem_write"],"effects":["read","update"]},
+      "expected":{"decision":"deny","refused":true,"execution_attempted":false,"effect_changed":false,"final_content":"alpha keep","error_contains":"capability ceiling"}
+    },
+    {
+      "id":"edit-missing-read-effect","initial_content":"alpha keep",
+      "call":{"id":"edit-missing-read-effect","name":"file.edit","arguments":{"path":"edit-missing-read-effect.txt","old_text":"alpha","new_text":"beta"}},
+      "manifest":{"capabilities":["filesystem_read","filesystem_write"],"effects":["update"]},
+      "expected":{"decision":"deny","refused":true,"execution_attempted":false,"effect_changed":false,"final_content":"alpha keep","error_contains":"capability ceiling"}
+    },
+    {
+      "id":"new-write-full-manifest","initial_content":null,
+      "call":{"id":"new-write-full-manifest","name":"file.write","arguments":{"path":"new-write-full-manifest.txt","content":"created"}},
+      "manifest":{"capabilities":["filesystem_write"],"effects":["create","update"]},
+      "expected":{"decision":"allow","refused":false,"execution_attempted":true,"effect_changed":true,"final_content":"created","error_contains":null}
+    },
+    {
+      "id":"existing-write-full-manifest","initial_content":"original",
+      "call":{"id":"existing-write-full-manifest","name":"file.write","arguments":{"path":"existing-write-full-manifest.txt","content":"replaced"}},
+      "manifest":{"capabilities":["filesystem_write"],"effects":["create","update"]},
+      "expected":{"decision":"allow","refused":false,"execution_attempted":true,"effect_changed":true,"final_content":"replaced","error_contains":null}
+    },
+    {
+      "id":"edit-full-manifest","initial_content":"alpha keep",
+      "call":{"id":"edit-full-manifest","name":"file.edit","arguments":{"path":"edit-full-manifest.txt","old_text":"alpha","new_text":"beta"}},
+      "manifest":{"capabilities":["filesystem_read","filesystem_write"],"effects":["read","update"]},
+      "expected":{"decision":"allow","refused":false,"execution_attempted":true,"effect_changed":true,"final_content":"beta keep","error_contains":null}
+    }
+  ]
+}

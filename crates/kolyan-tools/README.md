@@ -1,5 +1,43 @@
 # Workspace 工具边界
 
+## Isolated Agent environment tools
+
+`IsolatedToolSet` assembles exactly `file.read`, `file.write`, `file.edit` and
+`shell` under one physical workspace. It is the inventory for Agent host assembly,
+not an Agent Runner. Named or inline Agent permissions must filter both advertised
+schemas and actual invocation routing. `agent.invoke` is orchestration and is
+not part of this environment inventory.
+
+Both adapters implement Core's mandatory asynchronous preparation and scoped
+`ToolInvocation` port. Preparation derives claims and binds implementation and
+physical execution plans; execution validates the exact grant against independently
+admitted scope and current policy. There is no optional grant or ambient fallback.
+The host supplies the trusted worker binary, external staging root, protected
+control paths and byte/time limits. Assembly unions both adapters' protected paths
+and denies the staging root to sibling Shell execution.
+
+File workers consume only `ExactFileWorkerRequest`. They verify saved directory
+and leaf identities through nofollow handles instead of resolving model paths
+again. Write/edit create a 0700 private staging directory outside the workspace,
+on the same filesystem, and replace the target through pinned parent handles.
+Only the selected staging leaf is admitted. Rename is the effect commit point;
+this does not promise a transaction against an uncooperative external writer,
+cross-filesystem replacement or power-loss durability.
+
+Input and output bounds are independent. Shell stdin is empty; the trusted file
+protocol has a bounded input envelope. Complete serialized `ToolResult` size is
+checked separately from process output. Shell results preserve readable UTF-8 or
+explicit lossless hex for binary bytes, along with exit status and error state.
+Cancellation reaches the real process group and waits for cleanup; it does not
+roll back an effect already committed.
+
+Module tests remain under their source modules. Cross-crate real worker and
+sibling-shell mutation matrices live in `kolyan-integration-tests/tests/tools/`,
+with separate datasets and test-owned JSONL export before comparisons. They are
+real local subprocess tests, not actual-model or multi-Agent acceptance.
+
+## Trusted in-process primitives
+
 `RestrictedFileTool` 和 `RestrictedShellTool` 在构造时打开受信任的根目录，
 后续访问均通过 `cap_std::fs::Dir` 相对句柄完成，不再将模型路径拼成绝对路径
 交给 `std::fs`。打开根目录失败会保留错误，后续文件操作失败关闭。

@@ -1,0 +1,17 @@
+{
+  "expected_rows": 12,
+  "cases": [
+    {"id":"read_baseline","operation":{"name":"file.read","arguments":{"path":"parent/note"}},"mutation_command":null,"expected_stage":"success","expected_target":"alpha initial"},
+    {"id":"write_baseline","operation":{"name":"file.write","arguments":{"path":"parent/note","content":"replacement"}},"mutation_command":null,"expected_stage":"success","expected_target":"replacement"},
+    {"id":"edit_baseline","operation":{"name":"file.edit","arguments":{"path":"parent/note","old_text":"alpha","new_text":"beta"}},"mutation_command":null,"expected_stage":"success","expected_target":"beta initial"},
+    {"id":"read_parent_rebound","operation":{"name":"file.read","arguments":{"path":"parent/note"}},"mutation_command":"mv parent saved; mkdir parent; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"write_parent_rebound","operation":{"name":"file.write","arguments":{"path":"parent/note","content":"replacement"}},"mutation_command":"mv parent saved; mkdir parent; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"edit_parent_rebound","operation":{"name":"file.edit","arguments":{"path":"parent/note","old_text":"alpha","new_text":"beta"}},"mutation_command":"mv parent saved; mkdir parent; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"read_leaf_rebound","operation":{"name":"file.read","arguments":{"path":"parent/note"}},"mutation_command":"mv parent/note parent/saved; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"write_leaf_rebound","operation":{"name":"file.write","arguments":{"path":"parent/note","content":"replacement"}},"mutation_command":"mv parent/note parent/saved; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"edit_leaf_rebound","operation":{"name":"file.edit","arguments":{"path":"parent/note","old_text":"alpha","new_text":"beta"}},"mutation_command":"mv parent/note parent/saved; printf redirected > parent/note","expected_stage":"worker_refusal","expected_target":"redirected"},
+    {"id":"read_symlink_rebound","operation":{"name":"file.read","arguments":{"path":"parent/note"}},"mutation_command":"mv parent/note parent/saved; ln -s ../sibling parent/note","expected_stage":"admission_refusal","expected_target":"sibling content"},
+    {"id":"write_symlink_rebound","operation":{"name":"file.write","arguments":{"path":"parent/note","content":"replacement"}},"mutation_command":"mv parent/note parent/saved; ln -s ../sibling parent/note","expected_stage":"admission_refusal","expected_target":"sibling content"},
+    {"id":"edit_symlink_rebound","operation":{"name":"file.edit","arguments":{"path":"parent/note","old_text":"alpha","new_text":"beta"}},"mutation_command":"mv parent/note parent/saved; ln -s ../sibling parent/note","expected_stage":"admission_refusal","expected_target":"sibling content"}
+  ]
+}
