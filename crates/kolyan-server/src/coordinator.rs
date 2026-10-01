@@ -238,3 +238,6 @@ fn is_terminal(state: ExecutionState) -> bool {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod boundary_tests;

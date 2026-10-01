@@ -666,3 +666,13 @@ one earlier boundary admission and one later committed suspension. The three
 write/edit/shell approvals remain three, not six, suspension facts. This is real
 local subprocess/OS/HTTP evidence with scripted Provider responses, not actual
 model-network or autonomous recursive Agent acceptance.
+
+Coordinator boundary regressions passed on Memory and SQLite: admission alone
+remains Running and is not resumable; a saved checkpoint followed by suspension
+is resumable; cancellation and foreign execution facts cannot resurrect it
+(`/tmp/kolyan-l5-server-boundary-tests-v2.log`). The existing approval recovery
+dataset previously expected suspension before the requested checkpoint. Its
+sequence now explicitly requires boundary admission, then approval checkpoint,
+then suspension, retaining approval resolution, tool execution and completion.
+That existing reconstruction target passed unchanged scenario assertions after
+this fact-contract migration. Full workspace revalidation is still in progress.

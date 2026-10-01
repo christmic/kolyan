@@ -1,7 +1,8 @@
 {"kind":"execution_started"}
 {"kind":"step_started"}
-{"kind":"execution_suspended"}
+{"kind":"execution_boundary_admitted"}
 {"kind":"approval_requested"}
+{"kind":"execution_suspended"}
 {"kind":"approval_resolved"}
 {"kind":"tool_execution_started"}
 {"kind":"tool_execution_completed"}
