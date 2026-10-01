@@ -3,6 +3,62 @@ use futures_util::FutureExt;
 use std::fs;
 use std::sync::Arc;
 
+/// Local primitive checks exercise the synchronous internals, not an unmanaged
+/// production ToolExecutor entrypoint. Governed checks use explicit scoped input.
+trait PrimitiveTestCall {
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_>;
+}
+
+impl PrimitiveTestCall for RestrictedShellTool {
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+        Box::pin(async move { self.execute_query(call) })
+    }
+}
+
+impl PrimitiveTestCall for RestrictedFileTool {
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+        Box::pin(async move { self.execute_file(call) })
+    }
+}
+
+impl PrimitiveTestCall for PolicyEnforcingTool<RestrictedFileTool, kolyan_policy::PolicyEngine> {
+    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+        Box::pin(async move {
+            let prepared = self.prepare(call).await?;
+            let mut source_policy = kolyan_policy::PolicyEngine::default();
+            for manifest in RestrictedFileTool::tool_manifests() {
+                source_policy.register(manifest);
+            }
+            let scope = kolyan_policy::ToolExecutionScope {
+                execution: kolyan_types::ExecutionKey {
+                    session_id: "unit-session".into(),
+                    turn_id: "unit-turn".into(),
+                    execution_id: "unit-execution".into(),
+                },
+                step_id: "unit-step".into(),
+                agent_snapshot_digest: None,
+            };
+            let grant = kolyan_policy::PreparedGrant::issue(
+                &prepared,
+                source_policy.decide_prepared(&prepared, &PolicyContext::default()),
+                kolyan_policy::ApprovalEvidence::NotConfirmed,
+                scope.clone(),
+            )
+            .map_err(|error| ToolError::PolicyDenied {
+                message: error.to_string(),
+            })?;
+            self.execute_invocation(ToolInvocation {
+                prepared,
+                grant,
+                scope,
+                policy_revision: source_policy.revision(),
+                control: kolyan_core::TurnControl::default(),
+            })
+            .await
+        })
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn rejects_symlink_escape_for_reads_writes_and_queries() {

@@ -4,7 +4,9 @@
 use std::io::Read;
 use std::path::PathBuf;
 
-use kolyan_tools::{FileOperation, FileOperationLimits, FileOperationResult, FileOperations};
+use kolyan_tools::{
+    ExactFileWorkerRequest, FileOperationLimits, FileOperationResult, execute_exact,
+};
 use thiserror::Error;
 
 const MAX_PROTOCOL_BYTES: usize = 64 * 1024 * 1024;
@@ -21,6 +23,8 @@ pub struct WorkerConfig {
 pub enum WorkerError {
     #[error("invalid worker configuration")]
     Configuration,
+    #[error("request physical workspace does not match trusted worker configuration")]
+    WorkspaceMismatch,
     #[error("worker input exceeds its byte limit")]
     InputLimit,
     #[error("invalid worker request: {0}")]
@@ -49,8 +53,10 @@ impl WorkerConfig {
     }
 }
 
-/// Execute exactly one strict typed request. Oversized input and unknown fields
-/// fail before any operation. Callers launch this inside the admitted sandbox.
+/// Execute one exact physical plan. Oversized input, unknown fields and a foreign
+/// workspace fail before effects. The executor validates pinned directory and
+/// target identities; it never resolves the operation's model path again.
+/// Callers must launch this inside the independently admitted sandbox.
 pub fn execute_request(
     config: &WorkerConfig,
     input: impl Read,
@@ -63,8 +69,11 @@ pub fn execute_request(
     if bytes.len() > config.max_input_bytes {
         return Err(WorkerError::InputLimit);
     }
-    let operation: FileOperation = serde_json::from_slice(&bytes)?;
-    Ok(FileOperations::new(&config.workspace, config.file_limits).execute(&operation)?)
+    let request: ExactFileWorkerRequest = serde_json::from_slice(&bytes)?;
+    if config.workspace != request.binding.workspace.physical_path {
+        return Err(WorkerError::WorkspaceMismatch);
+    }
+    Ok(execute_exact(&request, config.file_limits)?)
 }
 
 #[cfg(test)]

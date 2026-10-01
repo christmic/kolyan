@@ -2,6 +2,8 @@
 //! Command text is never parsed to infer safety. Grants are supplied by the
 //! trusted host; this adapter does not issue authority or record effect receipts.
 
+mod turn;
+
 use std::path::{Component, Path, PathBuf};
 use std::time::Duration;
 
@@ -163,6 +165,7 @@ impl IsolatedShellTool {
                     command: SandboxCommand::Shell(arguments.command),
                     cwd,
                     stdin: Vec::new(),
+                    max_input_bytes: 0,
                     timeout: Duration::from_millis(timeout_ms),
                     max_output_bytes,
                 },

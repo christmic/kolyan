@@ -1,4 +1,5 @@
-//! Thin trusted helper entrypoint. Workspace and ceilings arrive through host argv.
+//! Exact-plan helper entrypoint. Physical workspace and ceilings arrive through
+//! host argv; stdin cannot replace that configuration or select a raw fallback.
 
 use std::io::Write;
 use std::path::PathBuf;

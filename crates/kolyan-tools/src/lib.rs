@@ -1,9 +1,16 @@
 //! Tool registration and execution boundaries.
 
+mod exact_file;
 mod file_operations;
+mod isolated;
 mod isolated_file;
 mod isolated_shell;
 mod workspace;
+pub use exact_file::{
+    ExactDirectoryBinding, ExactFileBinding, ExactFileIdentity, ExactFileStaging,
+    ExactFileWorkerRequest, execute_exact,
+};
+pub use isolated::{IsolatedToolSet, IsolatedToolSetConfig, IsolatedToolSetError};
 pub use isolated_file::{IsolatedFileConfig, IsolatedFileError, IsolatedFileTools};
 pub use isolated_shell::{
     IsolatedShellConfig, IsolatedShellError, IsolatedShellTool, ShellArguments,
@@ -14,9 +21,12 @@ pub use file_operations::{
     FileOperations, ReadArguments, WriteArguments,
 };
 
-use kolyan_core::{ToolError, ToolExecutor, ToolFuture};
+use kolyan_core::{ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
-use kolyan_policy::{ExecutionGrant, PolicyError, PolicyResolver, ToolManifest};
+use kolyan_policy::{
+    InvocationClaim, PolicyContext, PolicyDecisionKind, PolicyResolver, PreparedCall,
+    ResourceClaim, ToolManifest, ToolRequirements,
+};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -145,8 +155,18 @@ impl RestrictedShellTool {
 }
 
 impl ToolExecutor for RestrictedShellTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        Box::pin(async move { self.execute_query(call) })
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { prepare_restricted(&self.root, call, Self::tool_manifest()) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            validate_restricted(self, &invocation).await?;
+            bounded_result(
+                self.execute_query(invocation.prepared.call().clone())?,
+                &invocation,
+            )
+        })
     }
 }
 
@@ -213,7 +233,9 @@ impl RestrictedFileTool {
                 capabilities: [kolyan_policy::Capability::FilesystemWrite]
                     .into_iter()
                     .collect(),
-                effects: [kolyan_policy::Effect::Update].into_iter().collect(),
+                effects: [kolyan_policy::Effect::Create, kolyan_policy::Effect::Update]
+                    .into_iter()
+                    .collect(),
                 path_scopes: Vec::new(),
                 idempotency: kolyan_policy::Idempotency::NonIdempotent,
                 approval: kolyan_policy::ApprovalMode::Never,
@@ -289,35 +311,147 @@ where
     T: ToolExecutor,
     R: PolicyResolver + 'static,
 {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        match self.resolver.decide(&call).into_grant(&call) {
-            Ok(_grant) => self.inner.execute(call),
-            Err(error) => Box::pin(async move { Err(policy_error(error)) }),
-        }
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        self.inner.prepare(call)
     }
 
-    fn execute_with_grant(&self, call: ToolCall, grant: ExecutionGrant) -> ToolFuture<'_> {
-        if grant.call_id != call.id || grant.tool_name != call.name {
-            return Box::pin(async {
-                Err(ToolError::PolicyDenied {
-                    message: "execution grant does not match the tool call".into(),
-                })
-            });
-        }
-        self.inner.execute(call)
-    }
-}
-
-fn policy_error(error: PolicyError) -> ToolError {
-    ToolError::PolicyDenied {
-        message: error.to_string(),
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            let decision = self.resolver.decide_prepared(
+                &invocation.prepared,
+                &PolicyContext {
+                    turn_id: Some(invocation.scope.execution.turn_id.clone()),
+                    ..Default::default()
+                },
+            );
+            invocation
+                .grant
+                .validate(
+                    &invocation.prepared,
+                    &decision.policy_version,
+                    &invocation.scope,
+                )
+                .map_err(|error| ToolError::PolicyDenied {
+                    message: error.to_string(),
+                })?;
+            if decision.kind == PolicyDecisionKind::Deny
+                || decision.policy_version != invocation.policy_revision
+            {
+                return Err(ToolError::PolicyDenied {
+                    message: decision.reason,
+                });
+            }
+            self.inner.execute_invocation(invocation).await
+        })
     }
 }
 
 impl ToolExecutor for RestrictedFileTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        Box::pin(async move { self.execute_file(call) })
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move {
+            let manifest = Self::tool_manifests()
+                .into_iter()
+                .find(|manifest| manifest.tool_name == call.name)
+                .ok_or_else(|| ToolError::Unavailable {
+                    name: call.name.clone(),
+                })?;
+            prepare_restricted(&self.root, call, manifest)
+        })
     }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            validate_restricted(self, &invocation).await?;
+            bounded_result(
+                self.execute_file(invocation.prepared.call().clone())?,
+                &invocation,
+            )
+        })
+    }
+}
+
+// These deliberately non-process primitives remain explicit host adapters for
+// existing in-process fixtures. They are not the default sandboxed Agent inventory.
+fn prepare_restricted(
+    root: &Workspace,
+    call: ToolCall,
+    manifest: ToolManifest,
+) -> Result<PreparedCall, ToolError> {
+    if call.name != manifest.tool_name {
+        return Err(ToolError::Unavailable { name: call.name });
+    }
+    let object = call
+        .arguments
+        .as_object()
+        .ok_or_else(|| ToolError::Failed {
+            message: "tool arguments must be an object".into(),
+        })?;
+    let path = object.get("path").and_then(Value::as_str).unwrap_or(".");
+    let relative = Workspace::relative(path).map_err(|message| ToolError::Failed { message })?;
+    root.directory()
+        .map_err(|message| ToolError::Failed { message })?;
+    let resource = root.path.join(relative).to_string_lossy().into_owned();
+    let revision = format!("restricted-v2/{}", root.path.display());
+    PreparedCall::new(
+        call,
+        revision,
+        InvocationClaim {
+            tool_name: manifest.tool_name,
+            capabilities: manifest.capabilities,
+            effects: manifest.effects,
+            resource: ResourceClaim {
+                path: Some(resource),
+            },
+            idempotency: manifest.idempotency,
+        },
+        ToolRequirements {
+            process_sandbox: false,
+            max_output_bytes: 1024 * 1024,
+            timeout_ms: 30_000,
+        },
+    )
+    .map_err(|error| ToolError::Failed {
+        message: error.to_string(),
+    })
+}
+
+async fn validate_restricted<T: ToolExecutor>(
+    tool: &T,
+    invocation: &ToolInvocation,
+) -> Result<(), ToolError> {
+    if invocation.control.is_cancelled() {
+        return Err(ToolError::Cancelled);
+    }
+    let current = tool.prepare(invocation.prepared.call().clone()).await?;
+    if current != invocation.prepared || current.requirements().process_sandbox {
+        return Err(ToolError::PolicyDenied {
+            message: "restricted adapter preparation mismatch".into(),
+        });
+    }
+    invocation
+        .grant
+        .validate(&current, &invocation.policy_revision, &invocation.scope)
+        .map_err(|error| ToolError::PolicyDenied {
+            message: error.to_string(),
+        })
+}
+
+fn bounded_result(
+    result: ToolResult,
+    invocation: &ToolInvocation,
+) -> Result<ToolResult, ToolError> {
+    if result.content.len() as u64
+        > invocation
+            .grant
+            .constraints()
+            .max_output_bytes
+            .expect("validated limit")
+    {
+        return Err(ToolError::Failed {
+            message: "tool result exceeds its granted byte limit".into(),
+        });
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
