@@ -133,17 +133,17 @@ fn request(turn_id: &str, text: &str) -> TurnRequest {
     }
 }
 
-fn approval_policy() -> Arc<PolicyEngine> {
+fn approval_policy(root: &std::path::Path) -> Arc<PolicyEngine> {
     let mut policy = PolicyEngine::default();
     policy.register(ToolManifest {
         tool_name: "file.write".into(),
         capabilities: [Capability::FilesystemWrite].into_iter().collect(),
-        effects: [Effect::Update].into_iter().collect(),
-        path_scopes: vec![PathScope::new("safe")],
+        effects: [Effect::Create, Effect::Update].into_iter().collect(),
+        path_scopes: vec![PathScope::new(root.join("safe").to_string_lossy())],
         idempotency: Idempotency::NonIdempotent,
         approval: ApprovalMode::Always,
     });
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     Arc::new(policy)
 }
 
@@ -259,7 +259,7 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
     let session_path = root.join("sessions");
     let store = FileSessionStore::new(&session_path).unwrap();
     store.create("approval-session").unwrap();
-    let policy = approval_policy();
+    let policy = approval_policy(&root);
     let provider = ApprovalProvider {
         calls: Arc::default(),
         requests: Arc::default(),
@@ -399,9 +399,9 @@ async fn session_execution_marks_failure_and_external_cancel() {
                         arguments: json!({"path":"safe/cancel.txt","content":"cancelled"}),
                     },
                 },
-                PolicyEnforcingTool::new(RestrictedFileTool::new(&root), approval_policy()),
+                PolicyEnforcingTool::new(RestrictedFileTool::new(&root), approval_policy(&root)),
             )
-            .with_policy_engine(approval_policy()),
+            .with_policy_engine(approval_policy(&root)),
             approval_request("cancel-turn"),
             "terminal-session",
             "cancel-execution",

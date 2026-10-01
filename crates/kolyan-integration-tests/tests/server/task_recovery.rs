@@ -1,6 +1,12 @@
 //! Offline fixture-driven recovery through the public task execution service.
 //! Seeded execution windows are explicit orchestration inputs, not live models.
 
+#[path = "../common/tool_preparation.rs"]
+pub mod trusted_tools;
+
+#[path = "task_recovery/seed.rs"]
+mod seed;
+
 use std::{
     collections::BTreeSet,
     error::Error,
@@ -14,7 +20,10 @@ use std::{
 };
 
 use futures_util::stream;
-use kolyan_core::{ToolExecutor, ToolFuture, TurnConfig, TurnExecutor, TurnRequest};
+use kolyan_core::{
+    ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture, TurnConfig, TurnExecutor,
+    TurnRequest,
+};
 use kolyan_ledger::{
     FactJournal, LedgerEvent, LedgerEventKind, LedgerStore, SqliteFactJournal, SqliteLedger,
 };
@@ -104,7 +113,20 @@ struct FixtureTool {
     counters: Arc<Counters>,
 }
 impl ToolExecutor for FixtureTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move {
+            if call.name != "fixture.lookup" {
+                return Err(kolyan_core::ToolError::Unavailable { name: call.name });
+            }
+            trusted_tools::prepare(call)
+        })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        let call = match trusted_tools::validate(&invocation) {
+            Ok(call) => call,
+            Err(error) => return Box::pin(async move { Err(error) }),
+        };
         assert_eq!(call.id, self.result.call_id);
         self.counters.tools.fetch_add(1, Ordering::SeqCst);
         let result = self.result.clone();
@@ -145,6 +167,12 @@ impl Context<'_> {
             self.data["bindings"][operation["binding"].as_str().unwrap_or("original")].clone(),
         )
         .unwrap()
+    }
+    fn effect_id(&self, binding: &AttemptBinding) -> String {
+        self.data["effect_id"]
+            .as_str()
+            .unwrap()
+            .replace("${turn}", &binding.execution.turn_id)
     }
 }
 
@@ -349,10 +377,15 @@ async fn perform(context: &mut Context<'_>, operation: &Value) -> Result<(), Fai
         }
         "seed" => {
             let ledger = SqliteLedger::open(context.root.join("ledger.sqlite"))?;
-            for seed in context.data["seed_groups"][operation["group"].as_str().unwrap()]
-                .as_array()
-                .unwrap()
-            {
+            let group = &context.data["seed_groups"][operation["group"].as_str().unwrap()];
+            if group.is_object() {
+                let events = seed::prepared_window(context, &binding, group).await?;
+                for event in events {
+                    ledger.append(event)?;
+                }
+                return Ok(());
+            }
+            for seed in group.as_array().unwrap() {
                 let seed = substitute(seed, context, &binding);
                 let event_id = seed["event_id"].as_str().unwrap().to_owned();
                 ledger.append(LedgerEvent {
@@ -394,7 +427,8 @@ async fn perform(context: &mut Context<'_>, operation: &Value) -> Result<(), Fai
                     result: serde_json::from_value(context.data["tool_result"].clone())?,
                     counters: context.counters.clone(),
                 },
-            );
+            )
+            .with_policy_engine(trusted_tools::policy());
             let request = TurnRequest {
                 turn_id: binding.execution.turn_id.clone(),
                 model_request: serde_json::from_value(context.data["request"].clone())?,
@@ -425,7 +459,7 @@ async fn perform(context: &mut Context<'_>, operation: &Value) -> Result<(), Fai
             let request = ReconciliationRequest {
                 reconciliation_id: id.into(),
                 execution: serde_json::from_value(json!(binding.execution))?,
-                effect_id: context.data["effect_id"].as_str().unwrap().into(),
+                effect_id: context.effect_id(&binding),
             };
             let inspector = FixtureInspector {
                 resolution: serde_json::from_value(operation["resolution"].clone())?,
@@ -512,10 +546,10 @@ fn substitute(value: &Value, context: &Context<'_>, binding: &AttemptBinding) ->
                 ("execution", binding.execution.execution_id.as_str()),
                 ("session", binding.execution.session_id.as_str()),
                 ("turn", binding.execution.turn_id.as_str()),
-                ("effect", context.data["effect_id"].as_str().unwrap()),
             ] {
                 text = text.replace(&format!("${{{key}}}"), value);
             }
+            text = text.replace("${effect}", &context.effect_id(binding));
             json!(text)
         }
         Value::Array(values) => Value::Array(

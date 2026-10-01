@@ -1063,6 +1063,7 @@ dependencies = [
  "kolyan-core",
  "kolyan-ledger",
  "kolyan-model",
+ "kolyan-policy",
  "kolyan-runtime",
  "kolyan-storage",
  "kolyan-trace",

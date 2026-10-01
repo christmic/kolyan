@@ -1,5 +1,7 @@
 //! Retry facade tests use native Ledger facts and the actual trusted reconciler.
 
+mod preparation;
+
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
@@ -198,52 +200,7 @@ fn stop(harness: &Harness, recovery: bool) {
 }
 
 fn effect(harness: &Harness, id: &str) -> ReconciliationRequest {
-    let prefix = format!("e/effect/{id}");
-    let prepared = EffectRequest {
-        effect_id: id.into(),
-        operation_kind: "file.write".into(),
-        input_digest:
-            json!({"name": "file.write", "arguments": {"path": "safe/a", "content": "result"}})
-                .to_string(),
-        requirements: vec![],
-        policy_revision: "p1".into(),
-    };
-    let grant = EffectGrant {
-        authorization_id: format!("{prefix}/authorized"),
-        effect_id: id.into(),
-        input_digest: prepared.input_digest.clone(),
-        constraints_digest: "executor-scope".into(),
-        authority_revision: "p1".into(),
-    };
-    for (suffix, kind, payload) in [
-        ("prepared", LedgerEventKind::EffectPrepared, json!(prepared)),
-        (
-            "authorized",
-            LedgerEventKind::EffectAuthorized,
-            json!(grant),
-        ),
-        (
-            "started",
-            LedgerEventKind::EffectStarted,
-            json!({"effect_id": id}),
-        ),
-    ] {
-        append(
-            &harness.service,
-            &format!("{prefix}/{suffix}"),
-            kind,
-            payload,
-        );
-    }
-    ReconciliationRequest {
-        reconciliation_id: "inspection".into(),
-        execution: ExecutionKey {
-            session_id: "s".into(),
-            turn_id: "t".into(),
-            execution_id: "e".into(),
-        },
-        effect_id: id.into(),
-    }
+    preparation::effect(harness, id)
 }
 
 struct Inspector(ReconciliationResolution);
@@ -413,7 +370,7 @@ fn any_committed_receipt_blocks_whole_attempt_retry() {
                 content: "written".into(),
                 is_error: false,
             },
-            executor_id: "file-executor".into(),
+            executor_id: "tool/file.write".into(),
             executor_revision: "r1".into(),
             evidence: "verified committed external transaction".into(),
         },
@@ -535,11 +492,12 @@ fn foreign_not_committed_inspection_cannot_resolve_this_effect() {
     let harness = harness(None, false);
     let request = effect(&harness, "step/call");
     stop(&harness, true);
+    let decision_id = format!("e/effect/{}/reconciliation/inspection", request.effect_id);
     let mut foreign = request;
     foreign.execution.session_id = "other-session".into();
     append(
         &harness.service,
-        "e/effect/step/call/reconciliation/inspection",
+        &decision_id,
         LedgerEventKind::EffectReconciled,
         json!({"request": foreign, "resolution": ReconciliationResolution::NotCommitted { evidence: "another transaction rolled back".into() }}),
     );

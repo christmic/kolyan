@@ -14,17 +14,13 @@
     "tool_then_failed":{"answer":"unused","call":{"id":"recovery-call","name":"fixture.lookup","arguments":{"key":"recover-value"}},"failure":"fixture fails after observing the actual committed tool result","failure_when_observed":true}
   },
   "tool_result":{"call_id":"recovery-call","content":"RECOVERY_TOOL_OUTPUT","is_error":false},
-  "effect_id":"seed-step/recovery-call",
+  "effect_id":"${turn}-step-0/recovery-call",
   "seed_groups":{
     "execution":[
       {"event_id":"${execution}/task-binding","kind":"execution_bound","payload":{"binding":{"task_id":"${task}","invocation_id":"${invocation}","attempt_id":"${attempt}","session_id":"${session}","turn_id":"${turn}","execution_id":"${execution}"}}},
       {"event_id":"${execution}/execution-started","kind":"execution_started","payload":{"session_id":"${session}","turn_id":"${turn}","execution_id":"${execution}"}}
     ],
-    "effect":[
-      {"event_id":"${execution}/effect/${effect}/prepared","kind":"effect_prepared","payload":{"effect_id":"${effect}","operation_kind":"fixture.lookup","input_digest":"{\"arguments\":{\"key\":\"recover-value\"},\"name\":\"fixture.lookup\"}","requirements":[],"policy_revision":"fixture-r1"}},
-      {"event_id":"${execution}/effect/${effect}/authorized","kind":"effect_authorized","payload":{"authorization_id":"${execution}/effect/${effect}/authorized","effect_id":"${effect}","input_digest":"{\"arguments\":{\"key\":\"recover-value\"},\"name\":\"fixture.lookup\"}","constraints_digest":"fixture-scope","authority_revision":"fixture-r1"}},
-      {"event_id":"${execution}/effect/${effect}/started","kind":"effect_started","payload":{"effect_id":"${effect}"}}
-    ]
+    "effect":{"source":"prepared_runtime","provider":"tool","events":["effect_prepared","effect_authorized","effect_started"]}
   },
   "cases":[
     {"name":"task_admitted_before_execution_journal","operations":[

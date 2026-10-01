@@ -111,6 +111,13 @@ fn request() -> ApprovalRequest {
             tool_name: "file.write".into(),
             args_fingerprint: "fp".into(),
             policy_version: "v1".into(),
+            // Storage round-trips this opaque fixture; it is not executable authority.
+            prepared_calls: Vec::new(),
+            preparation_errors: Vec::new(),
+            execution_scope: serde_json::from_value(json!({
+                "execution": {"session_id":"session-1", "turn_id":"turn-1", "execution_id":"execution-1"},
+                "step_id":"turn-1-step-0", "agent_snapshot_digest":null
+            })).unwrap(),
             approved_call_ids: Vec::new(),
             max_tool_calls: None,
             tool_calls_used: 0,

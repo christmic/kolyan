@@ -102,13 +102,13 @@ fn executor<P: ModelProvider>(
 ) -> TurnExecutor<P, PolicyEnforcingTool<RestrictedFileTool, PolicyEngine>> {
     let mut policy = PolicyEngine::default();
     for mut manifest in RestrictedFileTool::tool_manifests() {
-        manifest.path_scopes = vec![PathScope::new("safe")];
+        manifest.path_scopes = vec![PathScope::new(root.join("safe").to_string_lossy())];
         if manifest.tool_name == "file.write" {
             manifest.approval = ApprovalMode::Always;
         }
         policy.register(manifest);
     }
-    policy.restrict_workspace("safe");
+    policy.restrict_workspace(root.join("safe").to_string_lossy());
     let policy = Arc::new(policy);
     TurnExecutor::with_tools(
         provider,
@@ -435,10 +435,25 @@ fn verify_case(root: &Path, data: &Value, case: &Value, bound: &AttemptBinding) 
             .iter()
             .find(|receipt| receipt.payload["output"]["call_id"] == call.payload["call_id"])
             .unwrap();
-        assert_eq!(receipt.payload["input"]["name"], call.payload["name"]);
         assert_eq!(
-            receipt.payload["input"]["arguments"],
+            receipt.payload["input"]["prepared"]["call"]["name"],
+            call.payload["name"]
+        );
+        assert_eq!(
+            receipt.payload["input"]["prepared"]["call"]["arguments"],
             call.payload["arguments"]
+        );
+        assert_eq!(
+            receipt.payload["input"]["prepared"]["call"]["id"],
+            call.payload["call_id"]
+        );
+        assert_eq!(
+            receipt.payload["input"]["scope"]["execution"]["execution_id"],
+            receipt.binding.execution_id
+        );
+        assert_eq!(
+            receipt.payload["input"]["scope"]["execution"]["turn_id"],
+            receipt.binding.turn_id
         );
         assert_eq!(receipt.payload["output"]["is_error"], false);
         assert!(rows.iter().any(|row| {

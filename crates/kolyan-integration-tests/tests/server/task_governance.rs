@@ -90,10 +90,14 @@ fn executor(
     root: &Path,
     data: &Value,
 ) -> TurnExecutor<Scripted, PolicyEnforcingTool<RestrictedFileTool, PolicyEngine>> {
-    let scope = data["workspace_scope"].as_str().unwrap();
+    let scope = root
+        .join("workspace")
+        .join(data["workspace_scope"].as_str().unwrap())
+        .to_string_lossy()
+        .into_owned();
     let mut policy = PolicyEngine::default();
     for mut manifest in RestrictedFileTool::tool_manifests() {
-        manifest.path_scopes = vec![PathScope::new(scope)];
+        manifest.path_scopes = vec![PathScope::new(&scope)];
         if manifest.tool_name == "file.write" {
             manifest.approval = ApprovalMode::Always;
         }
