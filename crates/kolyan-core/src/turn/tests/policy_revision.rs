@@ -43,6 +43,8 @@ async fn rule_change_rejects_old_approval_even_when_decision_kind_is_unchanged()
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("revision-turn"))
+    .with_policy_engine(fixture_policy())
     .with_policy_engine(Arc::new(policy));
     let approval = match executor
         .start_resumable(TurnRequest {

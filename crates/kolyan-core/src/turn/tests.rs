@@ -8,6 +8,9 @@ use kolyan_model::{
 use serde_json::Value;
 
 mod policy_revision;
+pub(crate) mod preparation;
+mod prepared_authority;
+use preparation::{fixture_key, fixture_policy, fixture_prepare, fixture_validate};
 
 #[tokio::test]
 async fn no_progress_stops_repeated_tool_results_before_max_steps() {
@@ -42,6 +45,8 @@ async fn no_progress_stops_repeated_tool_results_before_max_steps() {
         },
         MockTool,
     )
+    .with_execution_key(fixture_key("progress"))
+    .with_policy_engine(fixture_policy())
     .with_policy_engine(Arc::new(policy));
     let error = executor
         .execute(TurnRequest {
@@ -158,6 +163,8 @@ async fn failed_model_stream_recording_prevents_tool_execution() {
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("stream-recording-failure"))
+    .with_policy_engine(fixture_policy())
     .with_step_event_recorder(Arc::new(BrokenStreamRecorder));
     let error = executor
         .execute(TurnRequest {
@@ -206,6 +213,8 @@ async fn required_tool_choice_is_preserved_across_model_steps() {
         },
         MockTool,
     )
+    .with_execution_key(fixture_key("required-across-steps"))
+    .with_policy_engine(fixture_policy())
     .with_event_recorder(choices.clone())
     .execute(TurnRequest {
         turn_id: "required-across-steps".into(),
@@ -368,6 +377,8 @@ async fn max_steps_is_a_completed_turn_outcome() {
         tool_call: call,
     };
     let execution = TurnExecutor::with_tools(provider, MockTool)
+        .with_execution_key(fixture_key("turn-max-steps"))
+        .with_policy_engine(fixture_policy())
         .execute_with_events(
             TurnRequest {
                 turn_id: "turn-max-steps".into(),
@@ -404,7 +415,9 @@ async fn failed_turn_stream_contains_terminal_event_before_error() {
         saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         tool_call: call,
     };
-    let executor = TurnExecutor::with_tools(provider, FailingTool);
+    let executor = TurnExecutor::with_tools(provider, FailingTool)
+        .with_execution_key(fixture_key("turn-stream-failed"))
+        .with_policy_engine(fixture_policy());
     let events = executor
         .execute_event_stream(
             TurnRequest {
@@ -443,7 +456,9 @@ async fn returns_tool_unavailable_instead_of_dropping_tool_calls() {
     let executor = TurnExecutor::new(MockProvider {
         stop_reason: StopReason::ToolUse,
         content: vec![ContentBlock::ToolCall { call: call.clone() }],
-    });
+    })
+    .with_execution_key(fixture_key("turn-tool"))
+    .with_policy_engine(fixture_policy());
     let error = executor
         .execute(TurnRequest {
             turn_id: "turn-tool".into(),
@@ -566,8 +581,13 @@ impl ModelProvider for MultiApprovalProvider {
 struct MockTool;
 
 impl ToolExecutor for MockTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { fixture_prepare(call) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
+            let call = fixture_validate(&invocation)?;
             Ok(ToolResult {
                 call_id: call.id,
                 content: "count=1".into(),
@@ -589,7 +609,9 @@ async fn executes_tool_result_and_runs_a_second_step() {
         saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         tool_call: call,
     };
-    let executor = TurnExecutor::with_tools(provider.clone(), MockTool);
+    let executor = TurnExecutor::with_tools(provider.clone(), MockTool)
+        .with_execution_key(fixture_key("turn-multi-step"))
+        .with_policy_engine(fixture_policy());
     let result = executor
         .execute(TurnRequest {
             turn_id: "turn-multi-step".into(),
@@ -638,8 +660,13 @@ async fn rejects_cancelled_turn_before_starting_a_step() {
 struct FailingTool;
 
 impl ToolExecutor for FailingTool {
-    fn execute(&self, _call: ToolCall) -> ToolFuture<'_> {
-        Box::pin(async {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { fixture_prepare(call) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            fixture_validate(&invocation)?;
             Err(ToolError::Failed {
                 message: "synthetic tool failure".into(),
             })
@@ -659,12 +686,13 @@ async fn continue_batch_converts_tool_failure_to_error_result() {
         saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         tool_call: call,
     };
-    let executor = TurnExecutor::with_tools(provider, FailingTool).with_tool_dispatch_policy(
-        ToolDispatchPolicy {
+    let executor = TurnExecutor::with_tools(provider, FailingTool)
+        .with_execution_key(fixture_key("turn-continue-batch"))
+        .with_policy_engine(fixture_policy())
+        .with_tool_dispatch_policy(ToolDispatchPolicy {
             mode: ToolDispatchMode::Serial,
             on_error: ToolErrorPolicy::ContinueBatch,
-        },
-    );
+        });
     let execution = executor
         .execute_with_events(
             TurnRequest {
@@ -716,6 +744,8 @@ async fn policy_plan_blocks_denied_calls_before_tool_execution() {
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("turn-policy-denied"))
+    .with_policy_engine(fixture_policy())
     .with_policy_engine(Arc::new(policy))
     .with_tool_dispatch_policy(ToolDispatchPolicy {
         mode: ToolDispatchMode::Serial,
@@ -772,8 +802,10 @@ async fn approval_pauses_turn_until_control_approves_the_grant() {
     });
     let control = TurnControl::default();
     let task_control = control.clone();
-    let executor =
-        TurnExecutor::with_tools(provider, MockTool).with_policy_engine(Arc::new(policy));
+    let executor = TurnExecutor::with_tools(provider, MockTool)
+        .with_execution_key(fixture_key("turn-approval"))
+        .with_policy_engine(fixture_policy())
+        .with_policy_engine(Arc::new(policy));
     let task = tokio::spawn(async move {
         executor
             .execute_with_events(
@@ -838,6 +870,8 @@ async fn durable_approval_resumes_without_replaying_the_first_model_step() {
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("turn-durable"))
+    .with_policy_engine(fixture_policy())
     .with_policy_engine(Arc::new(policy));
     let awaiting = executor
         .start_resumable(TurnRequest {
@@ -899,6 +933,8 @@ async fn durable_batch_waits_for_all_approvals_before_executing_tools() {
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("turn-multi-approval"))
+    .with_policy_engine(fixture_policy())
     .with_policy_engine(Arc::new(policy));
 
     let first = executor
@@ -968,6 +1004,8 @@ async fn turn_tool_budget_fails_closed_before_executing_the_batch() {
             executed: executed.clone(),
         },
     )
+    .with_execution_key(fixture_key("turn-tool-budget"))
+    .with_policy_engine(fixture_policy())
     .execute_with_events(
         TurnRequest {
             turn_id: "turn-tool-budget".into(),
@@ -1055,8 +1093,10 @@ async fn durable_approval_rejects_a_tampered_checkpoint() {
         idempotency: kolyan_policy::Idempotency::Idempotent,
         approval: kolyan_policy::ApprovalMode::Always,
     });
-    let executor =
-        TurnExecutor::with_tools(provider, MockTool).with_policy_engine(Arc::new(policy));
+    let executor = TurnExecutor::with_tools(provider, MockTool)
+        .with_execution_key(fixture_key("turn-tampered"))
+        .with_policy_engine(fixture_policy())
+        .with_policy_engine(Arc::new(policy));
     let awaiting = executor
         .start_resumable(TurnRequest {
             turn_id: "turn-tampered".into(),
@@ -1086,10 +1126,15 @@ struct CountingTool {
 }
 
 impl ToolExecutor for CountingTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
-        self.executed
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
+        Box::pin(async move { fixture_prepare(call) })
+    }
+
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
+            let call = fixture_validate(&invocation)?;
+            self.executed
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(ToolResult {
                 call_id: call.id,
                 content: "unexpected execution".into(),
@@ -1111,12 +1156,13 @@ async fn parallel_dispatch_preserves_tool_result_order() {
         saw_tool_result: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         tool_call: call,
     };
-    let executor = TurnExecutor::with_tools(provider, MockTool).with_tool_dispatch_policy(
-        ToolDispatchPolicy {
+    let executor = TurnExecutor::with_tools(provider, MockTool)
+        .with_execution_key(fixture_key("turn-parallel"))
+        .with_policy_engine(fixture_policy())
+        .with_tool_dispatch_policy(ToolDispatchPolicy {
             mode: ToolDispatchMode::Parallel,
             on_error: ToolErrorPolicy::FailTurn,
-        },
-    );
+        });
     let execution = executor
         .execute_with_events(
             TurnRequest {

@@ -3,28 +3,30 @@ use crate::{
     StepRequest, StepResult,
 };
 use futures_core::Stream;
-use futures_util::task::AtomicWaker;
 use futures_util::{future::join_all, stream};
 use kolyan_model::{
     ContentBlock, Message, MessageRole, ModelProvider, ModelRequest, ToolCall, ToolResult,
 };
-use kolyan_policy::{ExecutionGrant, PolicyContext, PolicyDecisionKind, PolicyEngine};
+use kolyan_policy::{
+    ApprovalEvidence, PolicyContext, PolicyDecisionKind, PolicyEngine, PreparedCall, PreparedGrant,
+    ToolExecutionScope,
+};
+use kolyan_types::ExecutionKey;
 use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicBool, Ordering},
-};
-use std::task::{Context, Poll};
+use std::sync::{Arc, Mutex};
+use std::task::Poll;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
 mod boundary;
+mod control;
 mod dispatch;
 mod engine;
 pub use boundary::{TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind};
+pub use control::TurnControl;
 
 /// Durable checkpoint for a turn paused at an approval boundary.
 ///
@@ -45,6 +47,9 @@ pub struct TurnContinuation {
     pub tool_name: String,
     pub args_fingerprint: String,
     pub policy_version: String,
+    pub prepared_calls: Vec<PreparedCall>,
+    pub preparation_errors: Vec<ToolDispatchResult>,
+    pub execution_scope: ToolExecutionScope,
     #[serde(default)]
     pub approved_call_ids: Vec<String>,
     #[serde(default)]
@@ -138,7 +143,7 @@ impl Default for ToolDispatchPolicy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ToolDispatchResult {
     pub call_id: String,
     pub result: Result<ToolResult, ToolError>,
@@ -485,7 +490,7 @@ impl TurnError {
     }
 }
 
-#[derive(Debug, Error, Clone, PartialEq, Eq)]
+#[derive(Debug, Error, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ToolError {
     #[error("invalid tool call batch: {message}")]
     InvalidBatch { message: String },
@@ -502,153 +507,40 @@ pub enum ToolError {
 }
 
 pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + 'a>>;
+pub type ToolPreparationFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<PreparedCall, ToolError>> + Send + 'a>>;
+
+/// Exact host-admitted authority and cooperative control for one external effect.
+/// The expected scope is independent of serialized grant data. Adapters must
+/// revalidate preparation and enforce every granted requirement before effects.
+pub struct ToolInvocation {
+    pub prepared: PreparedCall,
+    pub grant: PreparedGrant,
+    pub scope: ToolExecutionScope,
+    pub policy_revision: String,
+    pub control: TurnControl,
+}
 
 pub trait ToolExecutor: Send + Sync {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_>;
-
-    /// Invocation identity is stable across approval recovery. Adapters may use
-    /// it for receipts without making Core depend on storage.
-    fn execute_invocation(
-        &self,
-        _step_id: String,
-        call: ToolCall,
-        grant: Option<ExecutionGrant>,
-    ) -> ToolFuture<'_> {
-        match grant {
-            Some(grant) => self.execute_with_grant(call, grant),
-            None => self.execute(call),
-        }
-    }
-
-    fn execute_with_grant(&self, call: ToolCall, _grant: ExecutionGrant) -> ToolFuture<'_> {
-        self.execute(call)
-    }
+    /// Preparation performs no external effects and derives trusted semantics.
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_>;
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_>;
 }
 
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NoopToolExecutor;
 
 impl ToolExecutor for NoopToolExecutor {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
         Box::pin(async move { Err(ToolError::Unavailable { name: call.name }) })
     }
-}
 
-#[derive(Clone, Default)]
-pub struct TurnControl {
-    state: Arc<TurnControlState>,
-}
-
-#[derive(Default)]
-struct TurnControlState {
-    cancelled: AtomicBool,
-    approved_tools: Mutex<HashSet<String>>,
-    waiting_for_approval: Mutex<HashSet<String>>,
-    waker: AtomicWaker,
-}
-
-impl TurnControl {
-    pub fn cancel(&self) {
-        self.state.cancelled.store(true, Ordering::Release);
-        self.state.waker.wake();
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.state.cancelled.load(Ordering::Acquire)
-    }
-
-    pub fn approve_tool(&self, name: impl Into<String>) {
-        let name = name.into();
-        self.state
-            .approved_tools
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .insert(name.clone());
-        self.state
-            .waiting_for_approval
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .remove(&name);
-        self.state.waker.wake();
-    }
-
-    pub fn is_waiting_for_approval(&self, name: &str) -> bool {
-        self.state
-            .waiting_for_approval
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .contains(name)
-    }
-
-    fn wait_cancelled(&self) -> CancellationFuture {
-        CancellationFuture {
-            state: Arc::clone(&self.state),
-        }
-    }
-
-    fn wait_for_tool_approval(&self, name: impl Into<String>) -> ApprovalFuture {
-        ApprovalFuture {
-            state: Arc::clone(&self.state),
-            tool_name: name.into(),
-        }
-    }
-}
-
-struct CancellationFuture {
-    state: Arc<TurnControlState>,
-}
-
-struct ApprovalFuture {
-    state: Arc<TurnControlState>,
-    tool_name: String,
-}
-
-impl Future for ApprovalFuture {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self
-            .state
-            .approved_tools
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .remove(&self.tool_name)
-        {
-            return Poll::Ready(());
-        }
-        self.state
-            .waiting_for_approval
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .insert(self.tool_name.clone());
-        self.state.waker.register(cx.waker());
-        if self
-            .state
-            .approved_tools
-            .lock()
-            .expect("approval lock must not be poisoned")
-            .remove(&self.tool_name)
-        {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
-    }
-}
-
-impl Future for CancellationFuture {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if self.state.cancelled.load(Ordering::Acquire) {
-            return Poll::Ready(());
-        }
-        self.state.waker.register(cx.waker());
-        if self.state.cancelled.load(Ordering::Acquire) {
-            Poll::Ready(())
-        } else {
-            Poll::Pending
-        }
+    fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
+        Box::pin(async move {
+            Err(ToolError::Unavailable {
+                name: invocation.prepared.call().name.clone(),
+            })
+        })
     }
 }
 
@@ -660,6 +552,8 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     policy_engine: Option<Arc<PolicyEngine>>,
     boundary_control: Option<Arc<dyn TurnBoundaryControl>>,
     event_recorder: Option<Arc<dyn TurnEventRecorder>>,
+    execution_key: Option<ExecutionKey>,
+    agent_snapshot_digest: Option<String>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -672,6 +566,8 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             policy_engine: None,
             boundary_control: None,
             event_recorder: None,
+            execution_key: None,
+            agent_snapshot_digest: None,
         }
     }
 }
@@ -690,6 +586,8 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             policy_engine: self.policy_engine,
             boundary_control: self.boundary_control,
             event_recorder: self.event_recorder,
+            execution_key: self.execution_key,
+            agent_snapshot_digest: self.agent_snapshot_digest,
         }
     }
 
@@ -702,6 +600,8 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             policy_engine: None,
             boundary_control: None,
             event_recorder: None,
+            execution_key: None,
+            agent_snapshot_digest: None,
         }
     }
 
@@ -714,6 +614,8 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             policy_engine: None,
             boundary_control: None,
             event_recorder: None,
+            execution_key: None,
+            agent_snapshot_digest: None,
         }
     }
 
@@ -744,6 +646,16 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
 
     pub fn with_policy_engine(mut self, policy_engine: Arc<PolicyEngine>) -> Self {
         self.policy_engine = Some(policy_engine);
+        self
+    }
+
+    pub fn with_execution_key(mut self, key: ExecutionKey) -> Self {
+        self.execution_key = Some(key);
+        self
+    }
+
+    pub fn with_agent_snapshot_digest(mut self, digest: String) -> Self {
+        self.agent_snapshot_digest = Some(digest);
         self
     }
 }
@@ -781,7 +693,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
     ) -> Result<ResumableTurn, TurnError> {
         validate_approval_transition(&approval, approved_approval_id)?;
         let mut state = engine::RunState::restore(&approval)?;
-        self.validate_approval_policy(&approval)?;
+        self.validate_approval_policy(&approval, &control).await?;
         state
             .pending
             .as_mut()

@@ -4,6 +4,9 @@ pub(super) struct PendingTools {
     pub batch: ToolCallBatch,
     pub assistant_content: Vec<ContentBlock>,
     pub approved: Vec<String>,
+    pub prepared: Vec<PreparedCall>,
+    pub preparation_errors: Vec<ToolDispatchResult>,
+    pub scope: Option<ToolExecutionScope>,
 }
 
 pub(super) struct RunState {
@@ -65,6 +68,24 @@ impl RunState {
         let last = c.steps.last().ok_or_else(invalid)?;
         let batch = ToolCallBatch::try_from(c.pending_calls.clone())?;
         let call = batch.call(&c.call_id).ok_or_else(invalid)?;
+        c.execution_scope.validate().map_err(|_| invalid())?;
+        let mut accounted = HashSet::new();
+        for prepared in &c.prepared_calls {
+            prepared.validate().map_err(|_| invalid())?;
+            if batch.call(&prepared.call().id) != Some(prepared.call())
+                || !accounted.insert(prepared.call().id.as_str())
+            {
+                return Err(invalid());
+            }
+        }
+        for failure in &c.preparation_errors {
+            if failure.result.is_ok()
+                || batch.call(&failure.call_id).is_none()
+                || !accounted.insert(failure.call_id.as_str())
+            {
+                return Err(invalid());
+            }
+        }
         let step_id = format!("{}-step-{}", c.turn_id, c.steps.len() - 1);
         if approval.turn_id != c.turn_id
             || approval.call_id != c.call_id
@@ -86,9 +107,18 @@ impl RunState {
             || c.continuation_id != format!("continuation-{}", approval.approval_id)
             || c.approved_call_ids.contains(&call.id)
             || c.approved_call_ids.iter().collect::<HashSet<_>>().len() != c.approved_call_ids.len()
-            || c.approved_call_ids
+            || c.approved_call_ids.iter().any(|id| {
+                !c.prepared_calls
+                    .iter()
+                    .any(|prepared| &prepared.call().id == id)
+            })
+            || accounted.len() != batch.len()
+            || !c
+                .prepared_calls
                 .iter()
-                .any(|id| batch.call(id).is_none())
+                .any(|prepared| prepared.call().id == c.call_id)
+            || c.execution_scope.execution.turn_id != c.turn_id
+            || c.execution_scope.step_id != step_id
         {
             return Err(invalid());
         }
@@ -116,6 +146,9 @@ impl RunState {
                 batch,
                 assistant_content: c.assistant_content.clone(),
                 approved: c.approved_call_ids.clone(),
+                prepared: c.prepared_calls.clone(),
+                preparation_errors: c.preparation_errors.clone(),
+                scope: Some(c.execution_scope.clone()),
             }),
             resumed: true,
             resume_boundary: Some(approval.approval_id.clone()),
@@ -170,6 +203,9 @@ impl RunState {
                 tool_name: call.name.clone(),
                 args_fingerprint: serde_json::to_string(&call.arguments).expect("JSON arguments"),
                 policy_version,
+                prepared_calls: pending.prepared.clone(),
+                preparation_errors: pending.preparation_errors.clone(),
+                execution_scope: pending.scope.clone().expect("prepared invocation scope"),
                 approved_call_ids: pending.approved.clone(),
                 max_tool_calls: self.config.max_tool_calls,
                 tool_calls_used: self.tool_calls_used,
@@ -208,9 +244,10 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         Ok(())
     }
 
-    pub(super) fn validate_approval_policy(
+    pub(super) async fn validate_approval_policy(
         &self,
         approval: &ApprovalRequest,
+        control: &TurnControl,
     ) -> Result<(), TurnError> {
         let policy = self
             .policy_engine
@@ -219,10 +256,47 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 message: "approval resume requires a policy engine".into(),
             })?;
         let c = &approval.continuation;
-        for call in &c.pending_calls {
+        let scope = self.tool_scope(&c.turn_id, &c.execution_scope.step_id)?;
+        if scope != c.execution_scope {
+            return Err(TurnError::InvalidRequest {
+                message: "approval belongs to another execution scope".into(),
+            });
+        }
+        for saved in &c.prepared_calls {
+            let call = saved.call();
+            let preparation = self.tool_executor.prepare(call.clone());
+            let deadline = deadline_instant(c.deadline_at_ms);
+            let timeout = c
+                .tool_timeout_ms
+                .map(|millis| Instant::now() + Duration::from_millis(millis));
+            let limit = match (deadline, timeout) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (left, right) => left.or(right),
+            };
+            let current = tokio::select! {
+                biased;
+                _ = control.wait_cancelled() => return Err(TurnError::Cancelled),
+                result = async {
+                    match limit {
+                        Some(limit) => tokio::time::timeout_at(limit.into(), preparation).await.map_err(|_| {
+                            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+                                TurnError::TimedOut
+                            } else {
+                                TurnError::Tool(ToolError::TimedOut)
+                            }
+                        })?.map_err(TurnError::from),
+                        None => preparation.await.map_err(TurnError::from),
+                    }
+                } => result?,
+            };
+            if current != *saved {
+                return Err(TurnError::InvalidRequest {
+                    message: "approval preparation has changed".into(),
+                });
+            }
             if call.id == c.call_id || c.approved_call_ids.contains(&call.id) {
-                let decision = policy.decide_with_context(
-                    call,
+                let decision = policy.decide_prepared(
+                    &current,
                     &PolicyContext {
                         turn_id: Some(c.turn_id.clone()),
                         ..Default::default()
@@ -238,6 +312,31 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             }
         }
         Ok(())
+    }
+
+    fn tool_scope(&self, turn_id: &str, step_id: &str) -> Result<ToolExecutionScope, TurnError> {
+        let key = self
+            .execution_key
+            .clone()
+            .ok_or_else(|| TurnError::InvalidRequest {
+                message: "tool execution requires an admitted execution key".into(),
+            })?;
+        if key.turn_id != turn_id {
+            return Err(TurnError::InvalidRequest {
+                message: "execution key belongs to another Turn".into(),
+            });
+        }
+        let scope = ToolExecutionScope {
+            execution: key,
+            step_id: step_id.into(),
+            agent_snapshot_digest: self.agent_snapshot_digest.clone(),
+        };
+        scope
+            .validate()
+            .map_err(|error| TurnError::InvalidRequest {
+                message: error.to_string(),
+            })?;
+        Ok(scope)
     }
 
     pub(super) async fn run(
@@ -356,6 +455,9 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 batch,
                 assistant_content: step.response.content,
                 approved: Vec::new(),
+                prepared: Vec::new(),
+                preparation_errors: Vec::new(),
+                scope: None,
             });
         }
     }
@@ -389,6 +491,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         suspend: bool,
         events: &EventEmitter,
     ) -> Result<Option<ApprovalRequest>, TurnError> {
+        self.prepare_pending(state, control, events).await?;
         let pending = state.pending.as_ref().expect("pending tools");
         if let Some(policy) = &self.policy_engine
             && let Some(call) = pending.batch.calls().iter().find(|call| {
@@ -409,8 +512,14 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         {
             return Err(TurnError::ToolBudgetExceeded);
         }
-        let plan = self.policy_engine.as_ref().map(|policy| {
-            policy.resolve_batch(
+        let policy = self
+            .policy_engine
+            .as_ref()
+            .ok_or_else(|| TurnError::InvalidRequest {
+                message: "tool execution requires a trusted policy engine".into(),
+            })?;
+        let plan = policy
+            .resolve_prepared_batch(
                 &PolicyContext {
                     turn_id: Some(state.turn_id.clone()),
                     remaining_tool_calls: state
@@ -419,10 +528,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                         .map(|limit| limit.saturating_sub(state.tool_calls_used)),
                     ..Default::default()
                 },
-                pending.batch.calls(),
+                &pending.prepared,
             )
-        });
-        if let Some(plan) = &plan {
+            .map_err(|error| TurnError::InvalidRequest {
+                message: error.to_string(),
+            })?;
+        {
             if state.dispatch.on_error == ToolErrorPolicy::FailTurn
                 && let Some(denied) = plan
                     .decisions
@@ -509,9 +620,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     .push(call.id);
             }
         }
-        let results = self
-            .dispatch_pending(state, control, plan.as_ref(), events)
-            .await?;
+        let results = self.dispatch_pending(state, control, &plan, events).await?;
         state.check(control)?;
         let pending = state.pending.take().expect("pending tools");
         state.tool_calls_used += pending.batch.len();
@@ -521,6 +630,86 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             results,
         );
         Ok(None)
+    }
+
+    async fn prepare_pending(
+        &self,
+        state: &mut RunState,
+        control: &TurnControl,
+        events: &EventEmitter,
+    ) -> Result<(), TurnError> {
+        if self.policy_engine.is_none() {
+            return Err(TurnError::InvalidRequest {
+                message: "tool execution requires a trusted policy engine".into(),
+            });
+        }
+        let pending = state.pending.as_ref().expect("pending tools");
+        if pending.scope.is_some() {
+            return Ok(());
+        }
+        let scope = self.tool_scope(&state.turn_id, &state.step_id())?;
+        let calls = pending.batch.calls().to_vec();
+        let mut prepared = Vec::new();
+        let mut failures = Vec::new();
+        for call in calls {
+            state.check(control)?;
+            let preparation = self.tool_executor.prepare(call.clone());
+            let limit = match (
+                state.deadline,
+                state.tool_timeout.map(|duration| Instant::now() + duration),
+            ) {
+                (Some(left), Some(right)) => Some(left.min(right)),
+                (left, right) => left.or(right),
+            };
+            let result = tokio::select! {
+                biased;
+                _ = control.wait_cancelled() => return Err(TurnError::Cancelled),
+                result = async {
+                    match limit {
+                        Some(limit) => tokio::time::timeout_at(limit.into(), preparation).await.unwrap_or(Err(ToolError::TimedOut)),
+                        None => preparation.await,
+                    }
+                } => result,
+            };
+            match result {
+                Ok(input) => {
+                    input
+                        .validate()
+                        .map_err(|error| TurnError::InvalidRequest {
+                            message: error.to_string(),
+                        })?;
+                    if input.call() != &call {
+                        return Err(TurnError::InvalidRequest {
+                            message: "tool preparation changed the model call".into(),
+                        });
+                    }
+                    prepared.push(input);
+                }
+                Err(error) if state.dispatch.on_error == ToolErrorPolicy::FailTurn => {
+                    events.emit(TurnEvent::ToolCallRequested {
+                        turn_id: state.turn_id.clone(),
+                        call: call.clone(),
+                    })?;
+                    events.emit(TurnEvent::ToolExecutionFailed {
+                        turn_id: state.turn_id.clone(),
+                        call_id: call.id,
+                        name: call.name,
+                        error: error.clone(),
+                    })?;
+                    return Err(error.into());
+                }
+                Err(error) => failures.push(ToolDispatchResult {
+                    call_id: call.id,
+                    result: Err(error),
+                }),
+            }
+        }
+        state.check(control)?;
+        let pending = state.pending.as_mut().expect("pending tools");
+        pending.prepared = prepared;
+        pending.preparation_errors = failures;
+        pending.scope = Some(scope);
+        Ok(())
     }
 }
 

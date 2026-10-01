@@ -83,6 +83,13 @@ fn state() -> RunState {
         });
     }
     state.pending = Some(PendingTools {
+        prepared: vec![super::super::tests::preparation::fixture_prepare(call.clone()).unwrap()],
+        preparation_errors: Vec::new(),
+        scope: Some(ToolExecutionScope {
+            execution: super::super::tests::preparation::fixture_key("checkpoint"),
+            step_id: "checkpoint-step-2".into(),
+            agent_snapshot_digest: None,
+        }),
         batch: ToolCallBatch::try_from(vec![call]).unwrap(),
         assistant_content: content,
         approved: vec![],
@@ -109,6 +116,14 @@ fn checkpoint_preserves_original_deadline_indices_and_dispatch() {
     assert_eq!(restored.dispatch, state.dispatch);
     assert_eq!(restored.tool_timeout, state.tool_timeout);
     assert_eq!(restored.tool_calls_used, 2);
+    assert_eq!(
+        restored.pending.as_ref().unwrap().prepared,
+        state.pending.as_ref().unwrap().prepared
+    );
+    assert_eq!(
+        restored.pending.as_ref().unwrap().scope,
+        state.pending.as_ref().unwrap().scope
+    );
     assert!(approval.approval_id.contains("step-2"));
 }
 

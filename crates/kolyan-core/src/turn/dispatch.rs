@@ -8,57 +8,70 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         &self,
         state: &RunState,
         control: &TurnControl,
-        plan: Option<&BatchExecutionPlan>,
+        plan: &BatchExecutionPlan,
         events: &EventEmitter,
     ) -> Result<Vec<ToolResult>, TurnError> {
         let pending = state.pending.as_ref().expect("pending batch");
         let mut grants = HashMap::new();
-        let mut results = Vec::new();
-        let stages = match plan {
-            Some(plan) => {
-                for item in &plan.decisions {
-                    let call = pending.batch.call(&item.call_id).expect("planned call");
-                    if item.decision.kind == PolicyDecisionKind::Deny {
-                        events.emit(TurnEvent::ToolCallRequested {
-                            turn_id: state.turn_id.clone(),
-                            call: call.clone(),
-                        })?;
-                        let error = ToolError::PolicyDenied {
-                            message: item.decision.reason.clone(),
-                        };
-                        results.push(ToolDispatchResult {
-                            call_id: call.id.clone(),
-                            result: Err(error),
-                        });
+        let mut results = pending.preparation_errors.clone();
+        for failure in &results {
+            let call = pending
+                .batch
+                .call(&failure.call_id)
+                .expect("failed preparation call");
+            events.emit(TurnEvent::ToolCallRequested {
+                turn_id: state.turn_id.clone(),
+                call: call.clone(),
+            })?;
+        }
+        let stages = {
+            for item in &plan.decisions {
+                let call = pending.batch.call(&item.call_id).expect("planned call");
+                if item.decision.kind == PolicyDecisionKind::Deny {
+                    events.emit(TurnEvent::ToolCallRequested {
+                        turn_id: state.turn_id.clone(),
+                        call: call.clone(),
+                    })?;
+                    let error = ToolError::PolicyDenied {
+                        message: item.decision.reason.clone(),
+                    };
+                    results.push(ToolDispatchResult {
+                        call_id: call.id.clone(),
+                        result: Err(error),
+                    });
+                } else {
+                    let prepared = pending
+                        .prepared
+                        .iter()
+                        .find(|input| input.call().id == call.id)
+                        .expect("planned prepared call");
+                    let scope = pending.scope.clone().expect("prepared scope");
+                    let evidence = if item.decision.kind == PolicyDecisionKind::RequireApproval {
+                        if !pending.approved.contains(&call.id) {
+                            return Err(TurnError::InvalidRequest {
+                                message: "missing invocation approval".into(),
+                            });
+                        }
+                        ApprovalEvidence::Confirmed {
+                            prepared_digest: prepared.digest().into(),
+                            policy_revision: item.decision.policy_version.clone(),
+                            evidence_id: format!("{}-approval-{}", scope.step_id, call.id),
+                            scope: scope.clone(),
+                        }
                     } else {
-                        let grant = if item.decision.kind == PolicyDecisionKind::RequireApproval {
-                            if !pending.approved.contains(&call.id) {
-                                return Err(TurnError::InvalidRequest {
-                                    message: "missing invocation approval".into(),
-                                });
-                            }
-                            item.decision.clone().into_approved_grant(call)
-                        } else {
-                            item.decision.clone().into_grant(call)
-                        };
-                        grants.insert(
-                            call.id.clone(),
-                            grant.map_err(|error| TurnError::InvalidRequest {
-                                message: error.to_string(),
-                            })?,
-                        );
-                    }
+                        ApprovalEvidence::NotConfirmed
+                    };
+                    let grant =
+                        PreparedGrant::issue(prepared, item.decision.clone(), evidence, scope);
+                    grants.insert(
+                        call.id.clone(),
+                        grant.map_err(|error| TurnError::InvalidRequest {
+                            message: error.to_string(),
+                        })?,
+                    );
                 }
-                plan.stages_with_approvals(&pending.approved)
             }
-            None => vec![
-                pending
-                    .batch
-                    .calls()
-                    .iter()
-                    .map(|call| call.id.clone())
-                    .collect(),
-            ],
+            plan.stages_with_approvals(&pending.approved)
         };
         for stage in stages {
             let calls = stage
@@ -73,7 +86,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                                 state,
                                 control,
                                 call,
-                                grants.get(&call.id).cloned(),
+                                grants.get(&call.id).expect("admitted grant").clone(),
                                 events,
                             )
                             .await;
@@ -104,7 +117,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                             state,
                             control,
                             call,
-                            grants.get(&call.id).cloned(),
+                            grants.get(&call.id).expect("admitted grant").clone(),
                             events,
                         )
                     });
@@ -151,12 +164,17 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 Ok(result) => result.clone(),
                 Err(error) => {
                     // Denied calls never entered the dispatch boundary.
-                    if plan.is_some_and(|plan| {
-                        plan.decisions.iter().any(|item| {
-                            item.call_id == call.id
-                                && item.decision.kind == PolicyDecisionKind::Deny
-                        })
-                    }) {
+                    if pending
+                        .preparation_errors
+                        .iter()
+                        .any(|item| item.call_id == call.id)
+                        || {
+                            plan.decisions.iter().any(|item| {
+                                item.call_id == call.id
+                                    && item.decision.kind == PolicyDecisionKind::Deny
+                            })
+                        }
+                    {
                         events.emit(TurnEvent::ToolExecutionFailed {
                             turn_id: state.turn_id.clone(),
                             call_id: call.id.clone(),
@@ -186,7 +204,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         state: &RunState,
         control: &TurnControl,
         call: &ToolCall,
-        grant: Option<ExecutionGrant>,
+        grant: PreparedGrant,
         events: &EventEmitter,
     ) -> Result<ToolDispatchResult, TurnError> {
         self.admit(
@@ -217,8 +235,32 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             name: call.name.clone(),
         })?;
         let execute = async {
+            let pending = state.pending.as_ref().expect("pending tools");
+            let prepared = pending
+                .prepared
+                .iter()
+                .find(|input| input.call().id == call.id)
+                .expect("admitted preparation")
+                .clone();
+            let scope = pending.scope.clone().expect("admitted scope");
+            let revision = self
+                .policy_engine
+                .as_ref()
+                .expect("admitted policy")
+                .revision();
+            grant
+                .validate(&prepared, &revision, &scope)
+                .map_err(|error| ToolError::PolicyDenied {
+                    message: error.to_string(),
+                })?;
             self.tool_executor
-                .execute_invocation(state.step_id(), call.clone(), grant)
+                .execute_invocation(ToolInvocation {
+                    prepared,
+                    grant,
+                    scope,
+                    policy_revision: revision,
+                    control: control.clone(),
+                })
                 .await
         };
         let tool_limit = state.tool_timeout.map(|timeout| Instant::now() + timeout);
