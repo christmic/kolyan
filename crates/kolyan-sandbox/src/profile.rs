@@ -2,7 +2,15 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::{SandboxCommand, SandboxConfig, SandboxError, SandboxRequest};
+use crate::{
+    FileSandboxConfig, SandboxCommand, SandboxConfig, SandboxError, SandboxRequest, exact_file,
+};
+
+#[derive(Clone, Debug)]
+pub(crate) enum Access {
+    Workspace(SandboxConfig),
+    Files(FileSandboxConfig),
+}
 
 // Non-macOS construction fails before these process-only fields are consumed.
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
@@ -50,26 +58,31 @@ pub(crate) fn canonical_config(mut config: SandboxConfig) -> Result<SandboxConfi
 }
 
 pub(crate) fn admit(
-    config: &SandboxConfig,
+    access: &Access,
     mut request: SandboxRequest,
 ) -> Result<Admitted, SandboxError> {
     if request.timeout.is_zero()
         || request.max_output_bytes == 0
-        || request.stdin.len() > request.max_output_bytes
+        || request.max_input_bytes > 64 * 1024 * 1024
+        || request.stdin.len() > request.max_input_bytes
     {
         return Err(SandboxError::Invalid(
-            "positive timeout/output cap and bounded stdin required".into(),
+            "positive timeout/output cap and independently bounded stdin required".into(),
         ));
     }
     request.cwd = request.cwd.canonicalize()?;
-    if !request.cwd.is_dir()
-        || !config
-            .read_roots
-            .iter()
-            .chain(config.write_roots.iter())
-            .any(|r| request.cwd.starts_with(r))
-    {
-        return Err(SandboxError::Invalid("cwd outside admitted roots".into()));
+    match access {
+        Access::Workspace(config)
+            if request.cwd.is_dir()
+                && config
+                    .read_roots
+                    .iter()
+                    .chain(config.write_roots.iter())
+                    .any(|r| request.cwd.starts_with(r)) => {}
+        Access::Workspace(_) => {
+            return Err(SandboxError::Invalid("cwd outside admitted roots".into()));
+        }
+        Access::Files(config) => exact_file::admit(config, &request)?,
     }
     let (executable, arguments) = match &request.command {
         SandboxCommand::Shell(script) => {
@@ -90,23 +103,31 @@ pub(crate) fn admit(
     // macOS sh(1) selects bash/dash/zsh through this host-owned symlink.
     // Denying its read makes the launcher emit an error before command stderr.
     profile.push_str("(allow file-read* (literal \"/private/var/select/sh\"))\n");
-    for (index, root) in config
-        .read_roots
-        .iter()
-        .chain(config.write_roots.iter())
-        .enumerate()
-    {
-        parameters.push(format!("ROOT{index}={}", path_text(root)?));
-        profile.push_str(&format!("(allow file-read* (subpath (param \"ROOT{index}\")))\n(allow file-read-metadata (path-ancestors (param \"ROOT{index}\")))\n"));
-        if index >= config.read_roots.len() {
-            profile.push_str(&format!(
-                "(allow file-write* (subpath (param \"ROOT{index}\")))\n"
-            ));
+    if let Access::Workspace(config) = access {
+        for (index, root) in config
+            .read_roots
+            .iter()
+            .chain(config.write_roots.iter())
+            .enumerate()
+        {
+            parameters.push(format!("ROOT{index}={}", path_text(root)?));
+            profile.push_str(&format!("(allow file-read* (subpath (param \"ROOT{index}\")))\n(allow file-read-metadata (path-ancestors (param \"ROOT{index}\")))\n"));
+            if index >= config.read_roots.len() {
+                profile.push_str(&format!(
+                    "(allow file-write* (subpath (param \"ROOT{index}\")))\n"
+                ));
+            }
         }
+    } else if let Access::Files(config) = access {
+        exact_file::render(config, &mut profile, &mut parameters)?;
     }
     // posix_spawn can create a group/session without a setsid/setpgid syscall.
     profile.push_str("(allow sysctl-read (sysctl-name \"hw.pagesize\") (sysctl-name \"hw.pagesize_compat\") (sysctl-name \"hw.ncpu\") (sysctl-name \"kern.osproductversion\"))\n(allow syscall-unix)\n(deny syscall-unix (syscall-number SYS_setsid) (syscall-number SYS_setpgid) (syscall-number SYS_posix_spawn))\n");
-    for (index, root) in config.protected_roots.iter().enumerate() {
+    let protected_roots = match access {
+        Access::Workspace(config) => &config.protected_roots,
+        Access::Files(config) => &config.protected_roots,
+    };
+    for (index, root) in protected_roots.iter().enumerate() {
         parameters.push(format!("PROTECT{index}={}", path_text(root)?));
         profile.push_str(&format!(
             "(deny file-read* file-write* (subpath (param \"PROTECT{index}\")))\n"
@@ -121,7 +142,7 @@ pub(crate) fn admit(
     })
 }
 
-fn path_text(path: &Path) -> Result<&str, SandboxError> {
+pub(crate) fn path_text(path: &Path) -> Result<&str, SandboxError> {
     path.to_str()
         .filter(|p| !p.contains(['\0', '\n', '\r']))
         .ok_or_else(|| SandboxError::Invalid("path must be valid single-line UTF-8".into()))

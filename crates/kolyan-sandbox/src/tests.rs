@@ -64,6 +64,7 @@ mod macos {
             command: SandboxCommand::Shell(script.into()),
             cwd: root.into(),
             stdin: vec![],
+            max_input_bytes: 65536,
             timeout: Duration::from_secs(5),
             max_output_bytes: 65536,
         }

@@ -1,8 +1,11 @@
 //! Host-admitted process execution under macOS Seatbelt, not an authorization engine.
 //! Cancellation and dropped futures notify an independent process-owning reaper.
 
+mod exact_file;
 mod process;
 mod profile;
+
+pub use exact_file::FileSandboxConfig;
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -17,7 +20,7 @@ use thiserror::Error;
 
 /// Bind this trusted policy revision into prepared execution requirements/grants.
 /// Policy semantics changes require a revision change, not a compatibility branch.
-pub const MACOS_SEATBELT_POLICY_REVISION: &str = "kolyan-seatbelt-v2";
+pub const MACOS_SEATBELT_POLICY_REVISION: &str = "kolyan-seatbelt-v5";
 
 pub type SandboxFuture<'a> =
     Pin<Box<dyn Future<Output = Result<SandboxOutput, SandboxError>> + Send + 'a>>;
@@ -44,13 +47,15 @@ pub enum SandboxCommand {
     },
 }
 
-/// Per-invocation limits. Output cap is shared across both pipes; stdin is bounded
-/// by the same cap. Cwd must be within an admitted directory.
+/// Per-invocation limits. Output cap is shared across both pipes. Stdin has an
+/// independent host-selected ceiling; zero permits only empty input. Cwd must be
+/// within an admitted directory. Input ceilings cannot exceed 64 MiB.
 #[derive(Clone, Debug)]
 pub struct SandboxRequest {
     pub command: SandboxCommand,
     pub cwd: PathBuf,
     pub stdin: Vec<u8>,
+    pub max_input_bytes: usize,
     pub timeout: Duration,
     pub max_output_bytes: usize,
 }
@@ -113,7 +118,7 @@ pub trait SandboxExecutor: Send + Sync {
 /// Replaceable Seatbelt adapter. Construction fails closed off macOS.
 #[derive(Clone, Debug)]
 pub struct MacOsSandbox {
-    config: SandboxConfig,
+    access: profile::Access,
 }
 
 impl MacOsSandbox {
@@ -123,7 +128,20 @@ impl MacOsSandbox {
         }
         require_backend(std::path::Path::new("/usr/bin/sandbox-exec"))?;
         Ok(Self {
-            config: profile::canonical_config(config)?,
+            access: profile::Access::Workspace(profile::canonical_config(config)?),
+        })
+    }
+
+    /// Admit exact physical files, independently of workspace directory contents.
+    /// Only trusted executable requests are accepted. This does not pin filesystem
+    /// identity: the worker must also use nofollow opens and validate its parents.
+    pub fn new_files(config: FileSandboxConfig) -> Result<Self, SandboxError> {
+        if !cfg!(target_os = "macos") {
+            return Err(SandboxError::Unsupported);
+        }
+        require_backend(std::path::Path::new("/usr/bin/sandbox-exec"))?;
+        Ok(Self {
+            access: profile::Access::Files(exact_file::canonical_config(config)?),
         })
     }
 
@@ -134,14 +152,14 @@ impl MacOsSandbox {
         request: SandboxRequest,
         cancellation: SandboxCancellation,
     ) -> Result<SandboxOutput, SandboxError> {
-        let config = self.config.clone();
+        let access = self.access.clone();
         let dropped = Arc::new(AtomicBool::new(false));
         let guard = DropCancellation(dropped.clone());
         let (send, receive) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("kolyan-sandbox-reaper".into())
             .spawn(move || {
-                let result = profile::admit(&config, request)
+                let result = profile::admit(&access, request)
                     .and_then(|admitted| process::execute(admitted, cancellation, dropped));
                 let _ = send.send(result);
             })?;
@@ -181,3 +199,6 @@ impl Drop for DropCancellation {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod input_limits_tests;

@@ -14,8 +14,15 @@ write ledger facts, retry effects, or interpret tool-worker messages.
 - `SandboxConfig`: existing canonical read/write directory roots; write implies
   read. `protected_roots` denies existing control paths even under a writable
   root. `.git` and `.kolyan` paths are denied automatically, including creation.
-- `SandboxRequest`: admitted canonical cwd, `SandboxCommand`, bounded stdin,
-  positive timeout and combined stdout/stderr byte limit.
+- `MacOsSandbox::new_files(FileSandboxConfig)`: explicit exact-file mode;
+  `workspace` is the existing directory metadata/CWD anchor, `read_files` and
+  `write_files` are independent literal content/effect grants, and
+  `protected_roots` are denied. The admitted CWD must equal the physical workspace.
+  Only `SandboxCommand::Executable` is accepted; `Shell` fails before launch.
+- `SandboxRequest`: admitted canonical cwd, `SandboxCommand`, independently
+  bounded stdin, positive timeout and combined stdout/stderr byte limit.
+  `max_input_bytes` is host-selected and at most 64 MiB; zero permits empty stdin
+  only. Large worker input does not expand or consume the granted output ceiling.
 - `SandboxCommand::Executable`: trusted absolute executable and literal argv.
   Only that executable file is additionally readable/mappable; its parent tree
   is not implicitly granted. Suitable for a separately built trusted file worker.
@@ -45,6 +52,39 @@ Rust runtime page-size initialization. Framework/PrivateFramework trees, `/etc`,
 user homes and preferences are not generally readable. Programs needing extra
 libraries/resources fail unless the host explicitly admits appropriate roots.
 
+## Exact file mode
+
+File paths must be absolute physical paths: an existing canonical parent plus a
+final leaf. The leaf may not exist yet, allowing creation of the target and a
+host-selected staging file outside the workspace. Existing leaves must be regular
+files. Final symlinks (including dangling ones), redirected/noncanonical parents,
+root paths, invalid single-line UTF-8 paths, and `.git`/`.kolyan` or explicitly
+protected resources are refused. Explicit protected roots may have a nonexistent
+leaf too, but must have an existing canonical parent. Admission is rechecked on
+the execution worker. Failed exact admission never falls back to directory roots.
+
+Selected read files receive literal `file-read-data` and metadata. Selected write
+files receive literal `file-write*` and metadata; write does not imply content
+read in this mode. Add a file to both lists when a worker must read and replace it.
+The workspace and ancestors of selected files receive literal directory metadata
+and `file-read-data`: opening a directory on macOS requires this permission.
+Directory name listing is consequently visible, including at ancestor directories;
+child file contents and directory-wide writes are not granted. The fixed platform
+bootstrap exceptions above still apply. All admitted paths go through `-D`
+parameters; there is no workspace subtree content allowance in the exact renderer.
+
+The resource configuration and `SandboxExecutor` port remain independent of Core,
+Policy and databases. Trusted host assembly supplies the exact physical resources,
+executable and grant validation. Policy revision v5 covers exact resource access,
+independent input admission and verified zombie-only group cleanup; saved preparations bound to an earlier policy
+revision must not authorize execution under this revision.
+
+These pathname checks and the Seatbelt profile do **not** close TOCTOU during
+policy compilation or later path rebinding. The trusted file worker still must
+use nofollow traversal/open and pinned parent/root identity checks. Host admission
+must also account for hard links and mounts. This module does not prove atomic
+resource identity or compare-and-swap against a concurrent sibling writer.
+
 ## Process ownership and cleanup
 
 A dedicated blocking worker owns the process and pipe readers. Polling uses safe
@@ -54,6 +94,19 @@ pipes, not independently doubled. Input writing cannot block the async runtime.
 Timeout, cancellation, overflow, future drop and normal leader exit all terminate
 the invocation group, including leftover background commands. Grandchildren are
 reaped by their parent or the OS reaper; this host can directly wait only its child.
+
+Darwin may report `EPERM` for a group containing only zombies: XNU's
+[`killpg1`](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/kern_sig.c)
+filters out `SZOMB` members. `EPERM` is not generally ignored, even after normal
+leader exit. While retaining that leader unreaped, the host confirms its exit via
+`waitid(NOWAIT)` and inspects every group member's state through fixed `/bin/ps`
+with a cleared environment, numeric group argument and no argv/environment output.
+Only a nonempty zombie-only group permits this exception, regardless of whether
+the original outcome was success, timeout, cancellation or output overflow.
+Inspection has a 64 KiB output ceiling and one-second polling deadline; failure,
+oversize output and live members remain cleanup errors, not successful results.
+The inspector is outside Seatbelt, grants no new sandbox access, and has its own
+drop cleanup. This OS-specific state check must be revalidated on supported hosts.
 
 Process-group killing alone does **not** prevent detached-session escape. The
 profile separately denies `setsid`, `setpgid`, and `posix_spawn` Unix syscalls.
@@ -99,6 +152,12 @@ tests must be reevaluated when the backend changes.
 admitted I/O, readonly denial, outside-root and symlink read/write denial,
 protected metadata, exact argv/stdin, clean environment, parameter injection,
 network EPERM (not merely service refusal), output bounds, timeout and cleanup.
+Exact-file tests additionally run trusted `/bin/cat` and the test executable:
+selected reads, sibling/write-only content denial, literal directory opens and
+listing, nonexistent staging/target creation and atomic rename, unselected writes
+and mkdir denial, protected control metadata/content denial, clean environment,
+and loopback/external EPERM. Tests live in `src/exact_file/tests.rs`; the helper
+entrypoint is a subprocess probe, not a separate acceptance scenario.
 Two test-harness subprocess entrypoints are probes, not separate acceptance gates.
 Backend absence is tested without replacing the fixed OS executable. Non-macOS
 construction returns `Unsupported` and never starts an unsandboxed process.
