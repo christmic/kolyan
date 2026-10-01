@@ -4,20 +4,19 @@
 #[allow(dead_code)]
 mod parameters;
 
+#[path = "http_environment_tools/provider.rs"]
+mod provider;
+use provider::Provider;
+
 use std::{
     collections::BTreeMap,
     fs,
-    io::{BufRead, BufReader, Read, Write},
-    net::TcpListener,
+    io::{BufRead, BufReader, Write},
     path::Path,
     process::{Child, Command, Stdio},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-        mpsc,
-    },
+    sync::mpsc,
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 use kolyan_ledger::{LedgerEventKind, LedgerStore, SqliteLedger};
@@ -110,87 +109,6 @@ impl Drop for Service {
     fn drop(&mut self) {
         let _ = self.child.kill();
         let _ = self.child.wait();
-    }
-}
-
-struct Provider {
-    url: String,
-    stopped: Arc<AtomicBool>,
-    worker: Option<thread::JoinHandle<usize>>,
-}
-
-impl Provider {
-    fn start(root: &Path, outputs: Vec<Value>) -> Self {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}", listener.local_addr().unwrap());
-        listener.set_nonblocking(true).unwrap();
-        let stopped = Arc::new(AtomicBool::new(false));
-        let stop = stopped.clone();
-        let root = root.to_owned();
-        let worker = thread::spawn(move || {
-            let mut count = 0;
-            for output in outputs {
-                let deadline = Instant::now() + Duration::from_secs(120);
-                let mut socket = loop {
-                    if stop.load(Ordering::Acquire) {
-                        return count;
-                    }
-                    match listener.accept() {
-                        Ok((socket, _)) => break socket,
-                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
-                            assert!(
-                                Instant::now() < deadline,
-                                "scripted Provider request deadline"
-                            );
-                            thread::sleep(Duration::from_millis(10));
-                        }
-                        Err(error) => panic!("Provider accept: {error}"),
-                    }
-                };
-                socket
-                    .set_read_timeout(Some(Duration::from_secs(30)))
-                    .unwrap();
-                let mut reader = BufReader::new(socket.try_clone().unwrap());
-                let mut size = 0;
-                loop {
-                    let mut line = String::new();
-                    assert!(reader.read_line(&mut line).unwrap() > 0);
-                    if line == "\r\n" {
-                        break;
-                    }
-                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
-                        size = value.trim().parse().unwrap();
-                    }
-                }
-                assert!(size <= 8 * 1024 * 1024);
-                let mut bytes = vec![0; size];
-                reader.read_exact(&mut bytes).unwrap();
-                let request: Value = serde_json::from_slice(&bytes).unwrap();
-                append(
-                    &root.join("model.jsonl"),
-                    &json!({"index":count,"request":request,"scripted_output":output}),
-                );
-                let event = json!({"type":"response.completed","response":{"id":format!("response-{count}"),"status":"completed","output":output}});
-                let body = format!("event: response.completed\ndata: {event}\n\n");
-                write!(socket,"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len()).unwrap();
-                count += 1;
-            }
-            count
-        });
-        Self {
-            url,
-            stopped,
-            worker: Some(worker),
-        }
-    }
-}
-
-impl Drop for Provider {
-    fn drop(&mut self) {
-        self.stopped.store(true, Ordering::Release);
-        if let Some(worker) = self.worker.take() {
-            worker.join().unwrap();
-        }
     }
 }
 
@@ -517,7 +435,12 @@ async fn http_environment_tools_data_matrix() {
             assert_eq!(names, ["file.edit", "file.read", "file.write", "shell"]);
         }
         drop(service);
-        drop(provider);
+        assert_eq!(
+            provider
+                .finish()
+                .expect("scripted Provider worker completion"),
+            case.outputs.len()
+        );
     }
 }
 

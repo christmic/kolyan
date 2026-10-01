@@ -720,3 +720,31 @@ sequence now explicitly requires boundary admission, then approval checkpoint,
 then suspension, retaining approval resolution, tool execution and completion.
 That existing reconstruction target passed unchanged scenario assertions after
 this fact-contract migration. Full workspace revalidation is still in progress.
+
+### Fixture transport failure and verified cause
+
+The subsequent workspace regression passed the preceding targets, then failed
+the new HTTP fixture. Its original `read_line` returned errno 35 (`WouldBlock`);
+the fixture thread exited and the production request consequently observed
+Connection refused. `Provider::drop` then panicked on the failed thread join and
+aborted during cleanup, hiding the first failure. The failing HTTP and Ledger
+evidence is retained under `kolyan-http-four-tools-M9neZo`, with the workspace log
+at `/tmp/kolyan-l5-service-boundary-workspace-v2.log`. This is not a green gate.
+
+A native macOS regression reproduced the same listener and accepted-stream
+setup: despite a 30-second configured read timeout, the read returned WouldBlock
+in 91 microseconds before any first byte was sent. Explicit blocking mode then
+read the request successfully. The evidence is
+`kolyan-http-fixture-transport-M6se2f/probe.jsonl`. Therefore the confirmed cause
+is inherited nonblocking mode, not a 30-second timeout, failed model behavior or
+production protocol decoding.
+
+The fixture now bounds concurrent connection reads and waits for fragmented
+headers and bodies before consuming a script response. Empty connections do not
+consume scenarios; malformed complete requests fail explicitly. Partial headers,
+read states and errors are exported. Explicit finish reports worker failure;
+Drop records cleanup without a second panic. Completed corrupt JSONL lines fail
+parsing rather than being silently ignored while polling a partial final line.
+The eight-test transport/scenario target passed, retaining all eleven scenario
+reports under `kolyan-http-four-tools-VeeRXH`. This local target result does not
+replace final workspace or actual-model Agent acceptance.
