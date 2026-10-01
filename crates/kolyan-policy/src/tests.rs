@@ -1,6 +1,66 @@
 use super::*;
 use serde_json::json;
 
+#[test]
+fn delegation_permission_is_independent_of_process_execution() {
+    let call = ToolCall {
+        id: "delegate".into(),
+        name: "agent.invoke".into(),
+        arguments: json!({}),
+    };
+    let prepared = PreparedCall::new(
+        call,
+        "delegation-v1".into(),
+        InvocationClaim {
+            tool_name: "agent.invoke".into(),
+            capabilities: [Capability::AgentDelegate].into(),
+            effects: [Effect::Delegate].into(),
+            resource: ResourceClaim { path: None },
+            idempotency: Idempotency::NonIdempotent,
+        },
+        ToolRequirements {
+            process_sandbox: false,
+            max_output_bytes: 4096,
+            timeout_ms: 1000,
+        },
+    )
+    .unwrap();
+    let mut engine = PolicyEngine::default();
+    let mut manifest = ToolManifest::new("agent.invoke");
+    manifest.capabilities.insert(Capability::ProcessExecute);
+    manifest.effects.insert(Effect::Execute);
+    manifest.approval = ApprovalMode::Never;
+    engine.register(manifest.clone());
+    assert_eq!(
+        engine
+            .decide_prepared(&prepared, &PolicyContext::default())
+            .kind,
+        PolicyDecisionKind::Deny
+    );
+    manifest.capabilities = [Capability::AgentDelegate].into();
+    manifest.effects = [Effect::Delegate].into();
+    engine.register(manifest);
+    assert_eq!(
+        engine
+            .decide_prepared(&prepared, &PolicyContext::default())
+            .kind,
+        PolicyDecisionKind::Allow
+    );
+    let mut second = prepared.call().clone();
+    second.id = "delegate-other".into();
+    let second = PreparedCall::new(
+        second,
+        "delegation-v1".into(),
+        prepared.claim().clone(),
+        prepared.requirements().clone(),
+    )
+    .unwrap();
+    let plan = engine
+        .resolve_prepared_batch(&PolicyContext::default(), &[prepared, second])
+        .unwrap();
+    assert_eq!(plan.stages, vec![vec!["delegate"], vec!["delegate-other"]]);
+}
+
 fn write_manifest() -> ToolManifest {
     ToolManifest {
         tool_name: "file.write".into(),

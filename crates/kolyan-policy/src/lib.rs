@@ -23,6 +23,7 @@ pub enum Capability {
     ProcessExecute,
     NetworkConnect,
     SecretUse,
+    AgentDelegate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -35,6 +36,7 @@ pub enum Effect {
     Execute,
     ExternalNetwork,
     CredentialUse,
+    Delegate,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -445,7 +447,11 @@ fn claims_conflict(left: &InvocationClaim, right: &InvocationClaim) -> bool {
         claim.effects.iter().any(|effect| {
             matches!(
                 effect,
-                Effect::Create | Effect::Update | Effect::Delete | Effect::Execute
+                Effect::Create
+                    | Effect::Update
+                    | Effect::Delete
+                    | Effect::Execute
+                    | Effect::Delegate
             )
         })
     };
