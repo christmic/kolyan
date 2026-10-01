@@ -22,11 +22,18 @@ use std::time::{Duration, Instant};
 use thiserror::Error;
 
 mod boundary;
+mod checkpoint;
 mod control;
 mod dispatch;
 mod engine;
+mod outcome;
 pub use boundary::{TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind};
+pub use checkpoint::{
+    CheckpointApproval, CheckpointBudget, CheckpointCall, CheckpointCallState, CheckpointError,
+    IssuedToolAuthority, MAX_TURN_CHECKPOINT_BYTES, TURN_CHECKPOINT_SCHEMA, TurnCheckpoint,
+};
 pub use control::TurnControl;
+pub use outcome::{ExternalResolution, ExternalWait, MAX_EXTERNAL_BINDING_BYTES, ToolOutcome};
 
 /// Durable checkpoint for a turn paused at an approval boundary.
 ///
