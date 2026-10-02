@@ -204,3 +204,51 @@ executed. Formatting, source layout (via `sh`) and diff checks each exited 0.
 Normal commit hooks remain a separate gate. Strong model-opening consumers,
 forged-checkpoint integration negatives and C1/C2 remain
 required before reporting the complete goal-correction increment as accepted.
+
+## Exact resume budget validation
+
+An additive private module matrix starts an actual TaskExecutionService attempt
+with configured policy and atomic reservation. Runtime produces its approval
+checkpoint; the original service is dropped before reconstructing the checker.
+Memory retains the actual backing state; SQLite connections are reopened with
+the same filesystem SessionStore. Only a submitted checkpoint or binding copy
+is changed; original execution events, source journal and Session are not altered.
+
+Thirteen cases per backend cover exact reservation, an earlier original cutoff,
+absent reservation, changed invocation/execution/Session/Turn/Agent/constraints/
+source, excess Steps, absent cutoff and widened cutoff. Every submitted checkpoint
+must remain structurally valid. The helper stays private. All rows export the
+original suspension, submitted copy, requests, snapshots, Task facts and execution
+events before physical readback and assertions. Validation must open no additional
+model request, prepare or execute no tool, and append no fact or Session update.
+This checks the private budget validator with a real Runtime-produced checkpoint,
+not the actual Service approval-resume negative path or native/live-model behavior.
+
+### Approval resume consumer validation
+
+The next separately implemented test uses a read-only LedgerStore decorator that
+delegates real events unchanged except a selected exact suspension's budget fields
+in the returned read payload. It must not alter the source database or fabricate
+a checkpoint. Rebuilt TaskExecutionService must reject oversized Steps and absent
+or widened cutoffs through its actual resume_approval entry point before any new
+grant, model/tool activity or Task/Session writes. Include an unchanged positive
+consumer control, reject ambiguous read coordinates, and export source events,
+observed payloads and results before assertions. This consumer gate is released
+for independent implementation, not yet integrated or accepted. No production
+visibility expansion or new public consumer API is needed.
+
+### Main validator verification
+
+Main verified all four frozen file digests before integrating the independent
+tests. No existing assertion, production helper implementation or visibility was
+changed. `/tmp/kolyan-task-budget-resume-main-module-v1.log` exited 0: Server
+128 passed, zero failed and zero ignored. The 26 rows were physically reread at
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-task-budget-resume-I1bgob/actual.jsonl`.
+Each backend has two accepted and eleven rejected validation cases; every row
+retains exactly one initial model request, zero effects and unchanged Task facts,
+execution events and Session. Earlier-cutoff evidence was produced by the initial
+Runtime execution, not fabricated in the reconstructed checkpoint.
+
+Workspace/all-target strict Clippy exited 0 in
+`/tmp/kolyan-task-budget-resume-main-strict-v1.log`. These are offline validator
+receipts, not approval-resume consumer or MiniMax acceptance.

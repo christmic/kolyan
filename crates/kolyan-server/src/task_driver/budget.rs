@@ -38,3 +38,6 @@ where
         Ok(executor.with_absolute_deadline_at_ms(budget.policy.deadline_at_ms))
     }
 }
+
+#[cfg(test)]
+mod tests;

@@ -1,0 +1,15 @@
+[
+  {"id":"exact_reservation","mutation":"none","accepted":true,"error_contains":null},
+  {"id":"earlier_original_cutoff","mutation":"earlier_cutoff","accepted":true,"error_contains":null},
+  {"id":"missing_reservation","mutation":"missing_reservation","accepted":false,"error_contains":"no exact Step reservation"},
+  {"id":"changed_invocation","mutation":"invocation","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_execution","mutation":"execution","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_session","mutation":"session","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_turn","mutation":"turn","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_agent","mutation":"agent","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_constraints","mutation":"constraints","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"changed_input_source","mutation":"source","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"excess_step_ceiling","mutation":"max_steps","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"missing_absolute_cutoff","mutation":"missing_cutoff","accepted":false,"error_contains":"exceeds its saved Task execution budget"},
+  {"id":"widened_absolute_cutoff","mutation":"widened_cutoff","accepted":false,"error_contains":"exceeds its saved Task execution budget"}
+]

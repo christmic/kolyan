@@ -827,3 +827,12 @@ F2Qycj，只修新增框架为连续分页读取，并加强每行非空 facts/e
 `/tmp/kolyan-agent-host-main-strict-v1.log`。完整 Main 联合回归、产品服务/CLI
 入口、当前 ACL Skills 场景和唯一 MiniMax 矩阵仍是独立后续门，不能由本节
 推断整个 E0–E5 演进已经完成。
+
+### Integrated Host regression
+
+The complete frozen Main source at `b434f9d` passed workspace regression in
+`/tmp/kolyan-agent-host-main-workspace-v1.log`: 88 result groups, 889 passed,
+zero failed and 67 ignored. The complete log was reread after the gate ended;
+ignored provider-network tests were not executed. This closes that Host joint
+regression receipt, not the pending product entrypoints, Skills actual-model
+matrix, opening consumers, MCP/hooks or the complete E0–E5 program.
