@@ -1,7 +1,7 @@
 //! Bounded file worker protocol. The trusted host supplies workspace and limits;
 //! this helper neither authorizes effects nor establishes its own OS isolation.
 
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::PathBuf;
 
 use kolyan_tools::{
@@ -10,6 +10,17 @@ use kolyan_tools::{
 use thiserror::Error;
 
 const MAX_PROTOCOL_BYTES: usize = 64 * 1024 * 1024;
+
+/// Dedicated native-entry handshake. It carries no workspace or operation data.
+pub const BOOTSTRAP_RESPONSE: &[u8] =
+    b"{\"schema_version\":1,\"kind\":\"kolyan.worker.bootstrap\",\"ready\":true}\n";
+
+/// Write one fixed marker without consuming stdin or entering file execution.
+/// This proves native entry only, not authorization or future sandbox readiness.
+pub fn bootstrap_check(mut output: impl Write) -> std::io::Result<()> {
+    output.write_all(BOOTSTRAP_RESPONSE)?;
+    output.flush()
+}
 
 /// Host-selected command-line configuration, never part of model arguments.
 #[derive(Debug, Clone)]

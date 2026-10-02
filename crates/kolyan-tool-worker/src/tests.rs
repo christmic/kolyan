@@ -3,6 +3,18 @@ use super::*;
 use kolyan_tools::{ExactFileBinding, ExactFileStaging, FileOperation};
 use serde_json::json;
 
+#[test]
+fn bootstrap_marker_is_fixed_without_operation_or_workspace_input() {
+    let mut output = Vec::new();
+    bootstrap_check(&mut output).unwrap();
+    assert_eq!(output, BOOTSTRAP_RESPONSE);
+    let marker: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        marker,
+        json!({"schema_version":1,"kind":"kolyan.worker.bootstrap","ready":true})
+    );
+}
+
 fn private_stage() -> tempfile::TempDir {
     let mut builder = tempfile::Builder::new();
     #[cfg(unix)]

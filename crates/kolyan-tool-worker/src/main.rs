@@ -4,11 +4,15 @@
 use std::io::Write;
 use std::path::PathBuf;
 
-use kolyan_tool_worker::{WorkerConfig, WorkerError, execute_request};
+use kolyan_tool_worker::{WorkerConfig, WorkerError, bootstrap_check, execute_request};
 use kolyan_tools::FileOperationLimits;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let arguments = std::env::args_os().skip(1).collect::<Vec<_>>();
+    if matches!(arguments.as_slice(), [flag] if flag == "--bootstrap-check") {
+        bootstrap_check(std::io::stdout().lock())?;
+        return Ok(());
+    }
     if arguments.len() != 4 {
         return Err(WorkerError::Configuration.into());
     }
