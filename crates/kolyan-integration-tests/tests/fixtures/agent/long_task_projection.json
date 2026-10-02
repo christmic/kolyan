@@ -1,0 +1,1 @@
+{"schema_version":1,"policy_id":"long-host-explicit-projection","source":"complete_predecessor_trajectory_plus_current_input","selection":"first_user_anchor_and_complete_last_turn_plus_current_tail","mode":"Inspect","counter":"Unsupported","turns":10,"roles":"Root_then_nine_Continuation","live_per_turn_artifact_oracle":true}

@@ -1,0 +1,1 @@
+{"schema_version":1,"selectors":["named","inline"],"selections":["full","explicit_projection"],"configured_combinations":19,"finalizer":"AgentRunner.role_aware","source":"exact_frozen_predecessor","counter":"Unsupported"}

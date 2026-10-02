@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "gate_timeout_ms": 10000,
+  "drive_timeout_ms": 40000,
+  "live_drive_timeout_ms": 600000,
+  "inspection_window_assumption_tokens": 32768,
+  "max_steps": 4,
+  "input": "Write safe/native-proof.txt once with NATIVE-EFFECT-PROOF using file.write. Finish only after its actual result.",
+  "parent_input": "Invoke exactly one named child native-child at revision r1 using agent.invoke with parallel false. Give it exactly this private input: Write safe/native-proof.txt once with NATIVE-EFFECT-PROOF using file.write. Finish only after its actual result. Request only file.write permission, with no named delegation targets and allow_inline false and allow_self false. Do not execute file.write yourself. Await the actual child result.",
+  "write_arguments": {"path":"safe/native-proof.txt","content":"NATIVE-EFFECT-PROOF"},
+  "frames": [
+    {"reasoning":"Request one exact native effect.","content":[{"type":"tool_call","call":{"id":"native-write","name":"file.write","arguments":{"path":"safe/native-proof.txt","content":"NATIVE-EFFECT-PROOF"}}}],"usage":{"input_tokens":11,"output_tokens":7}},
+    {"reasoning":"The actual native result is available.","content":[{"type":"text","text":"The real write completed."}],"usage":{"input_tokens":12,"output_tokens":8}}
+  ],
+  "parent_frames": [
+    {"reasoning":"Admit one private child and release the parent into a durable wait.","content":[{"type":"tool_call","call":{"id":"delegate-native","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":{"kind":"named","value":{"definition_id":"native-child","revision":"r1"}},"input":"Write safe/native-proof.txt once with NATIVE-EFFECT-PROOF using file.write. Finish only after its actual result.","permissions":{"tools":["file.write"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":13,"output_tokens":9}},
+    {"reasoning":"This response must never be requested after cancellation.","content":[{"type":"text","text":"Unexpected parent resume."}],"usage":{"input_tokens":14,"output_tokens":10}}
+  ],
+  "cases": [
+    {"id":"cancel_after_committed_native_receipt","fault":"cancel_after_receipt","expected_receipts":1,"expected_uncertain":false,"expected_task_state":"Failed","expected_model_requests":1},
+    {"id":"native_commit_without_receipt_uncertain","fault":"lose_receipt","expected_receipts":0,"expected_uncertain":true,"expected_task_state":"RecoveryRequired","expected_model_requests":1},
+    {"id":"cancelled_parent_late_native_child","fault":"late_child","expected_receipts":1,"expected_uncertain":false,"expected_task_state":"Cancelled","expected_model_requests":3}
+  ],
+  "expected_content":"NATIVE-EFFECT-PROOF",
+  "unapproved_gap":"agent_running_native_worker_cancel: actual PID/start/reap observation is not available at these public host seams"
+}

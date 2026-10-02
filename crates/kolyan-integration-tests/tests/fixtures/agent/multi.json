@@ -1,0 +1,62 @@
+{
+  "schema_version":1,
+  "execution_state":"not_run",
+  "driver_state":"awaiting_production_child_runner_and_verified_join_contract",
+  "modes":["offline_scripted_real_workers","live_common_all_19"],
+  "root_selectors":["named","inline"],
+  "host_limits":{"max_depth":2,"max_invocations":4,"max_attempts":1,"max_children":2,"max_parallel":2,"max_steps_per_turn":24},
+  "initial_files":{"safe/left.txt":"LEFT-REAL-PROOF","safe/right.txt":"RIGHT-REAL-PROOF"},
+  "registered_children":[
+    {"definition_id":"left-reader","revision":"r1","display_name":"Left reader","instructions":"Read the explicit input file using file.read and finish. Do not delegate.","tools":["file.read"],"file_policy_scope":"safe/left.txt"},
+    {"definition_id":"right-reader","revision":"r1","display_name":"Right reader","instructions":"Read the explicit input file using file.read and finish. Do not delegate.","tools":["file.read"],"file_policy_scope":"safe/right.txt"},
+    {"definition_id":"left-writer","revision":"r1","display_name":"Left writer","instructions":"Write only the explicit input file using file.write and finish after the actual effect succeeds. Do not delegate.","tools":["file.write"],"file_policy_scope":"safe/left-proof.txt"},
+    {"definition_id":"right-writer","revision":"r1","display_name":"Right writer","instructions":"Write only the explicit input file using file.write and finish after the actual effect succeeds. Do not delegate.","tools":["file.write"],"file_policy_scope":"safe/right-proof.txt"},
+    {"definition_id":"approval-writer","revision":"r1","display_name":null,"instructions":"Write only safe/child-proof.txt using file.write. Wait for real approval if requested. Never claim completion before the effect succeeds. Do not delegate.","tools":["file.write"],"file_policy_scope":"safe/child-proof.txt"}
+  ],
+  "inline_child":{"definition_id":"inline-reader","revision":"r1","display_name":null,"instructions":"Read only the explicit input file and return the actual result. Do not delegate.","tools":["file.read"],"file_policy_scope":"safe/right.txt"},
+  "model_selection":"every root and child uses the actual selected matrix entry; model references are supplied by the host fixture",
+  "cases":[
+    {
+      "id":"named_then_inline",
+      "status":"not_run",
+      "root_input":"Private parent marker ROOT-MULTI-PRIVATE. First invoke registered left-reader revision r1 with input: read safe/left.txt using file.read. Wait for its verified result. Then invoke the supplied inline-reader revision r1, no display name, with input: read safe/right.txt using file.read. Give each child only file.read and no delegation; parallel false. Finally report both actual proofs. Never read either file yourself or replay a finished child.",
+      "expected_topology":[{"from":"root","to":"named_left","target":"named","private_input":"Read safe/left.txt using file.read and finish."},{"from":"root","to":"inline_right","target":"inline","private_input":"Read safe/right.txt using file.read and finish."}],
+      "faults":[{"at":"first_child_result_published_before_consumption","action":"drop_all_runners_and_reopen_host"}],
+      "expectations":{"child_instances":2,"distinct_private_sessions":2,"child_requests_exclude":["ROOT-MULTI-PRIVATE"],"read_receipts":2,"verified_result_consumptions":2,"parent_final_contains":["LEFT-REAL-PROOF","RIGHT-REAL-PROOF"],"no_model_request_replay":true}
+    },
+    {
+      "id":"parallel_readonly_join",
+      "status":"not_run",
+      "root_input":"Use one agent.invoke with parallel true and two registered children: left-reader r1 reads safe/left.txt; right-reader r1 reads safe/right.txt. Give both only file.read and no delegation. Wait for both verified results and then report both file proofs. Do not finish after only one result.",
+      "expected_topology":[{"from":"root","to":"named_left","target":"named"},{"from":"root","to":"named_right","target":"named"}],
+      "enforced_concurrency":{"capability":"read_only","max_parallel":2,"must_observe_actual_overlap":true,"host_latch":"test-only observation port after actual child admission; never a mocked child result"},
+      "faults":[{"at":"one_child_completed_other_waiting","action":"drop_all_runners_and_reopen_host"}],
+      "expectations":{"child_instances":2,"distinct_private_sessions":2,"read_receipts":2,"verified_result_consumptions":2,"required_join_results":2,"parent_final_contains":["LEFT-REAL-PROOF","RIGHT-REAL-PROOF"],"no_early_parent_completion":true}
+    },
+    {
+      "id":"parallel_shared_writes_serialized",
+      "status":"not_run",
+      "root_input":"Use one agent.invoke with parallel true: registered left-writer revision r1 writes safe/left-proof.txt with LEFT-WRITE-PROOF, and registered right-writer revision r1 writes safe/right-proof.txt with RIGHT-WRITE-PROOF. Give each only file.write and no delegation. Wait for both verified effects; do not infer concurrency from the parallel request.",
+      "expected_topology":[{"from":"root","to":"named_left_writer","target":"named","definition_id":"left-writer","revision":"r1","private_input":"Write safe/left-proof.txt with LEFT-WRITE-PROOF using file.write and finish."},{"from":"root","to":"named_right_writer","target":"named","definition_id":"right-writer","revision":"r1","private_input":"Write safe/right-proof.txt with RIGHT-WRITE-PROOF using file.write and finish."}],
+      "enforced_concurrency":{"capability":"shared_writable_workspace","max_parallel":1,"must_observe_actual_overlap":false},
+      "expectations":{"max_observed_effect_concurrency":1,"verified_result_consumptions":2,"no_parallel_authority_from_model_intent":true,"physical_files":{"safe/left-proof.txt":"LEFT-WRITE-PROOF","safe/right-proof.txt":"RIGHT-WRITE-PROOF"}}
+    },
+    {
+      "id":"duplicate_child_result_rejected",
+      "status":"not_run",
+      "root_input":"Invoke left-reader r1 to read safe/left.txt once, wait for its verified result and finish.",
+      "faults":[{"at":"verified_result_consumed","action":"replay_the_exact_persisted_external_resolution"}],
+      "expectations":{"read_receipts":1,"verified_result_consumptions":1,"duplicate_resume":"explicit_rejection","extra_model_requests_after_replay":0}
+    },
+    {
+      "id":"child_approval_restart",
+      "status":"not_run",
+      "root_input":"Use agent.invoke with parallel false and registered approval-writer revision r1. Give it only file.write and no delegation, with input: Write safe/child-proof.txt with CHILD-PROOF using file.write and finish. Wait for the verified result; do not claim success while the child awaits approval.",
+      "expected_topology":[{"from":"root","to":"named_approval_writer","target":"named","definition_id":"approval-writer","revision":"r1","private_input":"Write safe/child-proof.txt with CHILD-PROOF using file.write and finish."}],
+      "approval_tools":["file.write"],
+      "faults":[{"at":"child_approval_and_parent_external_wait_persisted","action":"drop_all_runners_and_reopen_host"}],
+      "expectations":{"before_confirmation_file_absent":true,"parent_waiting_not_success":true,"confirm_exact_child_approval":true,"file_write_receipts":1,"verified_result_consumptions":1,"snapshot_unchanged":true}
+    }
+  ],
+  "evidence_contract":{"emit_before_assert":true,"retain":["all_actual_parent_and_child_requests","model_reasoning_and_content","prepared_calls_and_grants","child_snapshots","private_bindings","approval_and_external_waits","all_execution_ledgers","task_journal","join_membership","result_consumption","physical_files"],"parallel_proof":"actual admitted/executing intervals, not intent flags or elapsed model time"}
+}

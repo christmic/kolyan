@@ -1,0 +1,13 @@
+{
+  "providers": [
+    {"surface":"openai_compat","profile":"OpenAi","max_retries":2,"max_elapsed_ms":120000,"max_server_delay_ms":30000},
+    {"surface":"anthropic_compat","profile":"Anthropic","max_retries":2,"max_elapsed_ms":120000,"max_server_delay_ms":30000}
+  ],
+  "cases": [
+    {"id":"overloaded","status":529,"code":"overloaded_error","retry":true},
+    {"id":"auth","status":401,"code":"authentication_error","retry":false},
+    {"id":"permanent_quota","status":429,"code":"insufficient_quota","retry":false},
+    {"id":"unknown_rate_limit","status":429,"code":null,"retry":false},
+    {"id":"accepted_stream","status":200,"code":null,"retry":false}
+  ]
+}

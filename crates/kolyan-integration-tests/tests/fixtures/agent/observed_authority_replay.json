@@ -1,0 +1,278 @@
+[
+  {
+    "id": "invalid_environment_tool",
+    "source_trace": "NeAopa",
+    "source_projection": "ToolCall blocks and usage copied from observed Completed responses; original full JSONL retained.",
+    "input": "Create exactly one self child using agent.invoke, parallel false. Give that child only file.read and delegation allow_self true, allow_inline false, named_targets []. Its private input must tell it to create exactly one self grandchild with only file.read and no delegation (allow_self false, allow_inline false, named_targets []). The grandchild must read safe/child-proof.txt exactly once and return the actual content. Neither root nor intermediate child may read the file. Wait for the grandchild result, then the child result, and report the real content. Do not create extra children.",
+    "initial_content": "DIAGNOSTIC-NO-EFFECT-PROOF",
+    "approval_tools": [],
+    "frames": [
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "children": [
+                  {
+                    "input": "Create exactly one self grandchild using agent.invoke with parallel false. Give that grandchild only file.read tool and delegation with allow_self false, allow_inline false, named_targets []. The grandchild's private input must tell it to read the file safe/child-proof.txt exactly once and return the actual content. You must not read the file yourself. Wait for the grandchild result and report the real content it returns. Do not create extra children.",
+                    "permissions": {
+                      "delegation": {
+                        "allow_inline": false,
+                        "allow_self": true,
+                        "named_targets": []
+                      },
+                      "tools": [
+                        "file.read"
+                      ]
+                    },
+                    "target": {
+                      "kind": "self_call"
+                    }
+                  }
+                ],
+                "parallel": false
+              },
+              "id": "call_49ed80145a674303872bcfcb",
+              "name": "agent.invoke"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
+          "input_tokens": 1554,
+          "output_tokens": 550,
+          "reasoning_tokens": 372
+        }
+      },
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "children": [
+                  {
+                    "input": "Create exactly one grandchild using agent.invoke with parallel false. The grandchild must have target.kind 'self_call', tools ['file.read'], and delegation with allow_self false, allow_inline false, named_targets []. The grandchild's input must tell it to read the file safe/child-proof.txt exactly once and return the actual content. Wait for the grandchild result and return the content it provides.",
+                    "permissions": {
+                      "delegation": {
+                        "allow_inline": false,
+                        "allow_self": true,
+                        "named_targets": []
+                      },
+                      "tools": [
+                        "agent.invoke"
+                      ]
+                    },
+                    "target": {
+                      "kind": "self_call"
+                    }
+                  }
+                ],
+                "parallel": false
+              },
+              "id": "call_b82b9e2198d349f2aa792515",
+              "name": "agent.invoke"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
+          "input_tokens": 760,
+          "output_tokens": 738,
+          "reasoning_tokens": 569
+        }
+      }
+    ],
+    "expected": {
+      "classification": "invalid_environment_tool",
+      "error_contains": "unknown variant `agent.invoke`",
+      "root_approvals": 0,
+      "root_external_waits": 1,
+      "child_invocations": 1,
+      "drive_stages": 1
+    }
+  },
+  {
+    "id": "effective_ceiling_expansion",
+    "source_trace": "0Go6lL",
+    "source_projection": "ToolCall blocks and usage copied from observed Completed responses; original full JSONL retained.",
+    "input": "Create exactly one self child using agent.invoke, parallel false. Give that child only file.read and delegation allow_self true, allow_inline false, named_targets []. Its private input must tell it to create exactly one self grandchild with only file.read and no delegation (allow_self false, allow_inline false, named_targets []). The grandchild must read safe/child-proof.txt exactly once and return the actual content. Neither root nor intermediate child may read the file. Wait for the grandchild result, then the child result, and report the real content. Do not create extra children.",
+    "initial_content": "DIAGNOSTIC-NO-EFFECT-PROOF",
+    "approval_tools": [],
+    "frames": [
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "children": [
+                  {
+                    "input": "Create exactly one self grandchild using agent.invoke, with parallel false. Give that grandchild only tools [\"file.read\"] and delegation allow_self false, allow_inline false, named_targets []. The grandchild's private input must tell it to read safe/child-proof.txt exactly once using file.read and return the actual file content. Do not let this intermediate child read the file itself. Do not create any extra children. Wait for the grandchild result, then report the grandchild's actual returned content.",
+                    "permissions": {
+                      "delegation": {
+                        "allow_inline": false,
+                        "allow_self": true,
+                        "named_targets": []
+                      },
+                      "tools": [
+                        "file.read"
+                      ]
+                    },
+                    "target": {
+                      "kind": "self_call"
+                    }
+                  }
+                ],
+                "parallel": false
+              },
+              "id": "toolu_2c84332acf58402fbb1388d5",
+              "name": "agent.invoke"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "input_tokens": 1570,
+          "output_tokens": 446,
+          "reasoning_tokens": null
+        }
+      },
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "children": [
+                  {
+                    "input": "You are an intermediate orchestration agent. You MUST NOT read any file yourself and you have no file.read tool.\n\nYour only job: make exactly ONE agent.invoke call, with parallel=false, that creates exactly ONE self grandchild (target: {kind: \"self_call\"}). Do not create any extra children.\n\nThe grandchild's permissions must be exactly:\n- tools: [\"file.read\"]\n- delegation: { \"named_targets\": [], \"allow_inline\": false, \"allow_self\": false }\n\nThe grandchild's private input must be exactly:\n\"Read the workspace file safe/child-proof.txt exactly once using the file.read tool. Return the actual file content you received verbatim. Do not summarize, do not invent content, and do not create any children of your own.\"\n\nThen wait for the grandchild's durable result and report the grandchild's actual returned content unchanged to your parent.",
+                    "permissions": {
+                      "delegation": {
+                        "allow_inline": false,
+                        "allow_self": true,
+                        "named_targets": []
+                      },
+                      "tools": []
+                    },
+                    "target": {
+                      "kind": "self_call"
+                    }
+                  }
+                ],
+                "parallel": false
+              },
+              "id": "toolu_b6e6f47276804309b95c973b",
+              "name": "agent.invoke"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "input_tokens": 787,
+          "output_tokens": 1192,
+          "reasoning_tokens": null
+        }
+      },
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "children": [
+                  {
+                    "input": "Read the workspace file safe/child-proof.txt exactly once using the file.read tool. Return the actual file content you received verbatim. Do not summarize, do not invent content, and do not create any children of your own.",
+                    "permissions": {
+                      "delegation": {
+                        "allow_inline": false,
+                        "allow_self": false,
+                        "named_targets": []
+                      },
+                      "tools": [
+                        "file.read"
+                      ]
+                    },
+                    "target": {
+                      "kind": "self_call"
+                    }
+                  }
+                ],
+                "parallel": false
+              },
+              "id": "toolu_08f51aeeaf0249e0b1869535",
+              "name": "agent.invoke"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": 0,
+          "cache_write_tokens": 0,
+          "input_tokens": 800,
+          "output_tokens": 158,
+          "reasoning_tokens": null
+        }
+      }
+    ],
+    "expected": {
+      "classification": "effective_ceiling_expansion",
+      "error_contains": "exceed the effective ceiling",
+      "root_approvals": 0,
+      "root_external_waits": 1,
+      "child_invocations": 2,
+      "drive_stages": 2
+    }
+  },
+  {
+    "id": "parent_read_instead_of_child_wait",
+    "source_trace": "7JEtBR",
+    "source_projection": "ToolCall blocks and usage copied from observed Completed responses; original full JSONL retained.",
+    "input": "Use exactly one agent.invoke with parallel true and exactly two independent named child-definition revision r1 children. Give each only file.read and no delegation: named_targets [], allow_inline false, allow_self false. Each private input must request reading safe/child-proof.txt exactly once and returning the actual content without delegation. The trusted host requires approval before each read. Wait for both approvals and real results; do not read the file yourself, substitute results or create extra children.",
+    "initial_content": "DIAGNOSTIC-NO-EFFECT-PROOF",
+    "approval_tools": [
+      "file.read"
+    ],
+    "frames": [
+      {
+        "reasoning": "Offline call-only projection of the referenced observed response; not a fresh network result.",
+        "content": [
+          {
+            "call": {
+              "arguments": {
+                "path": "safe/child-proof.txt"
+              },
+              "id": "call_01a0f9aed44b70229d5b03b4",
+              "name": "file.read"
+            },
+            "type": "tool_call"
+          }
+        ],
+        "usage": {
+          "cache_read_tokens": null,
+          "cache_write_tokens": null,
+          "input_tokens": 1629,
+          "output_tokens": 52,
+          "reasoning_tokens": null
+        }
+      }
+    ],
+    "expected": {
+      "classification": "parent_read_instead_of_child_wait",
+      "error_contains": null,
+      "root_approvals": 1,
+      "root_external_waits": 0,
+      "child_invocations": 0,
+      "drive_stages": 0
+    }
+  }
+]

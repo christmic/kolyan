@@ -1,0 +1,36 @@
+{
+  "schema_version":1,
+  "slots":2,
+  "cases":[
+    {
+      "id":"readonly_two_children_overlap",
+      "input":"PARENT-PRIVATE-MARKER. Use exactly one agent.invoke with parallel true and exactly two independent registered child-definition revision r1 children. Each child input: Read safe/child-proof.txt once using file.read and return its actual content; do not delegate. Give each only file.read with named_targets [], allow_inline false, allow_self false. Both independent readers are required. Wait for both real results then finish. Do not read files yourself.",
+      "child_instructions":"Use file.read once for the explicitly requested physical file, then return its actual content. Do not delegate or repeat an operation.",
+      "tools":["file.read"],"initial_content":"TWO-CHILD-READ-PROOF","expected_content":"TWO-CHILD-READ-PROOF",
+      "expected_peak":2,"expected_children":2,"expected_receipts":2,"expected_receipts_per_child":1,"expected_consumptions":2,"expected_parent_requests":2,
+      "parent_frames":[
+        {"reasoning":"Admit two independent readers.","content":[{"type":"tool_call","call":{"id":"two-readers","name":"agent.invoke","arguments":{"parallel":true,"children":[{"target":"$TARGET","input":"Read safe/child-proof.txt once using file.read, then finish. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},{"target":"$TARGET","input":"Read safe/child-proof.txt once using file.read, then finish. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+        {"reasoning":"Both verified results were joined.","content":[{"type":"text","text":"Both independent children returned the proof."}],"usage":{"input_tokens":20,"output_tokens":6}}
+      ],
+      "child_frames":[
+        {"reasoning":"Read the real physical proof once.","content":[{"type":"tool_call","call":{"id":"child-read","name":"file.read","arguments":{"path":"safe/child-proof.txt"}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+        {"reasoning":"Return the observed result.","content":[{"type":"text","text":"TWO-CHILD-READ-PROOF"}],"usage":{"input_tokens":20,"output_tokens":6}}
+      ]
+    },
+    {
+      "id":"writable_two_children_serial",
+      "input":"PARENT-PRIVATE-MARKER. Use exactly one agent.invoke with parallel true and exactly two independent registered child-definition revision r1 children. Each child input: Write safe/child-proof.txt with exactly TWO-CHILD-WRITE-PROOF using file.write once, then finish. Do not delegate. Give each only file.write with named_targets [], allow_inline false, allow_self false. Both independent writes are required even though content matches. The host determines safe scheduling. Wait for both real effects then finish. Do not write files yourself.",
+      "child_instructions":"Use file.write once for the requested physical file with the exact requested content. Return only after the real effect completes. Do not delegate or repeat an operation.",
+      "tools":["file.write"],"initial_content":"BEFORE-WRITES","expected_content":"TWO-CHILD-WRITE-PROOF",
+      "expected_peak":1,"expected_children":2,"expected_receipts":2,"expected_receipts_per_child":1,"expected_consumptions":2,"expected_parent_requests":2,
+      "parent_frames":[
+        {"reasoning":"Request two independent writers; host owns scheduling.","content":[{"type":"tool_call","call":{"id":"two-writers","name":"agent.invoke","arguments":{"parallel":true,"children":[{"target":"$TARGET","input":"Write safe/child-proof.txt with exactly TWO-CHILD-WRITE-PROOF using file.write once, then finish. Do not delegate.","permissions":{"tools":["file.write"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},{"target":"$TARGET","input":"Write safe/child-proof.txt with exactly TWO-CHILD-WRITE-PROOF using file.write once, then finish. Do not delegate.","permissions":{"tools":["file.write"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+        {"reasoning":"Both real effects were verified.","content":[{"type":"text","text":"Both independent writes completed."}],"usage":{"input_tokens":20,"output_tokens":6}}
+      ],
+      "child_frames":[
+        {"reasoning":"Perform the authorized real write once.","content":[{"type":"tool_call","call":{"id":"child-write","name":"file.write","arguments":{"path":"safe/child-proof.txt","content":"TWO-CHILD-WRITE-PROOF"}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+        {"reasoning":"The physical effect was observed.","content":[{"type":"text","text":"TWO-CHILD-WRITE-PROOF written."}],"usage":{"input_tokens":20,"output_tokens":6}}
+      ]
+    }
+  ]
+}

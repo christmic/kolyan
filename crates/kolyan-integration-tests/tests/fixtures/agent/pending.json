@@ -1,0 +1,9 @@
+{
+  "schema_version":1,
+  "cases":[
+    {"id":"named_child","status":"not_run","requires":"AgentRunner child admission and external wait orchestration","expectations":["private child context","durable wait","verified result consumed once"]},
+    {"id":"inline_child","status":"not_run","requires":"AgentRunner child admission and external wait orchestration","expectations":["stable anonymous authority","private child context","durable wait"]},
+    {"id":"self_child","status":"not_run","requires":"AgentRunner saved-self orchestration","expectations":["saved definition","distinct instance","bounded depth"]},
+    {"id":"parallel_join","status":"not_run","requires":"AgentRunner child orchestration and exact join evidence","expectations":["distinct private contexts","all required children verified","consume each result once"]}
+  ]
+}

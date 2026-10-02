@@ -1,0 +1,160 @@
+{
+  "schema_version": 1,
+  "family": "minimax",
+  "surfaces": [
+    "openai_compat",
+    "anthropic_compat"
+  ],
+  "scopes": {
+    "root": [
+      "named",
+      "inline"
+    ],
+    "approval_restart": [
+      "named",
+      "inline"
+    ],
+    "delegation": [
+      "single-named",
+      "single-inline",
+      "single-self",
+      "parent-result-restart"
+    ],
+    "topology": [
+      "deep_two_self_calls",
+      "two_child_approvals_restart"
+    ],
+    "parallel": [
+      "readonly_two_children_overlap",
+      "writable_two_children_serial"
+    ],
+    "long_task": [
+      "named",
+      "inline"
+    ],
+    "continuation": [
+      "named",
+      "inline"
+    ],
+    "projection": [
+      "named",
+      "inline"
+    ],
+    "finalization": [
+      "full/named",
+      "full/inline",
+      "explicit_projection/named",
+      "explicit_projection/inline"
+    ]
+  },
+  "selection_cases": [
+    {
+      "id": "both_protocols_with_foreign_family",
+      "entries": [
+        [
+          "minimax",
+          "openai_compat",
+          "model-a"
+        ],
+        [
+          "qwen",
+          "anthropic_compat",
+          "foreign"
+        ],
+        [
+          "minimax",
+          "anthropic_compat",
+          "model-a"
+        ]
+      ],
+      "accepted": true
+    },
+    {
+      "id": "missing_minimax",
+      "entries": [
+        [
+          "qwen",
+          "openai_compat",
+          "model-a"
+        ]
+      ],
+      "accepted": false
+    },
+    {
+      "id": "missing_protocol",
+      "entries": [
+        [
+          "minimax",
+          "openai_compat",
+          "model-a"
+        ]
+      ],
+      "accepted": false
+    },
+    {
+      "id": "duplicate_protocol",
+      "entries": [
+        [
+          "minimax",
+          "openai_compat",
+          "model-a"
+        ],
+        [
+          "minimax",
+          "openai_compat",
+          "model-b"
+        ],
+        [
+          "minimax",
+          "anthropic_compat",
+          "model-a"
+        ]
+      ],
+      "accepted": false
+    },
+    {
+      "id": "foreign_protocol",
+      "entries": [
+        [
+          "minimax",
+          "openai_compat",
+          "model-a"
+        ],
+        [
+          "minimax",
+          "unsupported",
+          "model-a"
+        ]
+      ],
+      "accepted": false
+    },
+    {
+      "id": "empty_model",
+      "entries": [
+        [
+          "minimax",
+          "openai_compat",
+          ""
+        ],
+        [
+          "minimax",
+          "anthropic_compat",
+          "model-a"
+        ]
+      ],
+      "accepted": false
+    },
+    {
+      "id": "altered_existing_cases",
+      "entries": [["minimax", "openai_compat", "model-a"], ["minimax", "anthropic_compat", "model-a"]],
+      "cases": ["altered-case"],
+      "accepted": false
+    },
+    {
+      "id": "unknown_capability",
+      "entries": [["minimax", "openai_compat", "model-a"], ["minimax", "anthropic_compat", "model-a"]],
+      "scope": "undeclared",
+      "accepted": false
+    }
+  ]
+}

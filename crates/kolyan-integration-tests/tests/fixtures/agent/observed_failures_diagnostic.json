@@ -1,0 +1,35 @@
+[
+  {
+    "id": "root_first_response_claimed_unexecuted_writes",
+    "flow": "root",
+    "deployment": {
+      "schema_version": 1,
+      "family": "qwen",
+      "surface": "anthropic_compat",
+      "model": "qwen3.8-flash",
+      "selector": "inline"
+    }
+  },
+  {
+    "id": "root_stream_tls_close_notify_missing",
+    "flow": "root",
+    "deployment": {
+      "schema_version": 1,
+      "family": "qwen",
+      "surface": "anthropic_compat",
+      "model": "deepseek-v4-pro",
+      "selector": "named"
+    }
+  },
+  {
+    "id": "approval_restart_stream_tls_close_notify_missing",
+    "flow": "approval_restart",
+    "deployment": {
+      "schema_version": 1,
+      "family": "qwen",
+      "surface": "anthropic_compat",
+      "model": "qwen3.8-max",
+      "selector": "inline"
+    }
+  }
+]

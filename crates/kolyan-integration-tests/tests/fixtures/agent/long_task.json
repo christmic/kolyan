@@ -1,0 +1,651 @@
+{
+  "schema_version": 1,
+  "configured_combinations": 19,
+  "selectors": [
+    "named",
+    "inline"
+  ],
+  "instructions": "Follow the current Turn's exact ordered file operations using the admitted tools. Observe each result before continuing. Never repeat a completed mutation. Finish only after the actual read. Preserve previous Session history and tool results.",
+  "artifact_path": "safe/long-proof.txt",
+  "history_marker": "LONG-HISTORY-中文🦀",
+  "inspection_window_assumption_tokens": 32768,
+  "output_reserve_tokens": 8192,
+  "max_steps": 24,
+  "max_tool_calls": 24,
+  "max_suspensions": 4,
+  "approved_read_turns": [
+    "long-08"
+  ],
+  "policy": [
+    {
+      "tool_name": "file.read",
+      "capabilities": [
+        "filesystem_read"
+      ],
+      "effects": [
+        "read"
+      ],
+      "path_scopes": [],
+      "idempotency": "idempotent",
+      "approval": "never"
+    },
+    {
+      "tool_name": "file.write",
+      "capabilities": [
+        "filesystem_write"
+      ],
+      "effects": [
+        "create",
+        "update"
+      ],
+      "path_scopes": [],
+      "idempotency": "non_idempotent",
+      "approval": "always"
+    },
+    {
+      "tool_name": "file.edit",
+      "capabilities": [
+        "filesystem_read",
+        "filesystem_write"
+      ],
+      "effects": [
+        "read",
+        "update"
+      ],
+      "path_scopes": [],
+      "idempotency": "non_idempotent",
+      "approval": "always"
+    }
+  ],
+  "turns": [
+    {
+      "id": "long-01",
+      "input": "Private history marker LONG-HISTORY-中文🦀. Use file.write to write safe/long-proof.txt with exactly TURN01 (no newline). Then use file.read on that file, observe the actual result, and finish. Do not repeat effects.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-01",
+                "name": "file.write",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "content": "TURN01"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-01",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 01 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-02",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN01 with TURN01|TURN02. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-02",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN01",
+                  "new_text": "TURN01|TURN02"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-02",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 02 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-03",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN02 with TURN02|TURN03. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-03",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN02",
+                  "new_text": "TURN02|TURN03"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-03",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 03 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-04",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN03 with TURN03|TURN04. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-04",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN03",
+                  "new_text": "TURN03|TURN04"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-04",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 04 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-05",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN04 with TURN04|TURN05. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-05",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN04",
+                  "new_text": "TURN04|TURN05"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-05",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 05 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-06",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN05 with TURN05|TURN06. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-06",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN05",
+                  "new_text": "TURN05|TURN06"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-06",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 06 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-07",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN06 with TURN06|TURN07. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-07",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN06",
+                  "new_text": "TURN06|TURN07"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-07",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 07 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-08",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN07 with TURN07|TURN08. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-08",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN07",
+                  "new_text": "TURN07|TURN08"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-08",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 08 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-09",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN08 with TURN08|TURN09. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-09",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN08",
+                  "new_text": "TURN08|TURN09"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-09",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 09 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    },
+    {
+      "id": "long-10",
+      "input": "In this new Turn, use file.edit on safe/long-proof.txt exactly once: replace TURN09 with TURN09|TURN10. Then use file.read on that file, observe the actual result, and finish. Do not rewrite or repeat effects. Retain the earlier history marker and prior results.",
+      "script": [
+        {
+          "reasoning": "Apply only the current explicitly requested change.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "mutate-10",
+                "name": "file.edit",
+                "arguments": {
+                  "path": "safe/long-proof.txt",
+                  "old_text": "TURN09",
+                  "new_text": "TURN09|TURN10"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 10,
+            "output_tokens": 5
+          }
+        },
+        {
+          "reasoning": "Read the actual physical bytes after the mutation result.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "read-10",
+                "name": "file.read",
+                "arguments": {
+                  "path": "safe/long-proof.txt"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 6
+          }
+        },
+        {
+          "reasoning": "Both real OS operations have completed.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Turn 10 done; history marker LONG-HISTORY-中文🦀 retained."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 7
+          }
+        }
+      ]
+    }
+  ]
+}
