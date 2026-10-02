@@ -37,6 +37,7 @@ Session
 
 ## 设计文档
 
+- [Agent 阶段性增强实施方案（分批设计、并行开发与验收）](docs/requirements/0031-agent-evolution-program.md)
 - [Agent 调用、四种工具与 macOS 沙箱规格（L5，实施中）](docs/requirements/0030-governed-agent-execution.md)
 - [账本、轨迹与长任务能力规格（L1–L4 已验收）](docs/requirements/0029-durable-task-foundation.md)
 - [最小 HTTP Server 需求与验收（已实现，真实矩阵 76/76 通过）](docs/requirements/0028-http-server-boundary.md)
