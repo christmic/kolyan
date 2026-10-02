@@ -54,11 +54,11 @@ impl ToolExecutor for ChangingPreparation {
                 )
                 .unwrap();
             self.executed.fetch_add(1, Ordering::SeqCst);
-            Ok(ToolResult {
+            Ok(ToolOutcome::Completed(ToolResult {
                 call_id: invocation.prepared.call().id.clone(),
                 content: "committed".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
@@ -141,11 +141,11 @@ async fn resumed_approval_rejects_changed_implementation_resource_scope_or_snaps
         .with_agent_snapshot_digest("a".repeat(64))
         .with_policy_engine(approval_policy());
         let approval = match executor.start_resumable(turn_request()).await.unwrap() {
-            ResumableTurn::AwaitingApproval(approval) => *approval,
+            ResumableTurn::Suspended(approval) => *approval,
             other => panic!("expected durable approval: {other:?}"),
         };
         let bytes = serde_json::to_vec(&approval).unwrap();
-        let restored: ApprovalRequest = serde_json::from_slice(&bytes).unwrap();
+        let restored: TurnSuspension = serde_json::from_slice(&bytes).unwrap();
         let executor = match mutation {
             1 | 2 | 6 => {
                 mode.store(mutation, Ordering::SeqCst);
@@ -165,9 +165,12 @@ async fn resumed_approval_rejects_changed_implementation_resource_scope_or_snaps
         };
         assert!(
             matches!(
-                executor
-                    .resume_approval(restored, &approval.approval_id)
-                    .await,
+                resume_confirmed(
+                    &executor,
+                    restored,
+                    &approval.waiting.approvals[0].approval_id
+                )
+                .await,
                 Err(TurnError::InvalidRequest { .. })
             ),
             "mutation {mutation}"
@@ -194,14 +197,14 @@ async fn resumed_preparation_retains_tool_timeout_without_a_turn_deadline() {
     .with_policy_engine(approval_policy())
     .with_tool_timeout(Duration::from_millis(10));
     let approval = match executor.start_resumable(turn_request()).await.unwrap() {
-        ResumableTurn::AwaitingApproval(approval) => *approval,
+        ResumableTurn::Suspended(approval) => *approval,
         other => panic!("expected approval: {other:?}"),
     };
     mode.store(3, Ordering::SeqCst);
-    let id = approval.approval_id.clone();
+    let id = approval.waiting.approvals[0].approval_id.clone();
     let error = tokio::time::timeout(
         Duration::from_secs(1),
-        executor.resume_approval(approval, &id),
+        resume_confirmed(&executor, approval, &id),
     )
     .await
     .expect("saved tool timeout must bound resumed preparation")
