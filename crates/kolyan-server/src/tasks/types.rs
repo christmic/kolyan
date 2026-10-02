@@ -6,6 +6,7 @@ use kolyan_ledger::{FactError, FactRef};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use super::InvocationInputSource;
 use crate::ExecutionRef;
 
 /// Definition revision and instance are distinct from invocation identity.
@@ -97,6 +98,7 @@ pub struct InvocationDefinition {
     pub role: InvocationRole,
     pub parent_invocation_id: Option<String>,
     pub dependencies: Vec<String>,
+    pub input_source: InvocationInputSource,
 }
 
 /// Execution identity must be the identity admitted by SessionExecutionService.
@@ -108,6 +110,7 @@ pub struct AttemptBinding {
     pub execution: ExecutionRef,
     pub agent: AgentIdentity,
     pub constraints_digest: String,
+    pub input_source: InvocationInputSource,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,16 +172,26 @@ impl CompletionEvidence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum WaitingReason {
-    Approval { approval_id: String },
+    Suspension(TaskSuspension),
     ChildResults { invocation_ids: Vec<String> },
     Recovery { reason: String },
+}
+
+/// Coordinates of a Runtime checkpoint, not approval or result authority.
+/// Both sets may be populated; only Runtime verifies the underlying proofs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TaskSuspension {
+    pub checkpoint_id: String,
+    pub approval_ids: Vec<String>,
+    pub external_wait_ids: Vec<String>,
 }
 
 /// Authoritative stopped outcome supplied by the host, never model text alone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum AttemptOutcome {
-    Suspended { approval_id: String },
+    Suspended { waiting: TaskSuspension },
     Completed { evidence: Vec<CompletionEvidence> },
     Failed { reason: String, safe_to_retry: bool },
     Cancelled { reason: String },
@@ -241,12 +254,33 @@ pub struct ConsumedResult {
     pub evidence: Vec<CompletionEvidence>,
 }
 
+/// A terminal result is feedback, not proof that the Task succeeded.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum TerminalResultDisposition {
+    Completed { evidence: Vec<CompletionEvidence> },
+    Failed { reason: String },
+    Cancelled { reason: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ConsumedTerminalResult {
+    pub parent: AttemptBinding,
+    pub child: AttemptBinding,
+    pub terminal_fact: FactRef,
+    pub source: ExecutionEvidence,
+    pub disposition: TerminalResultDisposition,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvocationSnapshot {
     pub definition: InvocationDefinition,
     pub state: InvocationState,
     pub attempts: Vec<String>,
     pub consumed_results: BTreeMap<String, ConsumedResult>,
+    pub terminal_consumed_results: BTreeMap<String, ConsumedTerminalResult>,
+    pub terminal_fact: Option<FactRef>,
     pub completion_fact: Option<FactRef>,
     pub cancellation_requested: bool,
 }
@@ -289,7 +323,7 @@ pub(crate) enum TaskEvent {
     AttemptObserved(AttemptObservation),
     AttemptResumed {
         binding: AttemptBinding,
-        approval_id: String,
+        checkpoint_id: String,
     },
     RecoveryNeeded {
         attempt_id: String,
@@ -303,6 +337,10 @@ pub(crate) enum TaskEvent {
     ResultConsumed {
         invocation_id: String,
         result: ConsumedResult,
+    },
+    TerminalResultConsumed {
+        invocation_id: String,
+        result: Box<ConsumedTerminalResult>,
     },
     Completed {
         evidence: Vec<CompletionEvidence>,

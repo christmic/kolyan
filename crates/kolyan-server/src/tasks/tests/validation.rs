@@ -1,5 +1,6 @@
 //! Admission/replay validation and exact retry/CAS semantics.
 
+use crate::input_fixture::SourceFixtureAdmission;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -33,7 +34,7 @@ fn exact_command_retries_survive_later_appends_but_changed_content_fails() {
     );
     assert_eq!(
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "admit-root",
                 invocation("root", None, InvocationRole::Root)
@@ -140,7 +141,23 @@ fn critical_version_subject_payload_and_causal_chain_are_checked_on_replay() {
                     serde_json::to_value(types::TaskEvent::Registered(task)).unwrap();
             }
         }
-        destination.append("task", 0, copied).unwrap();
+        // Preserve the exact source closure in the reconstructed journal. The
+        // deliberately mutated Task drafts are still checked by production replay.
+        let registration = copied.remove(0);
+        destination.append("task", 0, vec![registration]).unwrap();
+        for cause in &source[1].draft.causes {
+            if cause.stream_id != "task" {
+                let records = coordinator.journal().read(&cause.stream_id, 0, 2).unwrap();
+                destination
+                    .append(
+                        &cause.stream_id,
+                        0,
+                        records.into_iter().map(|record| record.draft).collect(),
+                    )
+                    .unwrap();
+            }
+        }
+        destination.append("task", 1, copied).unwrap();
         assert!(
             TaskCoordinator::new(destination).snapshot("task").is_err(),
             "{mutation}"
@@ -155,7 +172,7 @@ fn identity_collision_and_changed_admission_are_rejected_before_append() {
     for id in ["task", "root"] {
         assert!(
             coordinator
-                .admit_invocation(
+                .admit_fixture(
                     "task",
                     &format!("collision-{id}"),
                     invocation(id, Some("root"), InvocationRole::SelfCall)
@@ -242,7 +259,7 @@ fn artifact_criterion_needs_matching_digest_and_actual_bound_source() {
     }];
     coordinator.register_task("register", task).unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "root",
             invocation("root", None, InvocationRole::Root),

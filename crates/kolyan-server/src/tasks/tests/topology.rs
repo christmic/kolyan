@@ -1,6 +1,7 @@
 //! Call ancestry and result-dependency graphs are distinct DAGs.
 
 use super::*;
+use crate::input_fixture::SourceFixtureAdmission;
 
 fn consume<J: FactJournal>(coordinator: &TaskCoordinator<J>, parent: &str, child: &str) {
     let state = coordinator.snapshot("task").unwrap();
@@ -27,7 +28,7 @@ fn consume<J: FactJournal>(coordinator: &TaskCoordinator<J>, parent: &str, child
 fn fanout_join_requires_exact_consumption_before_root_execution() {
     let coordinator = setup(MemoryFactJournal::default());
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "self",
             invocation("self", Some("root"), InvocationRole::SelfCall),
@@ -36,7 +37,7 @@ fn fanout_join_requires_exact_consumption_before_root_execution() {
     let mut delegate = invocation("delegate", Some("root"), InvocationRole::Delegation);
     delegate.agent.definition_id = "different-agent".into();
     coordinator
-        .admit_invocation("task", "delegate", delegate.clone())
+        .admit_fixture("task", "delegate", delegate.clone())
         .unwrap();
     for child in ["self", "delegate"] {
         coordinator
@@ -107,7 +108,7 @@ fn parent_already_running_cannot_complete_before_child_result_consumption() {
         .start_attempt("task", "start-root", root.clone())
         .unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "child",
             invocation("child", Some("root"), InvocationRole::SelfCall),
@@ -151,9 +152,7 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
     let coordinator = setup(MemoryFactJournal::default());
     let mut child = invocation("child", Some("root"), InvocationRole::SelfCall);
     child.dependencies.push("root".into());
-    coordinator
-        .admit_invocation("task", "child", child)
-        .unwrap();
+    coordinator.admit_fixture("task", "child", child).unwrap();
     let before = coordinator.snapshot("task").unwrap();
     assert!(
         coordinator
@@ -167,14 +166,14 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
     );
     assert_eq!(coordinator.snapshot("task").unwrap(), before);
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "grandchild",
             invocation("grandchild", Some("child"), InvocationRole::SelfCall),
         )
         .unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "greatgrandchild",
             invocation(
@@ -186,7 +185,7 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
         .unwrap();
     assert!(
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "too-deep",
                 invocation(
@@ -199,7 +198,7 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
     );
     for n in 0..4 {
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 &format!("child-{n}"),
                 invocation(
@@ -212,7 +211,7 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
     }
     assert!(
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "too-many",
                 invocation("too-many", Some("root"), InvocationRole::SelfCall)
@@ -225,7 +224,7 @@ fn graph_cycles_recursion_and_shared_invocation_budgets_fail_without_writes() {
 fn criterion_is_bound_to_invocation_not_any_successful_child() {
     let coordinator = setup(MemoryFactJournal::default());
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "child",
             invocation("child", Some("root"), InvocationRole::SelfCall),
@@ -267,7 +266,7 @@ fn continuation_is_a_new_admission_that_consumes_completed_predecessor() {
     }];
     coordinator.register_task("register", task).unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "root",
             invocation("root", None, InvocationRole::Root),
@@ -277,7 +276,7 @@ fn continuation_is_a_new_admission_that_consumes_completed_predecessor() {
     next.dependencies = vec!["root".into()];
     assert!(
         coordinator
-            .admit_invocation("task", "too-early", next.clone())
+            .admit_fixture("task", "too-early", next.clone())
             .is_err()
     );
     complete_invocation(&coordinator, "root", Vec::new());
@@ -285,13 +284,13 @@ fn continuation_is_a_new_admission_that_consumes_completed_predecessor() {
     missing.dependencies.clear();
     assert!(
         coordinator
-            .admit_invocation("task", "missing-edge", missing)
+            .admit_fixture("task", "missing-edge", missing)
             .is_err()
     );
     next.agent.revision = "r2".into();
     next.constraints_digest = "e".repeat(64);
     coordinator
-        .admit_invocation("task", "next", next.clone())
+        .admit_fixture("task", "next", next.clone())
         .unwrap();
     let mut attempt = binding("next", "a-next");
     attempt.agent = next.agent;
