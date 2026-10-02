@@ -514,3 +514,34 @@ groups, 908 passed, zero failed and 69 ignored, including helper subprocess
 results. The complete log contains no failed result groups. These gates ran
 serially with the existing Main cache and CARGO_INCREMENTAL=0. Ignored provider
 network cases were not executed; this receipt does not close whole E3 acceptance.
+
+## BeforeModel opening consumer contract
+
+The next consumer belongs inside the mandatory Runtime model-opening path,
+after advertisement, Skills, Context and actual prepared-plan/accounting checks,
+but before opening admission and the one-shot GEN permit. It does not add an
+outer copied loop or call a model from the Hook. COUNT may have occurred;
+denial or host failure still requires zero GEN. SDK HTTP retries remain inside
+the same admitted GEN and must not execute another BeforeModel Hook.
+
+ModelOpeningHookContext is opaque and privately constructed from the actual
+input admission, ModelRequested reference, execution/Step, verified opening
+ordinal, original source/snapshot digests, control and monotonic cutoff. It
+contains no tool grant. A narrow read-only Core cutoff accessor is allowed;
+sampling remaining time and rebuilding the deadline is not. A configured port
+without a finite original cutoff, explicit exact binding or completed Hook
+proof must refuse with a typed cause, not silently take an unconfigured path.
+
+Hook completion is durably acknowledged and read back before admission. The
+consumer then rechecks the original control/cutoff and unchanged preparation
+and opening evidence before consuming the permit for the same SDK plan.
+Unfinished saved observations never trigger script replay or repair writes.
+Historical verification cannot provide fresh execution authority. Root and
+Child selections remain independent and explicitly installed by the Host.
+
+Main owns actual Host/Server composition and test registration; Runtime/Agent
+consumer implementation uses separate reviewed source ownership. New data-driven
+acceptance must cover multiple Steps, denial, publication failure, cancel/drop,
+the original cutoff, reconstruction and a real localhost SDK retry with exactly
+one Hook. Parent/child selection isolation requires additional actual native
+cases; the eleven existing Root rows cannot substitute for that coverage.

@@ -974,3 +974,46 @@ Workspace/all-target strict Clippy exited 0 in
 `/tmp/kolyan-opening-prefix-main-strict-v1.log`; formatting, source-layout and
 diff checks exited 0. These checks compiled all existing callers without
 introducing a compatibility path or replacing the larger Driver write set.
+
+## Execution lifecycle evidence repair contract
+
+Preserved central integration cases exposed two pending mandatory-opening
+consumer defects: Recorder reclassified original terminal observations, and
+the reader rejected an actual Coordinator approval-resume marker as a duplicate
+initial identity. The original 109 assertions and input cases remain intact.
+The retained failures are `/tmp/kolyan-central-opening-offline-v1.log` and
+`/tmp/kolyan-central-opening-offline-rest-v2.log`; this contract is not a fix receipt.
+
+Recorder must retain the original Completed, Failed, Cancelled and TimedOut
+event kinds and payloads. These diagnostic observations do not prove physical
+termination. A neutral Runtime execution_lifecycle module must distinguish
+strict current-producer observations from PhysicalTerminalCandidate rows by
+exact identity and payload, not kind alone. Its narrow shared classification
+API is not an execution grant or a complete stopped-prefix proof. Readers and
+consumers still authenticate the full prefix, acknowledgement and coordinates.
+
+Only actual canonical boundary, Runtime error and existing Server closure
+formats can be terminal candidates. Observation-only history cannot close an
+attempt; a second physical terminal or model fact after an actual stop refuses.
+Driver error publication/resume, opening reader/writer, effect proof and Server
+state/evidence/Session status must share this distinction. Restoring a Failed
+observation must not prevent publication of its actual physical error closure.
+
+Coordinator's current resume/recover producer format is retained. A reentry
+marker must bind the original execution/Turn and admitted Session, have exact
+event/idempotency identity, Null payload and a canonical decimal suffix equal
+to the immediately previous scoped cursor. Resume requires a verified Suspended
+prefix and strict latest suspension schema, digest, publication source, scope
+and completed history. Recover requires verified Running or Suspended state.
+Neither marker can settle an uncertain GEN, authorize redispatch after a stop
+or cancellation, or widen the authenticated original cutoff. Standalone Runtime
+resume continues through its actual checkpoint publication without inventing a
+Coordinator marker. Unknown or malformed markers refuse, rather than being ignored.
+
+The existing manual reader fixture generator must use actual producer terminal
+identities and payloads; normalize only its source construction, preserving all
+original cases and expected assertions. No production exception for fixture IDs
+is permitted. Acceptance requires both original failing central cases, added
+Memory/reopened-SQLite lifecycle negatives, Runtime/Server modules, strict
+all-target checks and integrated regression. Private implementation and design
+approval are not Main acceptance or actual-model evidence.
