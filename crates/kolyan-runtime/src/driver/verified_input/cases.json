@@ -1,0 +1,12 @@
+[
+  {"id":"exact_input","mutation":"read","cap":"maximum","expected":"exact_input"},
+  {"id":"unknown_schema","mutation":"schema","cap":"maximum","expected":"refused"},
+  {"id":"unknown_field","mutation":"unknown","cap":"maximum","expected":"refused"},
+  {"id":"missing_nullable","mutation":"missing","cap":"maximum","expected":"refused"},
+  {"id":"foreign_scope","mutation":"scope","cap":"maximum","expected":"refused"},
+  {"id":"one_byte","mutation":"read","cap":"one","expected":"refused"},
+  {"id":"zero_bytes","mutation":"read","cap":"zero","expected":"refused"},
+  {"id":"above_host_ceiling","mutation":"read","cap":"above_maximum","expected":"refused"},
+  {"id":"exact_envelope_cap","mutation":"read","cap":"exact","expected":"exact_input"},
+  {"id":"below_exact_envelope_cap","mutation":"read","cap":"below_exact","expected":"refused"}
+]

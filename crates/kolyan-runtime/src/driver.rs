@@ -1,12 +1,19 @@
+mod admission;
+mod verified_input;
+pub use verified_input::{VerifiedExecutionInput, verified_execution_input};
 mod recorder;
+mod recovery;
+mod resume;
+mod suspension;
 mod tools;
+use admission::InputAdmission;
 use recorder::LedgerRecorder;
 use tools::DurableTools;
 
 use crate::{ExecutionKey as RuntimeTurnKey, RuntimeError, Trajectory, TrajectoryRecord};
 use kolyan_core::{
-    ApprovalRequest, ResumableTurn, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
-    TurnBoundaryKind, TurnError, TurnExecution, TurnExecutor, TurnRequest,
+    ResumableTurn, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind,
+    TurnError, TurnExecution, TurnExecutor, TurnRequest, TurnSuspension,
 };
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelProvider;
@@ -18,8 +25,8 @@ use std::sync::Arc;
 #[derive(Debug, Clone, PartialEq)]
 pub enum DurableTurnResult {
     Completed(Box<TurnExecution>, Trajectory),
-    AwaitingApproval {
-        approval: Box<ApprovalRequest>,
+    Suspended {
+        suspension: Box<TurnSuspension>,
         trajectory: Trajectory,
     },
 }
@@ -28,6 +35,7 @@ pub enum DurableTurnResult {
 pub struct DurableTurnDriver<L, S> {
     ledger: L,
     trace: S,
+    verifier: Arc<dyn crate::ExternalWaitVerifier>,
 }
 
 impl<L, S> DurableTurnDriver<L, S>
@@ -36,7 +44,19 @@ where
     S: TraceSink,
 {
     pub fn new(ledger: L, trace: S) -> Self {
-        Self { ledger, trace }
+        Self {
+            ledger,
+            trace,
+            verifier: Arc::new(crate::RefuseExternalWaits),
+        }
+    }
+
+    pub fn with_external_wait_verifier(
+        mut self,
+        verifier: Arc<dyn crate::ExternalWaitVerifier>,
+    ) -> Self {
+        self.verifier = verifier;
+        self
     }
 
     pub fn ledger(&self) -> &L {
@@ -55,24 +75,6 @@ where
         Ok(())
     }
 
-    pub fn load_approval(
-        &self,
-        execution_id: &str,
-        approval_id: &str,
-    ) -> Result<ApprovalRequest, RuntimeError> {
-        let event = self
-            .ledger
-            .execution_events_after(execution_id, 0)?
-            .into_iter()
-            .find(|event| {
-                event.kind == LedgerEventKind::ApprovalRequested
-                    && event.payload["approval_id"] == approval_id
-            })
-            .ok_or_else(|| RuntimeError::Driver(format!("approval not found: {approval_id}")))?;
-        serde_json::from_value(event.payload)
-            .map_err(|error| RuntimeError::Driver(format!("invalid approval checkpoint: {error}")))
-    }
-
     pub async fn start<P, T>(
         &self,
         executor: TurnExecutor<P, T>,
@@ -89,6 +91,22 @@ where
             turn_id: request.turn_id.clone(),
             execution_id: execution_id.into(),
         };
+        let admitted = InputAdmission::new(
+            key.clone(),
+            &request,
+            *executor.tool_dispatch_policy(),
+            executor
+                .tool_timeout()
+                .map(|duration| u64::try_from(duration.as_millis()))
+                .transpose()
+                .map_err(|error| RuntimeError::Driver(error.to_string()))?,
+            executor.agent_snapshot_digest().map(str::to_owned),
+        )?;
+        let executor = if let Some(deadline) = admitted.deadline_at_ms {
+            executor.with_absolute_deadline_at_ms(deadline)
+        } else {
+            executor
+        };
         append_once(
             &self.ledger,
             &key.execution_id,
@@ -97,6 +115,7 @@ where
             LedgerEventKind::ExecutionStarted,
             json!(key),
         )?;
+        admitted.persist(&self.ledger)?;
         if !self
             .ledger
             .claim(&format!("{}/attempt/start", key.execution_id))?
@@ -113,103 +132,22 @@ where
         ));
         let controlled = executor
             .with_execution_key(key.clone())
-            .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
+            .map_tool_executor(|inner| {
+                DurableTools::new(self.ledger.clone(), key.clone(), inner)
+                    .with_snapshot_digest(admitted.agent_snapshot_digest.clone())
+                    .with_wait_verifier(self.verifier.clone())
+            })
             .with_boundary_control(control)
             .with_event_recorder(recorder.clone())
             .with_step_event_recorder(recorder);
         match controlled.start_resumable(request).await {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
-            Ok(ResumableTurn::AwaitingApproval(approval)) => self.suspended(&key, *approval),
+            Ok(ResumableTurn::Suspended(suspension)) => self.suspended(&key, *suspension),
             Err(error) => {
                 self.persist_error(&key, &error)?;
                 Err(RuntimeError::Turn(error))
             }
         }
-    }
-
-    pub async fn resume<P, T>(
-        &self,
-        executor: TurnExecutor<P, T>,
-        session_id: impl Into<String>,
-        execution_id: impl Into<String>,
-        approval_id: &str,
-    ) -> Result<DurableTurnResult, RuntimeError>
-    where
-        P: ModelProvider,
-        T: kolyan_core::ToolExecutor,
-    {
-        let execution_id = execution_id.into();
-        let approval = self.load_approval(&execution_id, approval_id)?;
-        let key = RuntimeTurnKey {
-            session_id: session_id.into(),
-            turn_id: approval.turn_id.clone(),
-            execution_id,
-        };
-        let identity = self
-            .ledger
-            .event_by_id(&format!("{}/execution-started", key.execution_id))?
-            .ok_or_else(|| RuntimeError::Driver("missing execution identity".into()))?;
-        if identity.payload != json!(key) {
-            return Err(RuntimeError::Driver(
-                "approval execution identity mismatch".into(),
-            ));
-        }
-        if !self.ledger.claim(&format!(
-            "{}/attempt/resume/{approval_id}",
-            key.execution_id
-        ))? {
-            return Err(RuntimeError::Driver(
-                "approval attempt is already claimed; replay is forbidden".into(),
-            ));
-        }
-        let control = Arc::new(LedgerBoundaryControl::new(self.ledger.clone(), key.clone()));
-        let recorder = Arc::new(LedgerRecorder::new(
-            self.ledger.clone(),
-            key.clone(),
-            format!("resume/{approval_id}"),
-        ));
-        let controlled = executor
-            .with_execution_key(key.clone())
-            .map_tool_executor(|inner| DurableTools::new(self.ledger.clone(), key.clone(), inner))
-            .with_boundary_control(control)
-            .with_event_recorder(recorder.clone())
-            .with_step_event_recorder(recorder);
-        match controlled.resume_approval(approval, approval_id).await {
-            Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
-            Ok(ResumableTurn::AwaitingApproval(next)) => self.suspended(&key, *next),
-            Err(error) => {
-                self.persist_error(&key, &error)?;
-                Err(RuntimeError::Turn(error))
-            }
-        }
-    }
-
-    fn suspended(
-        &self,
-        key: &RuntimeTurnKey,
-        approval: ApprovalRequest,
-    ) -> Result<DurableTurnResult, RuntimeError> {
-        append_once(
-            &self.ledger,
-            &key.execution_id,
-            &key.turn_id,
-            &format!("approval/{}/requested", approval.approval_id),
-            LedgerEventKind::ApprovalRequested,
-            serde_json::to_value(&approval)
-                .map_err(|error| RuntimeError::Driver(error.to_string()))?,
-        )?;
-        append_once(
-            &self.ledger,
-            &key.execution_id,
-            &key.turn_id,
-            &format!("execution-suspended/{}", approval.approval_id),
-            LedgerEventKind::ExecutionSuspended,
-            json!({"approval_id": approval.approval_id}),
-        )?;
-        Ok(DurableTurnResult::AwaitingApproval {
-            approval: Box::new(approval),
-            trajectory: self.project_events(key)?,
-        })
     }
 
     fn completed(
@@ -295,11 +233,24 @@ where
 struct LedgerBoundaryControl<L> {
     ledger: L,
     key: RuntimeTurnKey,
+    resume_cursor: Option<u64>,
 }
 
 impl<L> LedgerBoundaryControl<L> {
     fn new(ledger: L, key: RuntimeTurnKey) -> Self {
-        Self { ledger, key }
+        Self {
+            ledger,
+            key,
+            resume_cursor: None,
+        }
+    }
+
+    fn for_resume(ledger: L, key: RuntimeTurnKey, cursor: u64) -> Self {
+        Self {
+            ledger,
+            key,
+            resume_cursor: Some(cursor),
+        }
     }
 }
 
@@ -313,7 +264,15 @@ impl<L: LedgerStore + Clone + 'static> TurnBoundaryControl for LedgerBoundaryCon
             });
         }
         Box::pin(async move {
-            let (suffix, kind, payload) = boundary_event(&boundary);
+            let (mut suffix, kind, payload) = boundary_event(&boundary);
+            // A waiting checkpoint may survive several resume attempts. Only
+            // lifecycle admissions vary by attempt; Step/tool effects keep their
+            // stable identities so recovery cannot enter a completed effect twice.
+            if kind == LedgerEventKind::ExecutionBoundaryAdmitted
+                && let Some(cursor) = self.resume_cursor
+            {
+                suffix = format!("{suffix}/attempt/{cursor}");
+            }
             let event_id = format!("{}/{}", self.key.execution_id, suffix);
             let event = LedgerEvent {
                 event_id: event_id.clone(),
@@ -363,9 +322,22 @@ fn boundary_event(boundary: &TurnBoundary) -> (String, LedgerEventKind, Value) {
             json!({"approval_id": approval_id}),
         ),
         TurnBoundaryKind::ResumeApproval { approval_id } => (
-            format!("approval/{approval_id}/resolved"),
-            LedgerEventKind::ApprovalResolved,
+            format!("approval/{approval_id}/resume-boundary"),
+            LedgerEventKind::ExecutionBoundaryAdmitted,
             json!({"approval_id": approval_id}),
+        ),
+        TurnBoundaryKind::AwaitingExternal {
+            checkpoint_id,
+            wait_ids,
+        } => (
+            format!("checkpoint/{checkpoint_id}/wait-boundary"),
+            LedgerEventKind::ExecutionBoundaryAdmitted,
+            json!({"checkpoint_id":checkpoint_id,"wait_ids":wait_ids}),
+        ),
+        TurnBoundaryKind::ResumeCheckpoint { checkpoint_id } => (
+            format!("checkpoint/{checkpoint_id}/resume-boundary"),
+            LedgerEventKind::ExecutionBoundaryAdmitted,
+            json!({"checkpoint_id":checkpoint_id}),
         ),
         TurnBoundaryKind::Terminal { reason } => (
             format!("terminal/{reason:?}"),

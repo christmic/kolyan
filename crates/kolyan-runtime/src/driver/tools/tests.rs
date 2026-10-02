@@ -1,5 +1,6 @@
 use super::*;
 mod authority;
+mod external;
 mod preparation;
 mod scoped;
 use kolyan_core::{ToolInvocation, ToolPreparationFuture};
@@ -31,11 +32,11 @@ impl ToolExecutor for CountingTool {
                 })?;
             let call = invocation.prepared.call().clone();
             self.0.fetch_add(1, Ordering::SeqCst);
-            Ok(ToolResult {
+            Ok(ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "persisted output".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
