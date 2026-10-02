@@ -1,0 +1,158 @@
+{
+  "request": {
+    "model": "fixture",
+    "input": [
+      {
+        "role": "user",
+        "content": "中文🦀\u0000"
+      }
+    ],
+    "conversation": "conversation-fixture",
+    "instructions": "instructions",
+    "parallel_tool_calls": true,
+    "personality": "default",
+    "previous_response_id": "response-fixture",
+    "reasoning": {
+      "effort": "low"
+    },
+    "text": {
+      "format": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object"
+        }
+      },
+      "verbosity": "low"
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "function",
+        "name": "read",
+        "parameters": {
+          "type": "object"
+        }
+      }
+    ],
+    "truncation": "disabled"
+  },
+  "rows": [
+    {
+      "id": "full_fields",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "zero",
+      "response": "{\"input_tokens\":0,\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "success",
+      "tokens": 0
+    },
+    {
+      "id": "negative",
+      "response": "{\"input_tokens\":-1,\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "fraction",
+      "response": "{\"input_tokens\":1.5,\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "overflow",
+      "response": "{\"input_tokens\":18446744073709551616,\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "unknown_field",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\",\"future\":true}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "missing_tokens",
+      "response": "{\"object\":\"response.input_tokens\"}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "wrong_object",
+      "response": "{\"input_tokens\":42,\"object\":\"wrong\"}",
+      "mode": "normal",
+      "expected": "decode"
+    },
+    {
+      "id": "exact_64k",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "exact",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "over_64k",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "oversize",
+      "expected": "limit"
+    },
+    {
+      "id": "http_529_one_send",
+      "response": "{\"error\":{\"code\":\"overloaded\"}}",
+      "mode": "http_error",
+      "expected": "http"
+    },
+    {
+      "id": "body_timeout",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "slow_body",
+      "expected": "timeout"
+    },
+    {
+      "id": "headers_timeout",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "slow_headers",
+      "expected": "timeout"
+    },
+    {
+      "id": "zero_timeout_no_send",
+      "response": "{\"input_tokens\":42,\"object\":\"response.input_tokens\"}",
+      "mode": "zero_timeout",
+      "expected": "configuration"
+    },
+    {
+      "id": "drop_future_before_send",
+      "response": "{}",
+      "mode": "drop_before_send",
+      "expected": "cancelled"
+    },
+    {
+      "id": "drop_future_after_send",
+      "response": "{}",
+      "mode": "drop_after_send",
+      "expected": "cancelled"
+    },
+    {
+      "id": "redirect_not_followed",
+      "response": "{}",
+      "mode": "redirect",
+      "expected": "http"
+    },
+    {
+      "id": "overflow_timeout_no_send",
+      "response": "{}",
+      "mode": "overflow_timeout",
+      "expected": "configuration"
+    },
+    {
+      "id": "direct_sdk_count_input_over_16m_no_send",
+      "response": "{}",
+      "mode": "request_oversize",
+      "expected": "configuration"
+    }
+  ]
+}

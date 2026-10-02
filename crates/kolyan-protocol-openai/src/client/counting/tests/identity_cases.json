@@ -1,0 +1,115 @@
+{
+  "forbidden_fragments": [
+    "FICT-USER-13",
+    "FICT-PASS-37",
+    "FICT-QUERY-81",
+    "FICT-FRAGMENT-92",
+    "FICT-API-KEY-1",
+    "FICT-API-KEY-2",
+    "FICT-PRIVATE-VERSION-91",
+    "https://",
+    "example.invalid"
+  ],
+  "rows": [
+    {
+      "id": "identical",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": true
+    },
+    {
+      "id": "userinfo",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-14:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "password",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-38@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "query",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-82&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "query_order",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?tenant=a&api_key=FICT-QUERY-81#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "path",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/other?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "trailing_slash",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy/?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "port",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid:8443/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "percent_encoding",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT%2DPASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-1",
+      "expected_same": false
+    },
+    {
+      "id": "api_key_not_endpoint",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?api_key=FICT-QUERY-81&tenant=a#FICT-FRAGMENT-92",
+      "version": "responses/v1",
+      "target_version": "responses/v1",
+      "api_key": "FICT-API-KEY-1",
+      "target_api_key": "FICT-API-KEY-2",
+      "expected_same": true
+    }
+  ]
+}
