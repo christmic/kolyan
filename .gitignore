@@ -19,6 +19,7 @@
 .env
 .env.*
 !.env.example
+/crates/kolyan-integration-tests/tests/config/*.local.json
 
 # Language-specific caches
 __pycache__/
