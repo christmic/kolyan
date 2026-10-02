@@ -95,7 +95,9 @@ impl TurnDeadline {
         self.instant
     }
 
-    pub(super) fn restore(unix_ms: Option<u64>) -> Result<Self, TurnDeadlineError> {
+    /// Map a verified durable cutoff once for all phases of one resume attempt.
+    /// This does not authenticate the supplied timestamp or renew its budget.
+    pub fn restore(unix_ms: Option<u64>) -> Result<Self, TurnDeadlineError> {
         let Some(unix_ms) = unix_ms else {
             return Self::capture(None, None);
         };

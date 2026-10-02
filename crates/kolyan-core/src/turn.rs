@@ -748,11 +748,31 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         expected_scope: ToolExecutionScope,
         control: TurnControl,
     ) -> Result<TurnCheckpoint, TurnError> {
+        let deadline = TurnDeadline::restore(suspension.checkpoint.budget.deadline_at_ms)?;
+        self.merge_resume_with_control_and_deadline(
+            suspension,
+            input,
+            expected_scope,
+            control,
+            deadline,
+        )
+    }
+
+    /// Merge using the host's original resume anchor, before any model or effect.
+    pub fn merge_resume_with_control_and_deadline(
+        &self,
+        suspension: TurnSuspension,
+        input: ResumeInput,
+        expected_scope: ToolExecutionScope,
+        control: TurnControl,
+        deadline: TurnDeadline,
+    ) -> Result<TurnCheckpoint, TurnError> {
         self.validate_resume_scope(&expected_scope)?;
         suspension
             .validate(&expected_scope)
             .map_err(checkpoint_error)?;
-        engine::RunState::restore(&suspension.checkpoint, &expected_scope)?.check(&control)?;
+        engine::RunState::restore_with_deadline(&suspension.checkpoint, &expected_scope, deadline)?
+            .check(&control)?;
         match input {
             ResumeInput::ApprovalConfirmed(confirmation) => suspension
                 .checkpoint
@@ -771,6 +791,24 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         expected_scope: ToolExecutionScope,
         control: TurnControl,
     ) -> Result<ResumableTurn, TurnError> {
+        let deadline = TurnDeadline::restore(checkpoint.budget.deadline_at_ms)?;
+        self.resume_checkpoint_with_control_and_deadline(
+            checkpoint,
+            expected_scope,
+            control,
+            deadline,
+        )
+        .await
+    }
+
+    /// Continue with exactly the anchor used for this attempt's verified merge.
+    pub async fn resume_checkpoint_with_control_and_deadline(
+        &self,
+        checkpoint: TurnCheckpoint,
+        expected_scope: ToolExecutionScope,
+        control: TurnControl,
+        deadline: TurnDeadline,
+    ) -> Result<ResumableTurn, TurnError> {
         self.validate_resume_scope(&expected_scope)?;
         if self.absolute_deadline_at_ms.is_some_and(|limit| {
             checkpoint
@@ -782,7 +820,8 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 message: "checkpoint exceeds admitted absolute deadline".into(),
             });
         }
-        let state = engine::RunState::restore(&checkpoint, &expected_scope)?;
+        let state =
+            engine::RunState::restore_with_deadline(&checkpoint, &expected_scope, deadline)?;
         self.run(state, control, true, None).await
     }
 

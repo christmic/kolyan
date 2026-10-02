@@ -41,12 +41,18 @@ impl RunState {
             resume_boundary: None,
         })
     }
-    pub fn restore(
+    pub fn restore_with_deadline(
         checkpoint: &TurnCheckpoint,
         scope: &ToolExecutionScope,
+        deadline: TurnDeadline,
     ) -> Result<Self, TurnError> {
         checkpoint.validate(scope).map_err(checkpoint_error)?;
-        let deadline = TurnDeadline::restore(checkpoint.budget.deadline_at_ms)?;
+        deadline.validate_duration(None)?;
+        if deadline.deadline_at_ms() != checkpoint.budget.deadline_at_ms {
+            return Err(TurnError::InvalidRequest {
+                message: "restored deadline differs from the checkpoint cutoff".into(),
+            });
+        }
         Ok(Self {
             turn_id: scope.execution.turn_id.clone(),
             model_request: checkpoint.model_request.clone(),

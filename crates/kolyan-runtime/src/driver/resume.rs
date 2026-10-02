@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use kolyan_core::{
     ApprovalConfirmation, CheckpointCallState, ExternalResolution, ResumableTurn, ResumeInput,
-    ToolExecutor, TurnCheckpoint, TurnControl, TurnError, TurnExecutor,
+    ToolExecutor, TurnCheckpoint, TurnControl, TurnDeadline, TurnError, TurnExecutor,
 };
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelProvider;
@@ -81,6 +81,7 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
         }
         let suspension = self.load_suspension(&execution_id, checkpoint_id)?;
         let scope = admission.validate_checkpoint(&suspension.checkpoint)?;
+        let deadline = TurnDeadline::restore(suspension.checkpoint.budget.deadline_at_ms)?;
         match &input {
             ResumeInput::ApprovalConfirmed(confirmation) => {
                 let event = self
@@ -120,11 +121,12 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
                     .map_err(invalid)?;
             }
         }
-        let merged = match executor.merge_resume_with_control(
+        let merged = match executor.merge_resume_with_control_and_deadline(
             suspension,
             input.clone(),
             scope,
             TurnControl::default(),
+            deadline.clone(),
         ) {
             Ok(merged) => merged,
             Err(error @ TurnError::TimedOut) => {
@@ -142,7 +144,8 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
             }
         }
         self.commit_merged(&key, &merged)?;
-        self.drive_checkpoint(executor, &key, merged).await
+        self.drive_checkpoint(executor, &key, merged, deadline)
+            .await
     }
 
     /// Resume an already committed pure merge after a crash, without consuming
@@ -161,9 +164,11 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
         }
         self.check_resumable(&key)?;
         let current = self.load_suspension(&execution_id, checkpoint_id)?;
+        let deadline = TurnDeadline::restore(current.checkpoint.budget.deadline_at_ms)?;
         let checkpoint = self.hydrate_checkpoint(&key, current.checkpoint).await?;
         self.commit_merged(&key, &checkpoint)?;
-        self.drive_checkpoint(executor, &key, checkpoint).await
+        self.drive_checkpoint(executor, &key, checkpoint, deadline)
+            .await
     }
 
     pub(super) fn check_resumable(&self, key: &RuntimeTurnKey) -> Result<(), RuntimeError> {
@@ -333,6 +338,7 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
         executor: TurnExecutor<P, T>,
         key: &RuntimeTurnKey,
         checkpoint: TurnCheckpoint,
+        deadline: TurnDeadline,
     ) -> Result<DurableTurnResult, RuntimeError> {
         self.check_resumable(key)?;
         let admission = InputAdmission::load(&self.ledger, key)?;
@@ -365,7 +371,12 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
             .with_event_recorder(recorder.clone())
             .with_step_event_recorder(recorder);
         match executor
-            .resume_checkpoint_with_control(checkpoint, scope, TurnControl::default())
+            .resume_checkpoint_with_control_and_deadline(
+                checkpoint,
+                scope,
+                TurnControl::default(),
+                deadline,
+            )
             .await
         {
             Ok(ResumableTurn::Completed(execution)) => self.completed(key, *execution),

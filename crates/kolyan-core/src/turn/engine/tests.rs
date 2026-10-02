@@ -3,7 +3,14 @@ use kolyan_model::ToolChoice;
 use kolyan_model::{ModelRef, ModelResponse, StopReason, TokenUsage};
 use serde_json::json;
 
+mod shared_deadline;
+
 impl RunState {
+    fn restore(checkpoint: &TurnCheckpoint, scope: &ToolExecutionScope) -> Result<Self, TurnError> {
+        let deadline = TurnDeadline::restore(checkpoint.budget.deadline_at_ms)?;
+        Self::restore_with_deadline(checkpoint, scope, deadline)
+    }
+
     fn new(
         request: TurnRequest,
         dispatch: ToolDispatchPolicy,

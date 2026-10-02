@@ -723,3 +723,21 @@ snapshot digest 和 absolute deadline 必须原样移动，不重新构造默认
 workspace all-targets 严格 Clippy exit0，日志
 `/tmp/kolyan-provider-rebinding-main-strict-v2.log`。这是配置保留与实际 Step
 行为的证据，尚未证明 Runtime 已强制绑定模型开启协议。
+
+恢复同样必须共用一个锚点：TurnDeadline::restore 对已验证 checkpoint 的
+绝对截止时间采样一次；Runtime 在外部等待/证据验证前建立锚点，纯 merge、
+持久提交、模型开启和 Core 恢复沿用同一对象，不在后续恢复流程重新映射。
+新增 merge_resume_with_control_and_deadline、
+resume_checkpoint_with_control_and_deadline；旧便利入口仍执行相同契约，
+只是负责建立原始锚点，不建立旧格式回退。传入锚点必须与 checkpoint 的
+持久 cutoff 完全一致、不能带新的相对 duration；不匹配先拒绝且无效果。
+这避免 count 和 Core Step 分别持有不同恢复时钟样本；没有截止时间仍
+显式无限，不从系统当前时间制造新的预算。
+
+该恢复接线的主干模块回归终态 exit0：Core 108、Runtime 61、Server 124
+passed，均 0 failed、0 ignored；日志
+`/tmp/kolyan-shared-resume-anchor-main-module-v1.log`。新增独立锚点测试
+核对无限、耗尽、未来 cutoff 的精确 Instant 保留，以及三种 cutoff 不匹配
+和新相对窗口拒绝；旧 checkpoint 精确断言未改。workspace all-targets
+严格 Clippy exit0，日志 `/tmp/kolyan-shared-resume-anchor-main-strict-v1.log`。
+这不是完整 counted opening 的验收；真实计量与持久准入仍需下一批接线。
