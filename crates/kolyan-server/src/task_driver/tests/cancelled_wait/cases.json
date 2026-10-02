@@ -1,0 +1,12 @@
+[
+  {"id":"stopped_external_wait","signal_only":false,"mutation":"none","expected":"cancelled"},
+  {"id":"intent_is_not_terminal","signal_only":true,"mutation":"none","expected":"recovery"},
+  {"id":"missing_wait_publication","signal_only":false,"mutation":"missing_wait","expected":"refused"},
+  {"id":"unknown_wait_schema","signal_only":false,"mutation":"unknown_schema","expected":"refused"},
+  {"id":"resumed_before_cancel","signal_only":false,"mutation":"resumed","expected":"refused"},
+  {"id":"new_effect_after_intent","signal_only":false,"mutation":"new_effect","expected":"refused"},
+  {"id":"step_completion_after_intent","signal_only":false,"mutation":"late_step","expected":"refused"},
+  {"id":"wait_cannot_be_backfilled_after_terminal","signal_only":false,"mutation":"late_wait","expected":"refused"},
+  {"id":"foreign_wait_grant","signal_only":false,"mutation":"foreign_grant","expected":"refused"},
+  {"id":"foreign_suspension_owner","signal_only":false,"mutation":"foreign_scope","expected":"refused"}
+]

@@ -26,7 +26,7 @@ impl<J: FactJournal> TaskCoordinator<J> {
     /// Replay validates all critical semantics. Querying never executes work.
     pub fn snapshot(&self, task_id: &str) -> Result<TaskSnapshot, TaskError> {
         let records = self.records(task_id)?;
-        replay(task_id, &records)?.ok_or_else(|| TaskError::NotFound(task_id.to_owned()))
+        replay(self, task_id, &records)?.ok_or_else(|| TaskError::NotFound(task_id.to_owned()))
     }
 
     /// Registers an immutable definition; identical fact retries are idempotent.
@@ -89,20 +89,20 @@ impl<J: FactJournal> TaskCoordinator<J> {
         self.command(task_id, fact_id, TaskEvent::AttemptObserved(observation))
     }
 
-    /// Approval resumption retains the original attempt and exact admission.
+    /// Resumption retains the original attempt and exact checkpoint admission.
     pub fn resume_attempt(
         &self,
         task_id: &str,
         fact_id: &str,
         binding: AttemptBinding,
-        approval_id: &str,
+        checkpoint_id: &str,
     ) -> Result<TaskSnapshot, TaskError> {
         self.command(
             task_id,
             fact_id,
             TaskEvent::AttemptResumed {
                 binding,
-                approval_id: approval_id.into(),
+                checkpoint_id: checkpoint_id.into(),
             },
         )
     }
@@ -165,8 +165,27 @@ impl<J: FactJournal> TaskCoordinator<J> {
         )
     }
 
-    /// All criteria require exact previously observed evidence; model text alone
-    /// cannot complete a task. Physical evidence verification belongs to the host.
+    /// Commits terminal feedback for one exact admitted parent/child attempt edge.
+    /// The host verifies physical evidence first. Identical fact retries are
+    /// idempotent; another fact cannot consume twice or turn failure into success.
+    pub fn consume_terminal_result(
+        &self,
+        task_id: &str,
+        fact_id: &str,
+        invocation_id: &str,
+        result: ConsumedTerminalResult,
+    ) -> Result<TaskSnapshot, TaskError> {
+        self.command(
+            task_id,
+            fact_id,
+            TaskEvent::TerminalResultConsumed {
+                invocation_id: invocation_id.into(),
+                result: Box::new(result),
+            },
+        )
+    }
+
+    /// All criteria require exact previously observed evidence.
     pub fn complete_task(
         &self,
         task_id: &str,
@@ -209,7 +228,7 @@ impl<J: FactJournal> TaskCoordinator<J> {
         )
     }
 
-    fn records(&self, task_id: &str) -> Result<Vec<FactRecord>, TaskError> {
+    pub(crate) fn records(&self, task_id: &str) -> Result<Vec<FactRecord>, TaskError> {
         identity(task_id)?;
         let mut records = Vec::new();
         let mut after = 0;
@@ -250,7 +269,7 @@ impl<J: FactJournal> TaskCoordinator<J> {
     ) -> Result<TaskSnapshot, TaskError> {
         identity(fact_id)?;
         let records = self.records(task_id)?;
-        let mut snapshot = replay(task_id, &records)?;
+        let mut snapshot = replay(self, task_id, &records)?;
         let (kind, subject) = envelope(task_id, &event);
         let payload = serde_json::to_value(&event).map_err(|error| invalid(error.to_string()))?;
         if let Some(existing) = records
@@ -273,10 +292,20 @@ impl<J: FactJournal> TaskCoordinator<J> {
             .map(reference)
             .into_iter()
             .collect::<Vec<_>>();
+        if let Some(source) = super::input::event_source(&event)
+            && !causes.contains(source.fact())
+        {
+            causes.push(source.fact().clone());
+        }
         if let TaskEvent::ResultConsumed { result, .. } = &event
             && !causes.contains(&result.completion_fact)
         {
             causes.push(result.completion_fact.clone());
+        }
+        if let TaskEvent::TerminalResultConsumed { result, .. } = &event
+            && !causes.contains(&result.terminal_fact)
+        {
+            causes.push(result.terminal_fact.clone());
         }
         let draft = FactDraft {
             fact_id: fact_id.into(),
@@ -295,7 +324,8 @@ impl<J: FactJournal> TaskCoordinator<J> {
             position,
             draft: draft.clone(),
         };
-        apply(&mut snapshot, event, &candidate)?;
+        apply(&mut snapshot, event.clone(), &candidate)?;
+        self.verify_input_event(task_id, &event, &candidate, snapshot.as_ref())?;
         let committed = self.journal.append(task_id, expected, vec![draft])?;
         if committed != vec![candidate] {
             return Err(invalid("journal committed a different fact"));
@@ -341,6 +371,11 @@ fn envelope(task_id: &str, event: &TaskEvent) -> (&'static str, FactSubject) {
         TaskEvent::ResultConsumed { invocation_id, .. } => {
             ("task.result_consumed", "invocation", invocation_id.as_str())
         }
+        TaskEvent::TerminalResultConsumed { invocation_id, .. } => (
+            "task.terminal_result_consumed",
+            "invocation",
+            invocation_id.as_str(),
+        ),
         TaskEvent::Completed { .. } => ("task.completed", "task", task_id),
         TaskEvent::Cancelled { .. } => ("task.cancelled", "task", task_id),
         TaskEvent::Failed { .. } => ("task.failed", "task", task_id),
@@ -354,7 +389,11 @@ fn envelope(task_id: &str, event: &TaskEvent) -> (&'static str, FactSubject) {
     )
 }
 
-fn replay(task_id: &str, records: &[FactRecord]) -> Result<Option<TaskSnapshot>, TaskError> {
+fn replay<J: FactJournal>(
+    coordinator: &TaskCoordinator<J>,
+    task_id: &str,
+    records: &[FactRecord],
+) -> Result<Option<TaskSnapshot>, TaskError> {
     let mut snapshot = None;
     let mut previous = None;
     for record in records {
@@ -369,6 +408,7 @@ fn replay(task_id: &str, records: &[FactRecord]) -> Result<Option<TaskSnapshot>,
                 | "task.recovery_needed"
                 | "task.retry_authorized"
                 | "task.result_consumed"
+                | "task.terminal_result_consumed"
                 | "task.completed"
                 | "task.cancelled"
                 | "task.failed"
@@ -397,7 +437,8 @@ fn replay(task_id: &str, records: &[FactRecord]) -> Result<Option<TaskSnapshot>,
             {
                 return Err(invalid("registration belongs to another task stream"));
             }
-            apply(&mut snapshot, event, record)?;
+            apply(&mut snapshot, event.clone(), record)?;
+            coordinator.verify_input_event(task_id, &event, record, snapshot.as_ref())?;
         }
         if let Some(state) = &mut snapshot {
             state.position = record.position;

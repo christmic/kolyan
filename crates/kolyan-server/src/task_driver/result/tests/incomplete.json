@@ -1,0 +1,9 @@
+[
+  {"id":"incomplete_notification","reason":"Incomplete","notification":true,"conflict":null,"accepted":true},
+  {"id":"refused_notification","reason":"Refused","notification":true,"conflict":null,"accepted":true},
+  {"id":"max_steps_notification","reason":"MaxSteps","notification":true,"conflict":null,"accepted":true},
+  {"id":"incomplete_boundary_only","reason":"Incomplete","notification":false,"conflict":null,"accepted":true},
+  {"id":"contradictory_final_answer","reason":"Incomplete","notification":true,"conflict":"success","accepted":false},
+  {"id":"contradictory_turn_cancel","reason":"Incomplete","notification":true,"conflict":"cancel","accepted":false},
+  {"id":"contradictory_execution_cancel","reason":"Refused","notification":true,"conflict":"execution_cancel","accepted":false}
+]

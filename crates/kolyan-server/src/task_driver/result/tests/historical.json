@@ -1,0 +1,16 @@
+[
+ {"backend":"memory","task":"Completed","child":"completed","check":"read"},
+ {"backend":"sqlite","task":"Completed","child":"completed","check":"read"},
+ {"backend":"memory","task":"Failed","child":"failed","check":"read"},
+ {"backend":"sqlite","task":"Failed","child":"failed","check":"read"},
+ {"backend":"memory","task":"Failed","child":"cancelled","check":"read"},
+ {"backend":"sqlite","task":"Cancelled","child":"completed","check":"read"},
+ {"backend":"memory","task":"Failed","child":"failed","check":"foreign_parent"},
+ {"backend":"sqlite","task":"Failed","child":"failed","check":"foreign_child"},
+ {"backend":"memory","task":"Failed","child":"failed","check":"small_cap"},
+ {"backend":"sqlite","task":"Failed","child":"failed","check":"late_physical_cancel"},
+ {"backend":"memory","task":"Failed","child":"failed","check":"missing_consumption"},
+ {"backend":"sqlite","task":"Failed","child":"failed","check":"unknown_schema"},
+ {"backend":"memory","task":"Failed","child":"failed","check":"corrupt_consumption"},
+ {"backend":"sqlite","task":"Failed","child":"failed","check":"corrupt_cause"}
+]

@@ -1,5 +1,6 @@
 //! Retry facade tests use native Ledger facts and the actual trusted reconciler.
 
+use crate::input_fixture::SourceFixtureAdmission;
 mod preparation;
 
 use std::sync::{
@@ -60,10 +61,19 @@ fn harness(alteration: Option<&str>, active: bool) -> Harness {
         )
         .unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "admitted",
             InvocationDefinition {
+                input_source: crate::input_fixture::fixture_source(
+                    "task",
+                    "root",
+                    if (InvocationRole::Root) == crate::InvocationRole::Root {
+                        crate::InvocationInputKind::Standalone
+                    } else {
+                        crate::InvocationInputKind::Derived
+                    },
+                ),
                 invocation_id: "root".into(),
                 agent: agent.clone(),
                 constraints_digest: "c".repeat(64),
@@ -74,6 +84,11 @@ fn harness(alteration: Option<&str>, active: bool) -> Harness {
         )
         .unwrap();
     let binding = AttemptBinding {
+        input_source: crate::input_fixture::fixture_source(
+            "task",
+            "root",
+            crate::InvocationInputKind::Standalone,
+        ),
         attempt_id: "a1".into(),
         invocation_id: "root".into(),
         agent,
