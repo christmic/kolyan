@@ -1,5 +1,7 @@
 //! Child approval continuation reconstructs saved ownership, not a retained future.
 
+mod deny;
+
 use super::*;
 use crate::runner::{routing::RoutedTools, tools::SnapshotTools};
 use kolyan_core::TurnExecutor;
@@ -29,6 +31,13 @@ where
     /// Call only after authenticated approval. Server revalidates original scoped
     /// checkpoint and current adapters/policy. No original Runner future is needed.
     pub async fn resume_agent_child_approval(
+        self: &Arc<Self>,
+        request: ChildApprovalResumeRequest,
+    ) -> Result<AgentChildDriveResult, ToolError> {
+        self.accept_agent_child_approval(request).await
+    }
+
+    async fn accept_agent_child_approval(
         self: &Arc<Self>,
         request: ChildApprovalResumeRequest,
     ) -> Result<AgentChildDriveResult, ToolError> {
@@ -169,21 +178,25 @@ where
                 &child.attempt,
             )
             .await?;
-        let stopped = Box::pin(self.service.resume_approval(
-            &request.owner.task_id,
-            child.attempt.clone(),
-            &request.approval_id,
-            executor,
-        ))
-        .await;
+        let dispatch_error = {
+            let stopped = Box::pin(self.service.resume_approval(
+                &request.owner.task_id,
+                child.attempt.clone(),
+                &request.approval_id,
+                executor,
+            ))
+            .await;
+            if let Ok((_, execution @ kolyan_runtime::DurableTurnResult::Suspended { .. })) =
+                stopped
+            {
+                return Ok(AgentChildDriveResult::Waiting {
+                    child: Box::new(child),
+                    execution: Box::new(execution),
+                });
+            }
+            stopped.err().map(|error| error.to_string())
+        };
         drop(permits);
-        if let Ok((_, execution @ kolyan_runtime::DurableTurnResult::Suspended { .. })) = stopped {
-            return Ok(AgentChildDriveResult::Waiting {
-                child: Box::new(child),
-                execution: Box::new(execution),
-            });
-        }
-        let dispatch_error = stopped.err().map(|error| error.to_string());
         let service = self.service.clone();
         let task_id = request.owner.task_id;
         let binding = child.attempt;

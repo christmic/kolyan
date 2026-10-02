@@ -1,5 +1,6 @@
 //! Deep self and multiple durable waits, restored through actual Runner ports.
 
+mod denial;
 mod provider;
 mod recovery;
 mod root_only;

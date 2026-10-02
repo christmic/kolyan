@@ -1,0 +1,6 @@
+[
+  {"id":"denial-rebuild","factory_refuses":false,"revoke":false,"wrong_owner":false,"expected_success":true},
+  {"id":"denial-factory-refuses","factory_refuses":true,"revoke":false,"wrong_owner":false,"expected_success":true},
+  {"id":"denial-revoked","factory_refuses":false,"revoke":true,"wrong_owner":false,"expected_success":true},
+  {"id":"denial-foreign-owner","factory_refuses":false,"revoke":false,"wrong_owner":true,"expected_success":false}
+]

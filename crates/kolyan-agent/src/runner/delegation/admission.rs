@@ -302,6 +302,15 @@ where
         &self,
         owner: &DelegationOwner,
     ) -> Result<(AgentInvocationBinding, FactRef), ToolError> {
+        let result = self.inspect_historical_child_owner(owner)?;
+        self.validate_current_permissions(&result.0.snapshot)?;
+        Ok(result)
+    }
+
+    pub(super) fn inspect_historical_child_owner(
+        &self,
+        owner: &DelegationOwner,
+    ) -> Result<(AgentInvocationBinding, FactRef), ToolError> {
         owner.scope.validate().map_err(denied)?;
         let (saved, fact) = self
             .bindings
@@ -312,7 +321,6 @@ where
             )
             .map_err(denied)?
             .ok_or_else(|| denied("parent Agent binding is absent"))?;
-        self.validate_current_permissions(&saved.snapshot)?;
         let state = self
             .service
             .coordinator()
@@ -407,8 +415,32 @@ where
         issued: &IssuedToolAuthority,
         admission: &Admission,
     ) -> Result<(), ToolError> {
+        self.inspect_child_owner(owner)?;
+        self.inspect_historical_child_admission(owner, issued, admission)?;
+        for child in &admission.children {
+            let saved = self
+                .bindings
+                .load(
+                    &owner.task_id,
+                    &child.attempt.invocation_id,
+                    &owner.logical_session_id,
+                )
+                .map_err(denied)?
+                .ok_or_else(|| denied("child saved owner is absent"))?;
+            self.verify_child_input(&saved, &child.attempt.input_source)
+                .map_err(denied)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn inspect_historical_child_admission(
+        &self,
+        owner: &DelegationOwner,
+        issued: &IssuedToolAuthority,
+        admission: &Admission,
+    ) -> Result<(), ToolError> {
         issued.validate(&owner.scope).map_err(denied)?;
-        let (_, parent_fact) = self.inspect_child_owner(owner)?;
+        let (_, parent_fact) = self.inspect_historical_child_owner(owner)?;
         if &admission.owner != owner
             || &admission.issued != issued
             || admission.parent_binding_fact != parent_fact
@@ -446,7 +478,7 @@ where
                 .load_input_document(&saved, &child.attempt.input_source)
                 .map_err(denied)?;
             let input = self
-                .verify_child_input(&saved, &child.attempt.input_source)
+                .verify_historical_child_input(&saved, &child.attempt.input_source)
                 .map_err(denied)?;
             let initialized = PrivateContextService::new(
                 self.service.sessions().sessions().clone(),

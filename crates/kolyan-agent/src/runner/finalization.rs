@@ -40,6 +40,12 @@ pub struct TaskFinalizationRequest {
     pub policy: TaskFinalizationPolicy,
 }
 
+#[derive(Clone, Copy)]
+enum FinalizationAuthority<'a> {
+    CurrentHost,
+    DeniedRoot { approval_id: &'a str },
+}
+
 impl<J, L, S, SS, P, T> AgentRunner<J, L, S, SS, P, T>
 where
     J: FactJournal + 'static,
@@ -68,6 +74,25 @@ where
     fn finalize_saved_task(
         &self,
         request: &TaskFinalizationRequest,
+    ) -> Result<TaskSnapshot, RunnerError> {
+        self.finalize_saved_task_authority(request, FinalizationAuthority::CurrentHost)
+    }
+
+    pub(super) fn finalize_denied_root(
+        &self,
+        request: &TaskFinalizationRequest,
+        approval_id: &str,
+    ) -> Result<TaskSnapshot, RunnerError> {
+        self.finalize_saved_task_authority(
+            request,
+            FinalizationAuthority::DeniedRoot { approval_id },
+        )
+    }
+
+    fn finalize_saved_task_authority(
+        &self,
+        request: &TaskFinalizationRequest,
+        authority: FinalizationAuthority<'_>,
     ) -> Result<TaskSnapshot, RunnerError> {
         match request.policy {
             TaskFinalizationPolicy::AllInvocationsSuccessful => {}
@@ -99,8 +124,10 @@ where
                 (_, Some(saved)) => saved,
                 (_, None) => return Err(invalid("saved invocation owner is absent")),
             };
-            self.validate_current_permissions(&saved.snapshot)
-                .map_err(|error| invalid(error.to_string()))?;
+            if matches!(authority, FinalizationAuthority::CurrentHost) {
+                self.validate_current_permissions(&saved.snapshot)
+                    .map_err(|error| invalid(error.to_string()))?;
+            }
             if invocation.definition.agent != *saved.snapshot.identity()
                 || invocation.definition.constraints_digest != saved.snapshot.digest()
             {
@@ -110,9 +137,17 @@ where
                 InvocationRole::Root => {
                     self.verify_root_input(&saved, &invocation.definition.input_source)?
                 }
-                InvocationRole::SelfCall | InvocationRole::Delegation => {
-                    self.verify_child_input(&saved, &invocation.definition.input_source)?;
-                }
+                InvocationRole::SelfCall | InvocationRole::Delegation => match authority {
+                    FinalizationAuthority::CurrentHost => {
+                        self.verify_child_input(&saved, &invocation.definition.input_source)?;
+                    }
+                    FinalizationAuthority::DeniedRoot { .. } => {
+                        self.verify_historical_child_input(
+                            &saved,
+                            &invocation.definition.input_source,
+                        )?;
+                    }
+                },
                 InvocationRole::Continuation => {
                     self.verify_continuation_origin(&saved, &invocation.definition)?
                 }
@@ -153,6 +188,32 @@ where
             root_seen |= is_root;
             if is_root {
                 self.verify_root_execution_input(&saved, binding)?;
+                if let FinalizationAuthority::DeniedRoot { approval_id } = authority {
+                    let events = self
+                        .service
+                        .sessions()
+                        .execution()
+                        .server()
+                        .coordinator()
+                        .ledger()
+                        .execution_events_after(&binding.execution.execution_id, 0)
+                        .map_err(|error| invalid(error.to_string()))?;
+                    if !events.iter().any(|event| {
+                        event.kind == kolyan_ledger::LedgerEventKind::TurnFailed
+                            && event.event_id
+                                == format!(
+                                    "{}/approval/{approval_id}/denied",
+                                    binding.execution.execution_id
+                                )
+                            && event.turn_id == binding.execution.turn_id
+                            && event.payload["reason"] == "ApprovalRejected"
+                            && event.payload["approval_id"] == approval_id
+                    }) {
+                        return Err(invalid(
+                            "denial finalization requires exact persisted root rejection",
+                        ));
+                    }
+                }
             }
             // The durable user-cancellation verdict is not a claim that every
             // in-flight attempt has stopped. Never resume or consume to prove it.

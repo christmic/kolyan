@@ -1,0 +1,11 @@
+[
+  {"id":"child-deny-rebuilt","revoke":false,"factory_refuses":false,"mutation":"none","success":true},
+  {"id":"child-deny-revoked","revoke":true,"factory_refuses":false,"mutation":"none","success":true},
+  {"id":"child-deny-factory-refuses","revoke":false,"factory_refuses":true,"mutation":"none","success":true},
+  {"id":"child-deny-revoked-unavailable","revoke":true,"factory_refuses":true,"mutation":"none","success":true},
+  {"id":"child-deny-foreign-owner","revoke":false,"factory_refuses":true,"mutation":"owner","success":false},
+  {"id":"child-deny-foreign-checkpoint","revoke":false,"factory_refuses":true,"mutation":"checkpoint","success":false},
+  {"id":"child-deny-foreign-scope","revoke":false,"factory_refuses":true,"mutation":"scope","success":false},
+  {"id":"child-deny-detached-root-only","revoke":true,"factory_refuses":true,"mutation":"root_only_cancel","success":true},
+  {"id":"child-deny-all-cancelled","revoke":true,"factory_refuses":true,"mutation":"all_cancel","success":false}
+]

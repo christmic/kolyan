@@ -1,6 +1,9 @@
 //! Approval resume rebuilds current adapters from immutable saved Agent ownership.
 //! It never registers another Task, allocates an instance or reselects a catalog.
 
+mod deny;
+mod ownership;
+
 use std::sync::Arc;
 
 use kolyan_core::TurnExecutor;
@@ -13,7 +16,6 @@ use super::{
     AgentRunner, EnvironmentToolFactory, ProviderFactory, RootRunResult, RunnerError,
     routing::RoutedTools, tools::SnapshotTools,
 };
-use crate::binding::BindingContextKind;
 
 /// Trusted user confirmation of an exact pending root approval. Execution and
 /// snapshot identities are loaded from host facts, never accepted from the caller.
@@ -46,54 +48,7 @@ where
         let runner = self.clone();
         let approval_id = request.approval_id.clone();
         let (saved, binding, executor) = tokio::task::spawn_blocking(move || {
-            for id in [
-                &request.task_id,
-                &request.invocation_id,
-                &request.logical_session_id,
-                &request.attempt_id,
-                &request.approval_id,
-            ] {
-                crate::identity(id)?;
-            }
-            let saved = runner
-                .bindings
-                .load(
-                    &request.task_id,
-                    &request.invocation_id,
-                    &request.logical_session_id,
-                )?
-                .ok_or_else(|| RunnerError::Host("saved root binding is absent".into()))?;
-            if saved.context_kind != BindingContextKind::Root {
-                return Err(RunnerError::Host(
-                    "root resume cannot borrow a child context".into(),
-                ));
-            }
-            let ceiling = runner
-                .host
-                .intersection(saved.snapshot.definition().permissions())?;
-            saved.snapshot.permissions().require_subset_of(&ceiling)?;
-            let task = runner
-                .service
-                .coordinator()
-                .snapshot(&request.task_id)
-                .map_err(kolyan_server::TaskExecutionError::from)?;
-            let attempt = task
-                .attempts
-                .get(&request.attempt_id)
-                .ok_or_else(|| RunnerError::Host("saved attempt is absent".into()))?;
-            let binding = attempt.binding.clone();
-            runner.verify_root_attempt_source(&saved, &binding)?;
-            if task.state.is_terminal()
-                || attempt.cancellation_requested
-                || binding.invocation_id != saved.invocation_id
-                || binding.execution.session_id != saved.private_session_id
-                || binding.agent != *saved.snapshot.identity()
-                || binding.constraints_digest != saved.snapshot.digest()
-            {
-                return Err(RunnerError::Host(
-                    "saved attempt and Agent ownership differ or are terminal".into(),
-                ));
-            }
+            let (saved, binding) = runner.load_root_approval_owner(&request)?;
             let skill_binding = runner.restored_skills(&saved, &binding.input_source)?;
             let provider = runner.routed_provider(
                 &saved.snapshot,

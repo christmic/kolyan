@@ -771,3 +771,16 @@ Session 与对应 attempt 实际为 Failed。所有原七行预期保留。
 
 本记录是 Core/Server 和持久预算的离线联合验证，不是生产 AgentHost、
 Agent 根/子拒绝或 MiniMax 验收。那些消费者仍待分批集成与 Main 门禁。
+
+### Agent 历史拒绝消费者
+
+随后 Main 精确合入根/子拒绝、历史 owner/input/admission 核验和独立数据
+测试；当前 Accept 仍走当前权限、Skills 与来源重验，不使用历史权限执行。
+根拒绝只有核验对应持久 ApprovalRejected 后才允许历史收尾；子拒绝返回
+已核验的物理失败，不隐式消费结果、恢复父调用或打开下一个模型。
+
+`/tmp/kolyan-agent-denial-main-module-v1.log` 退出 0：Agent 109 passed、
+零失败。新四行根场景和九行子场景保留实际请求/事件，覆盖重建、撤权、
+Provider factory 不可用、错误 owner/checkpoint/scope，以及 RootOnly 与
+AllInvocations 取消策略的区别。拒绝不增加模型请求、不产生工具效果；
+所有旧测试断言保持。这个消费者门禁不替代生产 Host 或真实模型验收。

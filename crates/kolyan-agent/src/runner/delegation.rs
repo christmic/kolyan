@@ -121,6 +121,30 @@ where
         .map_err(|error| uncertain(format!("child recovery worker failed: {error}")))?
     }
 
+    /// Inspect only historical ownership and exact admitted wait. This read-only
+    /// evidence port never authorizes child execution or result consumption.
+    pub async fn inspect_agent_child_wait(
+        self: &Arc<Self>,
+        owner: DelegationOwner,
+        issued: IssuedToolAuthority,
+        supplied: ExternalWait,
+    ) -> Result<Vec<AdmittedAgentChild>, ToolError> {
+        let runner = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let coordinate = admission_coordinate(&owner, &issued)?;
+            if supplied != wait(coordinate.clone())? {
+                return Err(denied("external wait differs from exact host admission"));
+            }
+            let admission = runner
+                .load_child_admission(&coordinate)?
+                .ok_or_else(|| denied("child admission is absent"))?;
+            runner.inspect_historical_child_admission(&owner, &issued, &admission)?;
+            Ok(admission.children)
+        })
+        .await
+        .map_err(uncertain)?
+    }
+
     /// Resolve the exact wait fact and revalidate ownership/initialization without
     /// changing journals or starting any children. Unknown schemas fail closed.
     pub async fn verify_agent_child_wait(

@@ -18,6 +18,11 @@ use crate::{AgentInvocationBinding, ResolvedChildIntent};
 
 pub(super) const MAX_INPUT_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
 
+enum InputAuthority {
+    CurrentHost,
+    HistoricalParent,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct InputBody {
@@ -211,6 +216,23 @@ where
         saved: &AgentInvocationBinding,
         source: &InvocationInputSource,
     ) -> Result<ChildInput, RunnerError> {
+        self.verify_child_input_authority(saved, source, InputAuthority::CurrentHost)
+    }
+
+    pub(super) fn verify_historical_child_input(
+        &self,
+        saved: &AgentInvocationBinding,
+        source: &InvocationInputSource,
+    ) -> Result<ChildInput, RunnerError> {
+        self.verify_child_input_authority(saved, source, InputAuthority::HistoricalParent)
+    }
+
+    fn verify_child_input_authority(
+        &self,
+        saved: &AgentInvocationBinding,
+        source: &InvocationInputSource,
+        authority: InputAuthority,
+    ) -> Result<ChildInput, RunnerError> {
         let (proof, input): (_, ChildInput) = self.load_input_document(saved, source)?;
         let (_, ownership) = self
             .bindings
@@ -268,7 +290,10 @@ where
             &input.issued.prepared,
             &parent,
             &input.parent.parent.execution,
-            &self.host,
+            match authority {
+                InputAuthority::CurrentHost => &self.host,
+                InputAuthority::HistoricalParent => parent.snapshot.permissions(),
+            },
         )
         .map_err(|error| invalid(error.to_string()))?;
         if prepared.children().get(input.child_index) != Some(&input.intent) {
