@@ -878,3 +878,10 @@ not weakened. Workspace/all-target strict Clippy exited 0 in
 `/tmp/kolyan-opening-consumer-main-strict-v1.log`. Root/child/resume/pump binding,
 actual recorder injection, failure/retry consumers and real Host gates remain
 required; this receipt does not close E2 or the whole opening increment.
+
+Full regression of frozen Main `e78169e` subsequently exited 0 in
+`/tmp/kolyan-opening-consumer-main-workspace-v1.log`: 88 result groups, 892
+passed, zero failed and 67 ignored. The terminal receipt and complete log were
+checked without restarting the live gate. Ignored provider-network cases were
+not executed. This is the integrated foundation regression, not acceptance of
+the still-unwired mandatory opening consumer.
