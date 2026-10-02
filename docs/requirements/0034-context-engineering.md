@@ -741,3 +741,9 @@ passed，均 0 failed、0 ignored；日志
 和新相对窗口拒绝；旧 checkpoint 精确断言未改。workspace all-targets
 严格 Clippy exit0，日志 `/tmp/kolyan-shared-resume-anchor-main-strict-v1.log`。
 这不是完整 counted opening 的验收；真实计量与持久准入仍需下一批接线。
+
+随后相同主干源码的完整 agent_root 离线集成回归 exit0，74 passed、
+0 failed、22 ignored，日志 `/tmp/kolyan-opening-seams-agent-root-offline-v1.log`。
+它验证已有原生工具、审批/重建、子调用及 Goal 场景仍可运行；忽略的
+供应商网络未执行，隔离开发中的新 Host/Skills load/Opening inspector
+尚未纳入该次回归，不能据此扩大完成声明。
