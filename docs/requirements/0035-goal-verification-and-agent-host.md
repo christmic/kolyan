@@ -79,6 +79,38 @@ No fail-open model verdict or text-matching heuristic proves a filesystem goal.
 
 ### Bounded correction
 
+#### Root 目标输入和收尾接线
+
+第一宿主接线在 `RootRunRequest` 新增显式 `goals: Vec<GoalCriterion>`。所有
+调用方同步迁移，现有 execution-only 场景明确传空数组，不引入旧入口或隐式
+兼容 fallback。实际业务目标宿主必须提供非空目标，不能在任务结束后从模型
+写入内容反推 predicate。Root 注册保留独立 `root-final-answer` 执行 criterion，
+并追加全部 Goal；总 criteria 沿用 Server 1..128 上限，因此最多 127 个 Goal。
+目标 ID 不得与执行 criterion 重复，invocation_id 必须等于本次实际 root。
+Server 的精确 registry/schema/digest 校验仍是最终准入门禁；缺失 checker、
+未知 revision、错误 predicate 或错误 owner 在任何模型与工具调用前失败。
+
+TaskDefinition 的不可变 criteria 是目标 SSOT，不把另一份 goals 写入模型输入
+或重复维护在 Binding 中。Goal 不是权限，不能改变模型、工具库存、grant 或
+Agent snapshot。信任集合来自宿主实际已装配的适配器，不能来自模型或 predicate。
+
+现有 `finalize_task` 继续先验证全部 invocation、历史终态和必要 child result
+consumption。物理失败与取消沿用现有明确结果，不为了取得 assessment 重入
+模型、工具或恢复执行。全部物理执行成功后，对尚未 assessment 的已声明 Goal
+调用实际 `TaskExecutionService::assess_goal`，再调用其 `complete`；已有结果
+由 snapshot/replay 重新验证，不能改写或以新事实替换失败结论。assessment
+fact ID 必须与 Task/criterion 稳定绑定；断点重建及重复收尾不重复评估写入。
+Satisfied 才能进入业务 Completed；其他结论返回 durable Waiting，操作性
+checker/source/storage 错误保留原错误，不持久化为可纠正的假 Unsatisfied。
+
+新增独立 Runner 数据场景覆盖真实文件写入目标、最终拒绝、错误内容、合法
+物理终态但无效果、缺 checker/版本错误、伪造目标归属、审批前零效果、审批
+重建后目标验证、assessment 与 complete 之间断点以及重复收尾。离线运行
+实际 Runner/Runtime/Tools；真实 MiniMax 两协议由模型产生调用，并比较完整
+实际 JSONL、收据和 Goal facts。原输入、fixture、断言保留；结构体字段迁移
+只增加显式空 goals。该接线不启动自动纠错，后续 correction 必须单独绑定
+原目标与新 Continuation 的证据范围，不能放宽当前 root-only checker 门禁。
+
 An unsatisfied goal does not make the completed physical attempt unsuccessful
 retroactively. Keep the Task nonterminal while an admitted correction remains
 possible; distinguish goal waiting from active execution in host results.
@@ -570,3 +602,25 @@ the exact paths are also emitted in the log. Normal workspace all-target
 Clippy passed in the `e93464c` pre-commit hook with these Runtime changes
 present; no hook was bypassed. Task membership, goal checker, correction and
 production host acceptance remain open and cannot be inferred from this gate.
+
+### Server 目标证据集成验证
+
+Server enforcing slice 已接入 Main `b5bc995` 后的候选源码，尚未提交或完成
+整体宿主验收。主控独立模块回归终态退出 0：Server 122 passed、Agent
+98 passed，均 0 failed、0 ignored；日志 `/tmp/kolyan-task-goals-main-v1.log`。
+两 crate 全目标严格 Clippy 终态退出 0，日志
+`/tmp/kolyan-task-goals-main-strict-v1.log`。全仓回归另行运行，未结束前不计通过。
+
+新增三组框架在 Memory/SQLite 各执行 13 行 source、25 行 assessment 和
+6 行 Service reconstruction，共 88 个数据行；模型及工具为明确声明的本机
+脚本适配器，不是网络模型或原生文件 worker。完整实际请求、facts、effects、
+查询和结果先导出，flush/sync/关闭后物理读回，再比较。Service reconstruction
+新增场景结束旧 Service 生命周期，重新打开 SQLite、重新装配真实 Service，
+再完成及重复完成，核对无模型、工具或 Runtime 重入。
+
+初次审查发现旧测试只重建 coordinator、仍调用原 Service 完成，以及导出
+写入句柄未关闭；这些证据不足之处已修正并新增独立 Service 重建场景，原场景
+和断言保留。新 production reader/registry 在 pre-append、replay 与 public
+completion 均重新核验，不以 submitted verdict 或纯模型结束状态代替成功。
+具体 FileWrite checker、Agent 目标准入/收尾、有限纠错及生产宿主与真实模型
+验收仍须完成；这份回归不证明需求 0035 或演进计划整体完成。
