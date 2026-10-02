@@ -1,7 +1,9 @@
 //! Revision-pinned host hooks. Script decisions can only narrow execution.
-//! This foundation has no Runner/Runtime consumer and never opens a model stream.
+//! The effect bridge verifies execution ownership and consumes Runtime tool hooks.
+//! BeforeModel integration is separate; this module never opens a model stream.
 
 mod binding;
+mod bridge;
 mod catalog;
 mod definition;
 mod native;
@@ -10,6 +12,7 @@ mod protocol;
 mod runtime;
 
 pub use binding::VerifiedHookBinding;
+pub use bridge::AgentEffectHookBridge;
 pub use catalog::{HookCatalog, RegisteredHook};
 pub use definition::{HookKey, HookManifest, HookPhase};
 pub use native::NativeHookHost;

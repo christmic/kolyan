@@ -1,0 +1,13 @@
+[
+ {"id":"native-pass-and-saved-proof","completed":true,"receipt":1,"spawned":2,"verify":"ok"},
+ {"id":"explicit-empty-binding","completed":true,"receipt":1,"spawned":0,"verify":"ok"},
+ {"id":"missing-binding-denied","completed":false,"receipt":0,"spawned":0,"verify":null},
+ {"id":"native-before-denial","completed":false,"receipt":0,"spawned":1,"verify":null},
+ {"id":"observer-protocol-failure-keeps-receipt","completed":false,"receipt":1,"spawned":2,"verify":"error"},
+ {"id":"observer-publication-failure-keeps-receipt","completed":false,"receipt":1,"spawned":2,"verify":"error"},
+ {"id":"approval-reconstruction","completed":true,"receipt":1,"spawned":2,"verify":"ok"},
+ {"id":"revoked-before-entry","completed":false,"receipt":0,"spawned":0,"verify":null},
+ {"id":"native-before-timeout","completed":false,"receipt":0,"spawned":1,"verify":null},
+ {"id":"native-before-cancel","completed":false,"receipt":0,"spawned":1,"verify":null},
+ {"id":"native-before-drop","completed":false,"receipt":0,"spawned":1,"verify":null}
+]

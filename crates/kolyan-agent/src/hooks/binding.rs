@@ -39,6 +39,22 @@ impl VerifiedHookBinding {
 }
 
 impl HookCatalog {
+    /// Restore the explicit saved selection; missing facts never trigger binding.
+    pub(super) fn restore_for_scope(
+        &self,
+        scope: &HookScope,
+    ) -> Result<VerifiedHookBinding, HookError> {
+        let (stream_id, fact_id) = self.binding_coordinates(scope)?;
+        self.restore_binding(
+            &FactRef {
+                stream_id,
+                position: 1,
+                fact_id,
+            },
+            scope,
+        )
+    }
+
     /// Freezes explicit exact keys after checking all registered phases against
     /// host ACL. Empty selections are allowed, but never suppress required hooks.
     pub fn bind(

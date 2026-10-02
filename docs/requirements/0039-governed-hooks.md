@@ -465,3 +465,52 @@ Full workspace regression on this joint source exited 0 in
 The complete log has no failed result groups. Ignored network cases were not run.
 Agent native script bridge and BeforeModel consumption remain outstanding;
 no vendor requests ran in these gates.
+
+## Native Agent tool hook bridge integration
+
+The reviewed AgentEffectHookBridge now implements Runtime's EffectHookPort.
+It derives the exact admitted attempt from the canonical execution binding,
+proves the Task's unique Root logical Session and the invocation's private
+ownership, then restores the explicit persisted Hook selection. Missing
+selection refuses; an explicitly empty selection still has durable completion.
+Current host ACL and revocation checks precede and follow fresh dispatch.
+
+BeforeTool and AfterTool use actual read-only native sandbox scripts. Each
+bridge intent binds the original issued Step scope, effect/input identity,
+Hook binding and actual acknowledged receipt. The live window preserves the
+original monotonic cutoff, tightening only to the Hook ceiling. Saved proof
+verification reads exact facts, Required artifacts and causes without running
+scripts, appending repair facts or applying current revocation retroactively.
+An interrupted observer never replaces the original tool result or receipt.
+
+Main independently verified all eleven frozen file digests before importing
+them, added the central agent_hooks_bridge test registration, updated the module
+boundary comment and made physical-file reads reject every error except NotFound.
+The original input cases and assertions were retained.
+
+The Main Agent module gate exited 0 with 113 passed and zero failed or ignored
+in `/tmp/kolyan-native-hook-bridge-main-module-v1.log`. The native central gate
+exited 0 with one framework covering all eleven cases in
+`/tmp/kolyan-native-hook-bridge-main-native-v1.log`. Main physically reread and
+compared the exported case results at
+`/private/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-native-bridge-ThryQI/actual.jsonl`.
+
+The dataset covers success, explicit empty and missing bindings, entry denial,
+observer protocol/publication failure after a real write, approval suspension
+and store reconstruction, current revocation, timeout, cancellation and dropped
+execution. It compares receipts, physical file content, native spawn/reap/capture
+and cleanup counts, suspended zero-effect state and read-only saved verification.
+Complete model requests and responses are retained separately for each case.
+Model frames are explicitly scripted; native scripts and the target shell effect
+are real. This is not vendor-model acceptance. BeforeModel, parent/child
+independent Hook selections and production Host configuration remain required
+follow-up consumers; these eleven Root cases do not establish those capabilities.
+
+On the same integrated source, workspace/all-target strict Clippy exited 0 in
+`/tmp/kolyan-native-hook-bridge-main-strict-v1.log`; formatting, source-layout
+and diff checks also exited 0. Full workspace regression exited 0 in
+`/tmp/kolyan-native-hook-bridge-main-workspace-v1.log`: 92 successful result
+groups, 908 passed, zero failed and 69 ignored, including helper subprocess
+results. The complete log contains no failed result groups. These gates ran
+serially with the existing Main cache and CARGO_INCREMENTAL=0. Ignored provider
+network cases were not executed; this receipt does not close whole E3 acceptance.

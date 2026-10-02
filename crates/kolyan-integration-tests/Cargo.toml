@@ -169,6 +169,10 @@ path = "tests/ledger/scoped_recovery.rs"
 name = "agent_hooks"
 path = "tests/agent/hooks.rs"
 
+[[test]]
+name = "agent_hooks_bridge"
+path = "tests/agent/hooks_bridge.rs"
+
 [dependencies]
 # Workspace tokio only enables the "time" feature, but #[tokio::test] and the
 # multi-thread runtime require "macros", "rt", and "rt-multi-thread". Declare a

@@ -1,0 +1,24 @@
+{
+  "schema_version":1,
+  "hook_timeout_ms":1000,
+  "cleanup_wait_ms":15000,
+  "model":{"provider":"fixture","model":"offline-hooks"},
+  "input":"Create proof.txt containing exactly HOOK-TARGET-PROOF using the admitted shell, then finish after its result.",
+  "frames":[
+    {"id":"response-call","model":{"provider":"fixture","model":"offline-hooks"},"content":[{"type":"reasoning","text":"Offline scripted tool intent, not a vendor model."},{"type":"tool_call","call":{"id":"target-call","name":"shell","arguments":{"command":"/usr/bin/printf HOOK-TARGET-PROOF > proof.txt","path":"."}}}],"usage":{"input_tokens":5,"output_tokens":3},"stop_reason":{"reason":"tool_use"},"structured_output":null,"metadata":null},
+    {"id":"response-final","model":{"provider":"fixture","model":"offline-hooks"},"content":[{"type":"text","text":"Observed the tool result."}],"usage":{"input_tokens":8,"output_tokens":4},"stop_reason":{"reason":"end_turn"},"structured_output":null,"metadata":null}
+  ],
+  "cases":[
+    {"id":"native-pass-and-saved-proof","mode":"pass","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","after":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'"},
+    {"id":"explicit-empty-binding","mode":"empty","before":"","after":""},
+    {"id":"missing-binding-denied","mode":"unbound","before":"","after":""},
+    {"id":"native-before-denial","mode":"deny","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"deny\",\"reason\":\"host rejection\"}'","after":""},
+    {"id":"observer-protocol-failure-keeps-receipt","mode":"observer_error","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","after":"printf prose"},
+    {"id":"observer-publication-failure-keeps-receipt","mode":"observer_storage","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","after":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'"},
+    {"id":"approval-reconstruction","mode":"approval","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","after":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'"},
+    {"id":"revoked-before-entry","mode":"revoked","before":"printf '%s' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","after":""},
+    {"id":"native-before-timeout","mode":"timeout","before":"while :; do :; done","after":""},
+    {"id":"native-before-cancel","mode":"cancel","before":"while :; do :; done","after":""},
+    {"id":"native-before-drop","mode":"drop","before":"while :; do :; done","after":""}
+  ]
+}
