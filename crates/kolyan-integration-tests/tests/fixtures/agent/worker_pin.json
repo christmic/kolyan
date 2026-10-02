@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "max_steps": 2,
+  "input": "Write safe/proof.txt with PINNED-WORKER-PROOF once using file.write, then finish after its actual result.",
+  "frames": [
+    {"reasoning":"Request one authorized physical write.","content":[{"type":"tool_call","call":{"id":"pinned-write","name":"file.write","arguments":{"path":"safe/proof.txt","content":"PINNED-WORKER-PROOF"}}}],"usage":{"input_tokens":11,"output_tokens":7}},
+    {"reasoning":"The real write result is available.","content":[{"type":"text","text":"The authorized proof was written."}],"usage":{"input_tokens":12,"output_tokens":8}}
+  ],
+  "cases": [
+    {"id":"build_artifact_replaced","mutation":"build","expected_success":true,"expected_receipts":1,"expected_content":"PINNED-WORKER-PROOF"},
+    {"id":"pinned_artifact_replaced","mutation":"pinned","expected_success":false,"expected_receipts":0,"expected_content":null}
+  ]
+}

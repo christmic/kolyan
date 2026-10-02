@@ -1,0 +1,14 @@
+{
+ "config":{"schema_version":1,"preparation_timeout_ms":1000,"cleanup_timeout_ms":1000,"max_stdout_bytes":128,"max_stderr_bytes":128},
+ "total_bound_ms":2500,
+ "cases":[
+  {"id":"valid_marker_no_authority","script":"printf '%s\\n' '{\"schema_version\":1,\"kind\":\"kolyan.worker.bootstrap\",\"ready\":true}'\n","expected_error":null},
+  {"id":"wrong_marker","script":"#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"kind\":\"foreign\",\"ready\":true}'\n","expected_error":"invalid worker Ready evidence"},
+  {"id":"malformed_json","script":"#!/bin/sh\nprintf 'not-json'\n","expected_error":"expected"},
+  {"id":"nonzero_exit","script":"#!/bin/sh\nexit 7\n","expected_error":"did not exit cleanly"},
+  {"id":"stderr_not_ready","script":"#!/bin/sh\nprintf '%s\\n' '{\"schema_version\":1,\"kind\":\"kolyan.worker.bootstrap\",\"ready\":true}'\nprintf 'failure' >&2\n","expected_error":"did not exit cleanly"},
+  {"id":"bounded_output","script":"#!/bin/sh\nwhile :; do printf '01234567890123456789'; done\n","expected_error":"output"},
+  {"id":"single_launch_timeout","script":"#!/bin/sh\nwhile :; do :; done\n","expected_error":"timed out"},
+  {"id":"descendant_holds_pipes_after_parent_exit","script":"#!/bin/sh\n/bin/sleep 10 &\nprintf '%s\\n' '{\"schema_version\":1,\"kind\":\"kolyan.worker.bootstrap\",\"ready\":true}'\nexit 0\n","expected_error":"timed out","expected_direct_exit":0}
+ ]
+}

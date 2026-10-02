@@ -1,0 +1,30 @@
+{
+  "base": {
+    "session_id": "s", "turn_id": "t", "state": "suspended", "end_reason": null,
+    "steps": [], "tool_results": [], "checkpoint_id": "checkpoint-opaque",
+    "pending_approvals": [{"approval_id":"approval-1","turn_id":"t","call_id":"call-1","tool_name":"file.write","reason":"requires approval","expires_at_ms":null,"arguments":{"path":"safe/file"}}],
+    "external_waits": [{"call_id":"call-2","wait_id":"wait-1","kind":"agent.invoke","schema_version":1}],
+    "cancellation_requested": false, "execution_stopped": true, "recovery_required": false
+  },
+  "cases": [
+    {"id":"mixed_wait","mutations":[],"accepted":true},
+    {"id":"expiry_present","mutations":[{"op":"set","parent":"/pending_approvals/0","key":"expires_at_ms","value":123}],"accepted":true},
+    {"id":"running","mutations":[{"op":"set","parent":"","key":"state","value":"running"},{"op":"set","parent":"","key":"execution_stopped","value":false},{"op":"set","parent":"","key":"checkpoint_id","value":null},{"op":"set","parent":"","key":"pending_approvals","value":[]},{"op":"set","parent":"","key":"external_waits","value":[]}],"accepted":true},
+    {"id":"completed","mutations":[{"op":"set","parent":"","key":"state","value":"completed"},{"op":"set","parent":"","key":"end_reason","value":"FinalAnswer"},{"op":"set","parent":"","key":"checkpoint_id","value":null},{"op":"set","parent":"","key":"pending_approvals","value":[]},{"op":"set","parent":"","key":"external_waits","value":[]}],"accepted":true},
+    {"id":"missing_checkpoint","mutations":[{"op":"remove","parent":"","key":"checkpoint_id"}],"accepted":false},
+    {"id":"missing_approvals","mutations":[{"op":"remove","parent":"","key":"pending_approvals"}],"accepted":false},
+    {"id":"missing_waits","mutations":[{"op":"remove","parent":"","key":"external_waits"}],"accepted":false},
+    {"id":"legacy_approval_field","mutations":[{"op":"set","parent":"","key":"pending_approval","value":null}],"accepted":false},
+    {"id":"missing_expiry","mutations":[{"op":"remove","parent":"/pending_approvals/0","key":"expires_at_ms"}],"accepted":false},
+    {"id":"negative_expiry","mutations":[{"op":"set","parent":"/pending_approvals/0","key":"expires_at_ms","value":-1}],"accepted":false},
+    {"id":"missing_reason","mutations":[{"op":"remove","parent":"/pending_approvals/0","key":"reason"}],"accepted":false},
+    {"id":"missing_turn","mutations":[{"op":"remove","parent":"/pending_approvals/0","key":"turn_id"}],"accepted":false},
+    {"id":"hidden_continuation","mutations":[{"op":"set","parent":"/pending_approvals/0","key":"continuation","value":{}}],"accepted":false},
+    {"id":"hidden_prepared","mutations":[{"op":"set","parent":"/pending_approvals/0","key":"prepared","value":{}}],"accepted":false},
+    {"id":"hidden_grant","mutations":[{"op":"set","parent":"/pending_approvals/0","key":"grant","value":{}}],"accepted":false},
+    {"id":"hidden_external_binding","mutations":[{"op":"set","parent":"/external_waits/0","key":"binding","value":{}}],"accepted":false},
+    {"id":"missing_wait_version","mutations":[{"op":"remove","parent":"/external_waits/0","key":"schema_version"}],"accepted":false},
+    {"id":"zero_wait_version","mutations":[{"op":"set","parent":"/external_waits/0","key":"schema_version","value":0}],"accepted":false},
+    {"id":"null_approvals","mutations":[{"op":"set","parent":"","key":"pending_approvals","value":null}],"accepted":false}
+  ]
+}

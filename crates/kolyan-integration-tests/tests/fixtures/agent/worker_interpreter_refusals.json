@@ -1,0 +1,7 @@
+[
+ {"id":"changed_bytes","mutation":"bytes","expected_error":"identity changed"},
+ {"id":"changed_inode","mutation":"inode","expected_error":"identity changed"},
+ {"id":"writable_data","mutation":"writable","expected_error":"immutable regular file"},
+ {"id":"executable_data","mutation":"executable","expected_error":"must not be executable"},
+ {"id":"symlink_data","mutation":"symlink","expected_error":"physical and nonsymlink"}
+]

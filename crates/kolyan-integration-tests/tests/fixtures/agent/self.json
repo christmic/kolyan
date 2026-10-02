@@ -1,0 +1,44 @@
+{
+  "schema_version":1,
+  "execution_state":"not_run",
+  "driver_state":"awaiting_production_child_runner_contract",
+  "modes":["offline_scripted_real_workers","live_common_all_19"],
+  "root_selectors":["named","inline"],
+  "host_limits":{"max_depth":2,"max_invocations":3,"max_attempts":1,"max_children":1,"max_parallel":1,"max_steps_per_turn":24},
+  "initial_files":{"safe/self-proof.txt":"SELF-PHYSICAL-PROOF"},
+  "root_ceiling":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":true}},
+  "root_instructions":"If the current private input starts SELF_CHILD, read the supplied file once, return the actual result and never delegate. Otherwise follow the supplied root instruction. A child must not invent or borrow the parent's conversation history.",
+  "cases":[
+    {
+      "id":"saved_self_once",
+      "status":"not_run",
+      "root_input":"Root private marker ROOT-SELF-PRIVATE. Use agent.invoke exactly once with self_call, parallel false, child input SELF_CHILD: read safe/self-proof.txt using file.read and return its actual contents. Give the child only file.read and no delegation. Wait for the verified child result and report the observed file content. Do not read the file yourself or repeat the call.",
+      "offline_outputs":{
+        "root":[
+          {"reasoning":"Delegate to the saved self definition with narrower permission.","content":[{"type":"tool_call","call":{"id":"self-once","name":"agent.invoke","arguments":{"children":[{"target":{"kind":"self_call"},"input":"SELF_CHILD: read safe/self-proof.txt using file.read and return its actual contents.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}],"parallel":false}}}]},
+          {"reasoning":"Consume the verified child result once.","content":[{"type":"text","text":"SELF-PHYSICAL-PROOF"}]}
+        ],
+        "child_0":[
+          {"reasoning":"Read only the explicit private input's file.","content":[{"type":"tool_call","call":{"id":"self-read","name":"file.read","arguments":{"path":"safe/self-proof.txt"}}}]},
+          {"reasoning":"Finish without further delegation.","content":[{"type":"text","text":"SELF-PHYSICAL-PROOF"}]}
+        ]
+      },
+      "faults":[{"at":"parent_external_wait_persisted","action":"drop_all_runners_and_reopen_host"},{"at":"before_saved_self_resume","action":"replace_catalog_root_same_key_conflicting_content"}],
+      "expectations":{"same_saved_definition_digest":true,"distinct_parent_child_instance_ids":true,"private_child_session":true,"child_requests_exclude":["ROOT-SELF-PRIVATE"],"child_has_no_delegation":true,"child_read_receipts":1,"result_consumptions":1,"parent_final_contains":["SELF-PHYSICAL-PROOF"],"no_parent_model_request_replay":true}
+    },
+    {
+      "id":"self_depth_denied",
+      "status":"not_run",
+      "root_input":"Ask a self child to delegate to another self child before reading safe/self-proof.txt. Do not hide any denial. Stop if the host reports a recursion ceiling.",
+      "host_limit_override":{"max_depth":1},
+      "expectations":{"outcome":"explicit_depth_denial","instances_beyond_ceiling":0,"effects_beyond_ceiling":0,"no_successful_pending_result":true}
+    },
+    {
+      "id":"self_permission_expansion_denied",
+      "status":"not_run",
+      "root_input":"Use agent.invoke with self_call and ask the child for file.write even though your own ceiling contains only file.read. Report the refusal; do not substitute another tool.",
+      "expectations":{"outcome":"explicit_permission_denial","child_instances":0,"child_model_requests":0,"file_write_receipts":0}
+    }
+  ],
+  "evidence_contract":{"emit_before_assert":true,"retain":["actual_provider_requests","model_reasoning_and_content","prepared_delegation","snapshot_and_private_binding","external_wait","child_ledger","parent_ledger","coordination_journal","verified_result_reference","result_consumption"],"actor_aliases":"fixture routing labels only; host allocates and records actual identities"}
+}

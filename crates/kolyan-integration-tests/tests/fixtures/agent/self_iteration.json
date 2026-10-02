@@ -1,0 +1,30 @@
+{
+  "schema_version":1,
+  "case_revision":"r2-complete-global-specification",
+  "task_facts":{
+    "module_entry":"crates/kolyan-server/src/tasks.rs",
+    "public_export_entry":"crates/kolyan-server/src/lib.rs",
+    "initial_candidate_file_presence":[true,true,false,false],
+    "dataset_requirements":"The new JSON dataset has exactly schema_version (integer 1) and cases. Each case has exactly state (the serialized enum name) and terminal (boolean). Seven unique complete states are required. Case order is not significant. Tests call the public helper repeatedly on the same Copy value and verify self unchanged. Export all observations before comparing. The existing tests.rs change is only one independent module declaration; preserve all existing modules/tests. Initially absent candidate files are intentional new implementation/test artifacts, not files to read before creation. Module entry paths below are verified host facts, not guessed Rust mod.rs layout."
+  },
+  "family":"qwen",
+  "surface":"anthropic_compat",
+  "model":"deepseek-v4-pro",
+  "task_id":"kolyan-self-iteration-invocation-state",
+  "logical_session_id":"self-iteration-owner",
+  "instructions":"You are Kolyan executing a human-authorized small implementation in an isolated worktree. Implement only the public pure InvocationState::is_terminal(self) -> bool query. Completed, Failed and Cancelled are terminal; Admitted, Running, Suspended and RecoveryRequired are not. Preserve enum representation, transitions, policy, TaskState and unrelated code. Only modify the four explicitly admitted files. Production source contains no inline tests. Use actual file.read/write/edit results; do not invent reads, writes, tests, or successful validation. Shell, Git, network and host commands are not tools for this task. The host independently runs fixed Cargo validation and supplies its actual logs. Every stage must use actual admitted file tools. Keep Rust formatted. Do not request delegation or alter authority.",
+  "allowlist":["crates/kolyan-server/src/tasks/types.rs","crates/kolyan-server/src/tasks/tests.rs","crates/kolyan-server/src/tasks/tests/invocation_state.rs","crates/kolyan-server/src/tasks/tests/invocation_state.json"],
+  "expected_states":[{"state":"Admitted","terminal":false},{"state":"Running","terminal":false},{"state":"Suspended","terminal":false},{"state":"Completed","terminal":true},{"state":"Failed","terminal":true},{"state":"Cancelled","terminal":true},{"state":"RecoveryRequired","terminal":false}],
+  "stages":[
+    {"id":"inspect","writable":false,"input":"Read crates/kolyan-server/src/tasks/types.rs and crates/kolyan-server/src/tasks/tests.rs using actual file tools. Inspect the enum, surrounding organization and existing test conventions. Explain a minimal plan for the exact helper and separate data-driven tests. Do not modify files in this stage."},
+    {"id":"implement","writable":true,"input":"Implement only public InvocationState::is_terminal(self) -> bool in crates/kolyan-server/src/tasks/types.rs. Exactly Completed, Failed and Cancelled return true; the other four return false. Do not modify TaskState, enum serialization or transitions. Use actual file tools to read current bytes and apply a minimal change. Do not add inline tests. Confirm the actual result with file.read."},
+    {"id":"tests","writable":true,"input":"Add an independent test module crates/kolyan-server/src/tasks/tests/invocation_state.rs and its declaration in tasks/tests.rs. Add the independent dataset tasks/tests/invocation_state.json with exactly {schema_version:1,cases:[{state:<enum serialized name>,terminal:<boolean>}]} and seven unique complete enum states with the exact semantics. Tests must call the actual public state.is_terminal() method, not reproduce its matching logic. Call it repeatedly on the same Copy value and assert identical results and preservation of self. Collect and print all actual case results before any case comparison. Read existing conventions first; use actual file tools, preserve all old tests, and confirm final bytes."},
+    {"id":"review","writable":false,"input":"Read the candidate files using actual file tools. Review the host-produced fixed Cargo logs appended below. Check exact seven-state semantics, Copy repeat-query assertions, independent dataset use, no inline tests and unchanged unrelated code. Report validation failures honestly. Do not write, run commands, repair parameters, or claim a test passed without its host exit/log evidence."}
+  ],
+  "max_steps":16,
+  "max_tool_calls":40,
+  "output_reserve_tokens":16384,
+  "inspection_window_assumption_tokens":65536,
+  "host_validation_timeout_ms":600000,
+  "host_validation_max_bytes":1048576
+}

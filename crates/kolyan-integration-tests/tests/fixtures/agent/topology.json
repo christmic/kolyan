@@ -1,0 +1,35 @@
+[
+  {
+    "id":"deep_two_self_calls","target":"self",
+    "input":"Create exactly one self child using agent.invoke, parallel false. Give that child only file.read and delegation allow_self true, allow_inline false, named_targets []. Its private input must tell it to create exactly one self grandchild with only file.read and no delegation (allow_self false, allow_inline false, named_targets []). The grandchild must read safe/child-proof.txt exactly once and return the actual content. Neither root nor intermediate child may read the file. Wait for the grandchild result, then the child result, and report the real content. Do not create extra children.",
+    "initial_content":"DEEP-SELF-REAL-PROOF","tools":["file.read"],"approval_tools":[],
+    "expected_approvals":0,"expected_simultaneous_waits":0,"expected_file_receipts":1,"expected_delegate_receipts":2,"expected_instances":3,"max_transitions":8,
+    "parent_frames":[
+      {"reasoning":"Delegate the intermediate self invocation.","content":[{"type":"tool_call","call":{"id":"root-self","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Create exactly one self grandchild with only file.read and no delegation; it must read safe/child-proof.txt once and return the actual content. Do not read yourself. Wait for its real result then finish.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":true}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+      {"reasoning":"Return the verified nested result.","content":[{"type":"text","text":"DEEP-SELF-REAL-PROOF"}],"usage":{"input_tokens":20,"output_tokens":6}}
+    ],
+    "recursive_frames":[
+      {"reasoning":"Delegate exactly one leaf self invocation.","content":[{"type":"tool_call","call":{"id":"intermediate-self","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Read safe/child-proof.txt exactly once using file.read and return its actual content. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+      {"reasoning":"Return the actual leaf result.","content":[{"type":"text","text":"DEEP-SELF-REAL-PROOF"}],"usage":{"input_tokens":20,"output_tokens":6}}
+    ],
+    "child_frames":[
+      {"reasoning":"Read the physical proof once.","content":[{"type":"tool_call","call":{"id":"leaf-read","name":"file.read","arguments":{"path":"safe/child-proof.txt"}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+      {"reasoning":"Return the real file content.","content":[{"type":"text","text":"DEEP-SELF-REAL-PROOF"}],"usage":{"input_tokens":20,"output_tokens":6}}
+    ]
+  },
+  {
+    "id":"two_child_approvals_restart","target":"named",
+    "input":"Use exactly one agent.invoke with parallel true and exactly two independent named child-definition revision r1 children. Give each only file.read and no delegation: named_targets [], allow_inline false, allow_self false. Each private input must request reading safe/child-proof.txt exactly once and returning the actual content without delegation. The trusted host requires approval before each read. Wait for both approvals and real results; do not read the file yourself, substitute results or create extra children.",
+    "initial_content":"MULTI-WAIT-REAL-PROOF","tools":["file.read"],"approval_tools":["file.read"],
+    "expected_approvals":2,"expected_simultaneous_waits":2,"expected_file_receipts":2,"expected_delegate_receipts":1,"expected_instances":3,"max_transitions":8,
+    "parent_frames":[
+      {"reasoning":"Admit two independent approval-bound readers.","content":[{"type":"tool_call","call":{"id":"two-approval-readers","name":"agent.invoke","arguments":{"parallel":true,"children":[{"target":"$TARGET","input":"Read safe/child-proof.txt exactly once using file.read and return the actual content. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},{"target":"$TARGET","input":"Read safe/child-proof.txt exactly once using file.read and return the actual content. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+      {"reasoning":"Both approved physical reads were joined.","content":[{"type":"text","text":"Both readers returned MULTI-WAIT-REAL-PROOF."}],"usage":{"input_tokens":20,"output_tokens":6}}
+    ],
+    "recursive_frames":null,
+    "child_frames":[
+      {"reasoning":"Request one actual read under the host approval policy.","content":[{"type":"tool_call","call":{"id":"approved-read","name":"file.read","arguments":{"path":"safe/child-proof.txt"}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+      {"reasoning":"Return only the actual confirmed read result.","content":[{"type":"text","text":"MULTI-WAIT-REAL-PROOF"}],"usage":{"input_tokens":20,"output_tokens":6}}
+    ]
+  }
+]

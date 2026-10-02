@@ -1,0 +1,12 @@
+{
+  "schema_version":1,"timeout_ms":30000,"sample_after_ms":1000,"repetitions":2,
+  "proof":"STARTUP-ONLY-READ-PROOF",
+  "sources":[
+    {"id":"failed-self-pin","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-delegation-NsezRt","fresh_copy":false},
+    {"id":"failed-root-pin","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-restart-67S6zd","fresh_copy":false},
+    {"id":"failed-approval-pin","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-topology-W79HqV","fresh_copy":false},
+    {"id":"failed-recovery-pin","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-delegation-vKJm62","fresh_copy":false},
+    {"id":"new-inode-a","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-topology-W79HqV","fresh_copy":true},
+    {"id":"new-inode-b","failed_case":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-topology-W79HqV","fresh_copy":true}
+  ]
+}

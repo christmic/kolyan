@@ -1,0 +1,11 @@
+[
+  {"id":"exact_reference","mutation":"none","expected_ready":true},
+  {"id":"unknown_pin_schema","mutation":"schema_version","expected_ready":false},
+  {"id":"missing_ready_digest","mutation":"missing_ready_sha256","expected_ready":false},
+  {"id":"wrong_ready_digest","mutation":"ready_sha256","expected_ready":false},
+  {"id":"foreign_ready_path","mutation":"ready_path","expected_ready":false},
+  {"id":"changed_installed_identity","mutation":"installation_ino","expected_ready":false},
+  {"id":"unknown_critical_pin_field","mutation":"unknown_field","expected_ready":false},
+  {"id":"missing_ready_evidence","mutation":"missing_ready_evidence","expected_ready":false},
+  {"id":"changed_ready_marker","mutation":"changed_ready_marker","expected_ready":false}
+]

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "configured_combinations": 19,
+  "selectors": ["named", "inline"],
+  "instructions": "Follow the user's ordered operations. Use the real tools rather than describing effects. Never repeat a completed operation. After observing the requested results, give a final answer. Preserve the conversation history.",
+  "inspection_window_assumption_tokens": 32768,
+  "output_reserve_tokens": 8192,
+  "max_steps": 24,
+  "max_tool_calls": 24,
+  "policy_scope": "safe",
+  "shell_policy_scope": ".",
+  "policy": [
+    {"tool_name":"file.read","capabilities":["filesystem_read"],"effects":["read"],"path_scopes":[],"idempotency":"idempotent","approval":"never"},
+    {"tool_name":"file.write","capabilities":["filesystem_write"],"effects":["create","update"],"path_scopes":[],"idempotency":"non_idempotent","approval":"never"},
+    {"tool_name":"file.edit","capabilities":["filesystem_read","filesystem_write"],"effects":["read","update"],"path_scopes":[],"idempotency":"non_idempotent","approval":"never"},
+    {"tool_name":"shell","capabilities":["filesystem_read","filesystem_write","process_execute"],"effects":["read","create","update","delete","execute"],"path_scopes":[],"idempotency":"non_idempotent","approval":"never"}
+  ],
+  "turns": [
+    {
+      "id":"establish",
+      "input":"Private history phrase: HISTORY-agent-origin. Perform these operations in order, waiting for each tool result: (1) file.write path safe/proof.txt with exactly ORIGIN-agent-proof; (2) file.edit same path replacing ORIGIN with VERIFIED once; (3) file.read same path; (4) shell with path safe and command /bin/cat proof.txt. Then finish. Do not repeat writes or edits.",
+      "script":[
+        {"reasoning":"Write the original proof.","content":[{"type":"tool_call","call":{"id":"write-proof","name":"file.write","arguments":{"path":"safe/proof.txt","content":"ORIGIN-agent-proof"}}}],"usage":{"input_tokens":11,"output_tokens":7}},
+        {"reasoning":"Edit only after the write result.","content":[{"type":"tool_call","call":{"id":"edit-proof","name":"file.edit","arguments":{"path":"safe/proof.txt","old_text":"ORIGIN","new_text":"VERIFIED"}}}],"usage":{"input_tokens":12,"output_tokens":8}},
+        {"reasoning":"Read the edited physical file.","content":[{"type":"tool_call","call":{"id":"read-proof","name":"file.read","arguments":{"path":"safe/proof.txt"}}}],"usage":{"input_tokens":13,"output_tokens":9}},
+        {"reasoning":"Verify through the isolated shell.","content":[{"type":"tool_call","call":{"id":"shell-proof","name":"shell","arguments":{"path":"safe","command":"/bin/cat proof.txt"}}}],"usage":{"input_tokens":14,"output_tokens":10}},
+        {"reasoning":"All requested effects completed.","content":[{"type":"text","text":"Verified physical proof and remembered HISTORY-agent-origin."}],"usage":{"input_tokens":15,"output_tokens":11}}
+      ],
+      "expected":{"file":{"safe/proof.txt":"VERIFIED-agent-proof"},"tool_minimums":{"file.write":1,"file.edit":1,"file.read":1,"shell":1},"outcome":"FinalAnswer","history_contains":[],"input_tokens":65,"output_tokens":45}
+    },
+    {
+      "id":"recall",
+      "input":"This is a new independent Turn in the same Session. Do not write or edit. Read safe/proof.txt using file.read, then shell with path safe and command /bin/cat proof.txt. Give a final answer recalling the private history phrase from my previous request and the original pre-edit content.",
+      "script":[
+        {"reasoning":"Use the previous Turn history without rewriting.","content":[{"type":"tool_call","call":{"id":"read-again","name":"file.read","arguments":{"path":"safe/proof.txt"}}}],"usage":{"input_tokens":21,"output_tokens":7}},
+        {"reasoning":"Observe the persisted proof through shell.","content":[{"type":"tool_call","call":{"id":"shell-again","name":"shell","arguments":{"path":"safe","command":"/bin/cat proof.txt"}}}],"usage":{"input_tokens":22,"output_tokens":8}},
+        {"reasoning":"Recall source history and complete.","content":[{"type":"text","text":"HISTORY-agent-origin; original ORIGIN-agent-proof; current VERIFIED-agent-proof."}],"usage":{"input_tokens":23,"output_tokens":9}}
+      ],
+      "expected":{"file":{"safe/proof.txt":"VERIFIED-agent-proof"},"tool_minimums":{"file.read":1,"shell":1},"outcome":"FinalAnswer","history_contains":["HISTORY-agent-origin","ORIGIN-agent-proof"],"input_tokens":66,"output_tokens":24}
+    }
+  ]
+}

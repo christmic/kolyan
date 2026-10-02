@@ -1,0 +1,11 @@
+[
+  {"id":"compound","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"approved-id","expires_at_ms":null}],"external_waits":[]}},"expected_id":"approved-id"},
+  {"id":"mixed_wait","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"mixed-id","expires_at_ms":123}],"external_waits":[{"wait_id":"wait"}]}},"expected_id":"mixed-id"},
+  {"id":"legacy_singular","response":{"state":"Suspended","approval":{"approval_id":"old-id"}},"expected_id":null},
+  {"id":"http_top_level","response":{"state":"Suspended","checkpoint_id":"cp","pending_approvals":[{"approval_id":"http-id","expires_at_ms":null}],"external_waits":[]},"expected_id":null},
+  {"id":"empty_id","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"","expires_at_ms":null}],"external_waits":[]}},"expected_id":null},
+  {"id":"missing_id","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"expires_at_ms":null}],"external_waits":[]}},"expected_id":null},
+  {"id":"ambiguous_batch","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"one","expires_at_ms":null},{"approval_id":"two","expires_at_ms":null}],"external_waits":[]}},"expected_id":null},
+  {"id":"missing_expiry","response":{"state":"Suspended","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"id"}],"external_waits":[]}},"expected_id":null},
+  {"id":"not_suspended","response":{"state":"Completed","waiting":{"checkpoint_id":"cp","pending_approvals":[{"approval_id":"id","expires_at_ms":null}],"external_waits":[]}},"expected_id":null}
+]

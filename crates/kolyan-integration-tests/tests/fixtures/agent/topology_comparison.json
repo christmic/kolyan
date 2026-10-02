@@ -1,0 +1,5 @@
+[
+  {"id":"all_children_have_receipts","receipts":[1,1],"succeeds":true},
+  {"id":"first_child_missing_later_child_retained","receipts":[0,1],"succeeds":false},
+  {"id":"first_child_duplicate_later_child_retained","receipts":[2,1],"succeeds":false}
+]

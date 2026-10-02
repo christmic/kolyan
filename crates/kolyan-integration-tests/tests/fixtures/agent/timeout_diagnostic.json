@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "family": "qwen",
+  "surface": "anthropic_compat",
+  "model": "qwen3.7-plus",
+  "selector": "named"
+}
