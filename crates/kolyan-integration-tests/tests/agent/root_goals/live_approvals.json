@@ -1,0 +1,12 @@
+{
+  "family": "minimax",
+  "surfaces": ["openai_compat", "anthropic_compat"],
+  "local_backends": ["memory", "sqlite"],
+  "network_backends": ["sqlite"],
+  "evidence_scope": "actual approved writes and historical goals; replacement inode is not independently measured",
+  "cases": [
+    {"case_id":"named_approval_rebuild","named":true,"approval":true,"existing_target":false,"status":"Completed","verdict":"Satisfied","receipts":1},
+    {"case_id":"inline_approval_rebuild","named":false,"approval":true,"existing_target":false,"status":"Completed","verdict":"Satisfied","receipts":1},
+    {"case_id":"atomic_old_inode_replaced","named":true,"approval":false,"existing_target":true,"status":"Completed","verdict":"Satisfied","receipts":1}
+  ]
+}

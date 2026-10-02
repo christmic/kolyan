@@ -1,0 +1,16 @@
+[
+ {"id":"satisfied","mode":"valid","verdict":"Satisfied","expected":"Completed","assessments":1,"requests":1},
+ {"id":"unsatisfied","mode":"valid","verdict":"Unsatisfied","expected":"Waiting","assessments":1,"requests":1},
+ {"id":"indeterminate","mode":"valid","verdict":"Indeterminate","expected":"Waiting","assessments":1,"requests":1},
+ {"id":"checker_failed","mode":"valid","verdict":"CheckerFailed","expected":"Waiting","assessments":1,"requests":1},
+ {"id":"operational_error","mode":"operational","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":1},
+ {"id":"missing_checker","mode":"missing_checker","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"unknown_revision","mode":"unknown_revision","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"wrong_root","mode":"wrong_owner","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"duplicate_goal","mode":"duplicate","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"duplicate_execution_id","mode":"execution_id","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"too_many_goals","mode":"too_many","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"bad_digest","mode":"digest","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"bad_predicate","mode":"predicate","verdict":"Satisfied","expected":"Refused","assessments":0,"requests":0},
+ {"id":"assessment_complete_crash_boundary","mode":"crash","verdict":"Satisfied","expected":"Completed","assessments":1,"requests":1}
+]

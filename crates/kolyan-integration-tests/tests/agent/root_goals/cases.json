@@ -1,0 +1,122 @@
+{
+  "inspection_window_assumption_tokens": 32768,
+  "output_limit_tokens": 2048,
+  "backends": [
+    "memory",
+    "sqlite"
+  ],
+  "cases": [
+    {
+      "id": "named_committed",
+      "named": true,
+      "content": "goal\n",
+      "final_text": "written",
+      "write": true,
+      "approval": false,
+      "old_content": null,
+      "expected": "Completed",
+      "verdict": "Satisfied",
+      "receipts": 1
+    },
+    {
+      "id": "inline_committed",
+      "named": false,
+      "content": "goal\n",
+      "final_text": "written",
+      "write": true,
+      "approval": false,
+      "old_content": null,
+      "expected": "Completed",
+      "verdict": "Satisfied",
+      "receipts": 1
+    },
+    {
+      "id": "wrong_content",
+      "named": true,
+      "content": "wrong\n",
+      "final_text": "written",
+      "write": true,
+      "approval": false,
+      "old_content": null,
+      "expected": "Waiting",
+      "verdict": "Unsatisfied",
+      "receipts": 1
+    },
+    {
+      "id": "missing_effect",
+      "named": true,
+      "content": "goal\n",
+      "final_text": "done",
+      "write": false,
+      "approval": false,
+      "old_content": null,
+      "expected": "Waiting",
+      "verdict": "Unsatisfied",
+      "receipts": 0
+    },
+    {
+      "id": "final_text_refusal",
+      "named": false,
+      "content": "goal\n",
+      "final_text": "I cannot write that file.",
+      "write": false,
+      "approval": false,
+      "old_content": null,
+      "expected": "Waiting",
+      "verdict": "Unsatisfied",
+      "receipts": 0
+    },
+    {
+      "id": "named_approval_rebuild",
+      "named": true,
+      "content": "goal\n",
+      "final_text": "written",
+      "write": true,
+      "approval": true,
+      "old_content": null,
+      "expected": "Completed",
+      "verdict": "Satisfied",
+      "receipts": 1
+    },
+    {
+      "id": "inline_approval_rebuild",
+      "named": false,
+      "content": "goal\n",
+      "final_text": "written",
+      "write": true,
+      "approval": true,
+      "old_content": null,
+      "expected": "Completed",
+      "verdict": "Satisfied",
+      "receipts": 1
+    },
+    {
+      "id": "atomic_old_inode_replaced",
+      "named": true,
+      "content": "goal\n",
+      "final_text": "written",
+      "write": true,
+      "approval": false,
+      "old_content": "old\n",
+      "expected": "Completed",
+      "verdict": "Satisfied",
+      "receipts": 1
+    }
+  ],
+  "network_plan": {
+    "status": "planned_not_run",
+    "family": "minimax",
+    "surfaces": [
+      "openai_compat",
+      "anthropic_compat"
+    ],
+    "selectors": [
+      "named",
+      "inline"
+    ],
+    "input": "Use file.write with {\"path\":\"result.txt\",\"content\":\"goal\\n\"}. The JSON string must decode to exactly five UTF-8 bytes [103,111,97,108,10]: four letters followed by one LF, not the literal backslash and letter n. Use the actual tool result, then finish. Do not claim a write without the call.",
+    "max_steps": 4
+  },
+  "case_revision": "root-goals-v2-explicit-json-input",
+  "input": "Use file.write with {\"path\":\"result.txt\",\"content\":\"goal\\n\"}. The JSON string must decode to exactly five UTF-8 bytes [103,111,97,108,10]: four letters followed by one LF, not the literal backslash and letter n. Use the actual tool result, then finish. Do not claim a write without the call."
+}
