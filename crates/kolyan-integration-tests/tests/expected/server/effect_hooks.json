@@ -1,0 +1,92 @@
+[
+  {
+    "id": "start-pass",
+    "outcome": "FinalAnswer",
+    "before": 1,
+    "after": 1,
+    "receipts": 1,
+    "session_status": "completed",
+    "file_content": "actual-hook-result",
+    "model_requests": 2
+  },
+  {
+    "id": "start-deny",
+    "outcome": "Failed",
+    "before": 1,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "failed",
+    "file_content": null,
+    "model_requests": 1
+  },
+  {
+    "id": "before-host-failure",
+    "outcome": "Failed",
+    "before": 1,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "failed",
+    "file_content": null,
+    "model_requests": 1
+  },
+  {
+    "id": "after-host-failure",
+    "outcome": "Failed",
+    "before": 1,
+    "after": 1,
+    "receipts": 1,
+    "session_status": "failed",
+    "file_content": "actual-hook-result",
+    "model_requests": 1
+  },
+  {
+    "id": "before-cancel",
+    "outcome": "Cancelled",
+    "before": 1,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "cancelled",
+    "file_content": null,
+    "model_requests": 1
+  },
+  {
+    "id": "before-timeout",
+    "outcome": "TimedOut",
+    "before": 1,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "failed",
+    "file_content": null,
+    "model_requests": 1
+  },
+  {
+    "id": "approval-rebuild-pass",
+    "outcome": "FinalAnswer",
+    "before": 1,
+    "after": 1,
+    "receipts": 1,
+    "session_status": "completed",
+    "file_content": "actual-hook-result",
+    "model_requests": 2
+  },
+  {
+    "id": "approval-rebuild-deny",
+    "outcome": "Failed",
+    "before": 1,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "failed",
+    "file_content": null,
+    "model_requests": 1
+  },
+  {
+    "id": "approval-user-deny",
+    "outcome": "ApprovalRejected",
+    "before": 0,
+    "after": 0,
+    "receipts": 0,
+    "session_status": "failed",
+    "file_content": null,
+    "model_requests": 1
+  }
+]

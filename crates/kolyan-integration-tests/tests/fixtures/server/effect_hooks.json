@@ -1,0 +1,436 @@
+{
+  "cases": [
+    {
+      "id": "start-pass",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "pass",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "start-deny",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "deny",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "before-host-failure",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "before_host",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "after-host-failure",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "after_host",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "before-cancel",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "before_cancel",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "before-timeout",
+      "approval": false,
+      "user_deny": false,
+      "hook_mode": "before_pending",
+      "tool_window_ms": 100,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "approval-rebuild-pass",
+      "approval": true,
+      "user_deny": false,
+      "hook_mode": "pass",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "approval-rebuild-deny",
+      "approval": true,
+      "user_deny": false,
+      "hook_mode": "deny",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    },
+    {
+      "id": "approval-user-deny",
+      "approval": true,
+      "user_deny": true,
+      "hook_mode": "pass",
+      "tool_window_ms": 2000,
+      "turn_id": "t",
+      "max_steps": 3,
+      "request": {
+        "request_id": "input",
+        "model": {
+          "provider": "fixture",
+          "model": "hook-assembly"
+        },
+        "system": [
+
+        ],
+        "messages": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "text",
+                "text": "Write the approved result then finish after receiving tool results."
+              }
+            ]
+          }
+        ],
+        "tools": [
+
+        ],
+        "tool_choice": "auto",
+        "output_format": null,
+        "prompt_cache": null,
+        "reasoning": null,
+        "max_output_tokens": 128,
+        "extensions": {
+        }
+      },
+      "call": {
+        "id": "write",
+        "name": "file.write",
+        "arguments": {
+          "path": "safe/result.txt",
+          "content": "actual-hook-result"
+        }
+      }
+    }
+  ]
+}

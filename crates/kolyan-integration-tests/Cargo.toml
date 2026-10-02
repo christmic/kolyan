@@ -78,6 +78,10 @@ name = "server_runtime_approval"
 path = "tests/server/runtime_approval.rs"
 
 [[test]]
+name = "server_effect_hooks"
+path = "tests/server/effect_hooks.rs"
+
+[[test]]
 name = "server_runtime_approval_live"
 path = "tests/server/runtime_approval_live.rs"
 
