@@ -13,3 +13,6 @@ futures-util.workspace = true
 kolyan-model = { path = "../kolyan-model" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
 serde_json.workspace = true
+
+[dev-dependencies]
+kolyan-protocol-http = { path = "../kolyan-protocol-http" }

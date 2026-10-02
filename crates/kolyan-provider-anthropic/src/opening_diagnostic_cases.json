@@ -1,0 +1,8 @@
+[
+  {"id":"one_authentication","attempts":1,"status":401,"kind":"Authentication","stop":"Ineligible","diagnostic_kind":"local_http_opening_report"},
+  {"id":"one_rate_limit","attempts":1,"status":429,"kind":"RateLimited","stop":"UnknownRateLimit","diagnostic_kind":"local_http_opening_report"},
+  {"id":"one_unavailable","attempts":1,"status":529,"kind":"Unavailable","stop":"ElapsedLimit","diagnostic_kind":"local_http_opening_report"},
+  {"id":"one_header_budget","attempts":1,"status":null,"kind":"Transport","stop":"ElapsedLimit","diagnostic_kind":"local_http_opening_report"},
+  {"id":"pre_send_budget","attempts":0,"status":null,"kind":"Transport","stop":"ElapsedLimit","diagnostic_kind":"local_http_opening_report"},
+  {"id":"multiple_terminal_authentication","attempts":2,"status":401,"kind":"Authentication","stop":"Ineligible","diagnostic_kind":"local_http_opening_retry"}
+]

@@ -105,6 +105,7 @@ impl ModelProvider for AnthropicProvider {
                 .stream_message_with_extensions(&wire, &plan.wire_extensions)
                 .await
                 .map_err(anthropic_error)?;
+            let retry_report = response.retry_report().clone();
             let model = request.model.clone();
             let structured = request.output_format.is_some();
             let stream = map_stream(
@@ -114,12 +115,20 @@ impl ModelProvider for AnthropicProvider {
                 validator,
             );
             let audit = plan.decisions;
-            let prefix = futures_util::stream::iter((!audit.is_empty()).then(|| {
-                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: request.model.provider,
+            let mut metadata = Vec::new();
+            if !audit.is_empty() {
+                metadata.push(Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: request.model.provider.clone(),
                     raw: Some(json!({"kind":"request_planning","decisions":audit})),
-                }))
-            }));
+                })));
+            }
+            if retry_report.was_retried() {
+                metadata.push(Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: request.model.provider,
+                    raw: Some(json!({"kind":"local_http_opening_retry","report":retry_report})),
+                })));
+            }
+            let prefix = futures_util::stream::iter(metadata);
             Ok(Box::pin(prefix.chain(stream)) as _)
         })
     }
@@ -415,12 +424,32 @@ fn protocol_error(message: impl Into<String>) -> ProviderError {
 }
 
 fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> ProviderError {
+    let diagnostics = error
+        .opening_report()
+        .filter(|report| report.attempts() > 0 || report.terminal_stop().is_some())
+        .map(|report| {
+            let kind = if report.was_retried() {
+                "local_http_opening_retry"
+            } else {
+                "local_http_opening_report"
+            };
+            json!({"kind":kind,"report":report})
+        });
     let message = ProviderError::describe(&error);
-    let status = match &error {
+    let status = match error.root_cause() {
         kolyan_protocol_anthropic::AnthropicError::Http { status, .. } => Some(*status),
         _ => None,
     };
-    let (kind, phase) = match error {
+    let (kind, phase) = match error.root_cause() {
+        kolyan_protocol_anthropic::AnthropicError::OpeningBudgetExhausted => {
+            (ProviderErrorKind::Transport, ProviderErrorPhase::Open)
+        }
+        kolyan_protocol_anthropic::AnthropicError::Configuration(_) => {
+            (ProviderErrorKind::InvalidRequest, ProviderErrorPhase::Open)
+        }
+        kolyan_protocol_anthropic::AnthropicError::RetriedError { .. } => {
+            unreachable!("root_cause removes retry wrappers")
+        }
         kolyan_protocol_anthropic::AnthropicError::Api(_) => {
             (ProviderErrorKind::Other, ProviderErrorPhase::Stream)
         }
@@ -431,7 +460,7 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
             (ProviderErrorKind::Transport, ProviderErrorPhase::Stream)
         }
         kolyan_protocol_anthropic::AnthropicError::Http { status, .. } => (
-            match status {
+            match *status {
                 401 | 403 => ProviderErrorKind::Authentication,
                 429 => ProviderErrorKind::RateLimited,
                 500..=599 => ProviderErrorKind::Unavailable,
@@ -447,6 +476,7 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
     let mut error = ProviderError::new(kind, phase, message);
     error.status = status;
     error.provider = Some("anthropic".into());
+    error.diagnostics = diagnostics;
     error
 }
 
@@ -456,3 +486,6 @@ fn parse_json(text: &str) -> Option<Value> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod opening_diagnostic_tests;
