@@ -834,4 +834,47 @@ prepared 入口。真实 HostProvider 实现 SDK 的 PreparedModelProvider。
 WireBytes 政策，写入并回读准备事实，append_unless_cancelled 后消费私有
 一次性 permit，使用同一截止锚点及同一原始 plan 发送 GEN。Root、Child、
 恢复和 pump 必须沿用统一装配；重建不复用旧 bound provider 或旧 permit。
-这组写入器、强制 marker/完成注入及重试拒绝消费者仍待实现和实际验收。
+基础写入器与绑定接口见下节；强制 marker/完成注入及重试拒绝消费者仍待
+实际驱动接线与验收，不能由基础模块通过推断已生效。
+
+### Runtime opening writer integration
+
+Main verified all ten frozen source digests and imported nine new files plus
+only the Runtime module/export hunk. The existing proof reader and Ledger enum
+were reused without replacing their source. No SDK mapper, SSE loop, Core model
+interface or automatic retry was added.
+
+`BindOpeningAttempt` consumes a provider and returns its associated bound provider;
+there is no blanket or default binding. `OpeningModelProvider` prepares once,
+checks the explicitly selected ProviderReported or WireBytes policy, persists and
+physically rereads the exact critical preparation fact, and atomically admits
+against cancellation before consuming a private one-shot permit. It moves the
+same owned plan to `stream_prepared`. Unsupported count never falls back to
+generation or to an invented token estimate. Typed accounting, count timeout,
+deadline, cancellation and storage causes remain available for the Driver.
+
+The source publication methods validate actual committed Ledger coordinates;
+the completion sources have private fields and cannot be deserialized. Their
+existence does not prove a production recorder has called them. The current
+registry starts from the exact original input admission. A legitimate tighter
+resume cutoff needs an authenticated resume-anchor contract before mandatory
+Driver binding; silently restoring the wider initial cutoff is forbidden.
+
+Main module verification exited 0 in
+`/tmp/kolyan-opening-consumer-main-module-v1.log`: Core 108, Ledger 28 and Runtime
+65 passed, zero failed or ignored. Twenty independent cases ran for each of
+Memory and reopened SQLite. Complete 40 rows were synchronized, closed and
+physically reread at the macOS temporary paths
+`kolyan-opening-consumer-YQHhZ4/actual.jsonl` and
+`kolyan-opening-consumer-GEN6Lt/actual.jsonl`. Each backend includes seven
+Uncertain, twelve NotAdmitted and one Completed observations. Lost or damaged
+opening acknowledgements remain Uncertain with no new GEN; source write/read
+failure, budget rejection, count cancellation and timeout prevent GEN.
+
+The matrix uses a test-only prepared provider and manual input/request/completion
+recorder fixtures. It exercises the production writer, but is not real SDK HTTP,
+Core EOF, mandatory Driver or MiniMax acceptance. Existing test assertions were
+not weakened. Workspace/all-target strict Clippy exited 0 in
+`/tmp/kolyan-opening-consumer-main-strict-v1.log`. Root/child/resume/pump binding,
+actual recorder injection, failure/retry consumers and real Host gates remain
+required; this receipt does not close E2 or the whole opening increment.

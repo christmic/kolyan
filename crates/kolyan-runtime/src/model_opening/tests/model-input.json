@@ -1,0 +1,11 @@
+{
+ "execution":{"session_id":"session","execution_id":"execution","turn_id":"turn"},
+ "request":{"request_id":"turn-step-0","model":{"provider":"fixture","model":"fixture-model"},
+ "system":[],"messages":[{"role":"user","content":[{"type":"text","text":"Runtime consumer input"}]}],
+ "tools":[],"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,
+ "max_output_tokens":32,"extensions":{}},
+ "response":{"id":"fixture-response","model":{"provider":"fixture","model":"fixture-model"},
+ "content":[{"type":"text","text":"manual completion"}],"structured_output":null,
+ "stop_reason":{"reason":"end_turn"},"usage":{"input_tokens":3,"output_tokens":1,
+ "cache_read_tokens":null,"cache_write_tokens":null,"reasoning_tokens":null},"metadata":{}}
+}

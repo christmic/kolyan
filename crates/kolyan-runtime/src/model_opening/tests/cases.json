@@ -1,0 +1,22 @@
+[
+ {"id":"wire_bytes","policy":"bytes","mode":"ok","error":null,"prepare":1,"count":0,"gen":1,"state":"uncertain"},
+ {"id":"reported_count","policy":"count","mode":"ok","error":null,"prepare":1,"count":1,"gen":1,"state":"uncertain"},
+ {"id":"duplicate_stream","policy":"bytes","mode":"duplicate","error":"state","prepare":1,"count":0,"gen":1,"state":"uncertain"},
+ {"id":"byte_budget","policy":"zero_bytes","mode":"ok","error":"accounting","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"token_budget","policy":"zero_tokens","mode":"ok","error":"accounting","prepare":1,"count":1,"gen":0,"state":"not_admitted"},
+ {"id":"count_cancelled","policy":"count","mode":"cancel_count","error":"cancelled","prepare":1,"count":1,"gen":0,"state":"not_admitted"},
+ {"id":"count_timeout","policy":"count","mode":"slow_count","error":"count_timeout","prepare":1,"count":1,"gen":0,"state":"not_admitted"},
+ {"id":"ledger_cancelled","policy":"count","mode":"ledger_cancel","error":"cancelled","prepare":1,"count":1,"gen":0,"state":"not_admitted"},
+ {"id":"gen_error_is_uncertain","policy":"bytes","mode":"gen_error","error":"provider","prepare":1,"count":0,"gen":1,"state":"uncertain"},
+ {"id":"unsupported_count_no_fallback","policy":"count","mode":"unsupported","error":"provider","prepare":1,"count":1,"gen":0,"state":"not_admitted"},
+ {"id":"unknown_opening_ack","policy":"bytes","mode":"unknown_ack","error":"ledger","prepare":1,"count":0,"gen":0,"state":"uncertain"},
+ {"id":"damaged_opening_ack","policy":"bytes","mode":"bad_ack","error":"binding","prepare":1,"count":0,"gen":0,"state":"uncertain"},
+ {"id":"opening_write_failure","policy":"bytes","mode":"ledger_fail","error":"ledger","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"preparation_write_failure","policy":"bytes","mode":"fact_fail","error":"fact","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"unknown_preparation_ack","policy":"bytes","mode":"unknown_fact_ack","error":"fact","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"preparation_read_failure","policy":"bytes","mode":"fact_read_fail","error":"fact","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"preparation_read_mismatch","policy":"bytes","mode":"read_mismatch","error":"binding","prepare":1,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"admission_prefix_bound","policy":"bytes","mode":"prefix_bound","error":"proof","prepare":1,"count":0,"gen":0,"state":"uncertain"},
+ {"id":"zero_shared_deadline","policy":"count","mode":"zero_deadline","error":"deadline","prepare":0,"count":0,"gen":0,"state":"not_admitted"},
+ {"id":"completion_sources_are_actual","policy":"bytes","mode":"completion","error":null,"prepare":1,"count":0,"gen":1,"state":"completed"}
+]
