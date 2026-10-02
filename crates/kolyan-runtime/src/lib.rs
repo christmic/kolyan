@@ -10,12 +10,19 @@ mod driver;
 mod effect_proof;
 mod execution;
 mod external;
+mod model_opening_proof;
 
 pub use approval::approval_decision_payload;
 pub use effect_proof::{
     EffectProofCoordinate, EffectProofError, EffectProofRequest, EffectProofSources,
     MAX_EFFECT_PROOF_INPUT_BYTES, MAX_EFFECT_PROOF_RESULT_BYTES, VerifiedEffectProof,
     inspect_effect_proof,
+};
+pub use model_opening_proof::{
+    ModelContextPrepared, ModelOpeningAccounting, ModelOpeningAdmitted, ModelOpeningEventRef,
+    ModelOpeningInspectionLimits, ModelOpeningInspectionRequest, ModelOpeningMappingIdentity,
+    ModelOpeningProofError, ModelOpeningProtocol, ModelOpeningState, VerifiedModelOpeningStep,
+    VerifiedModelOpenings, inspect_model_openings,
 };
 mod reconciliation;
 

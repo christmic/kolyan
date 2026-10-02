@@ -23,6 +23,7 @@ pub enum LedgerEventKind {
     TurnStarted,
     StepStarted,
     ModelRequested,
+    ModelOpeningAdmitted,
     ModelStreamEvent,
     StepCompleted,
     ToolCallRequested,

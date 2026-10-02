@@ -789,3 +789,49 @@ decode error 与请求、响应均已保留；修正仅复用各协议已有 ful
 视为相同，已按原合同改为完整 decoded body/digest 校验；GEN 仍比较实际
 原始字节。这两项是新增测试框架问题，不修改生产解析器、旧场景或旧断言；
 失败日志 v1/v3 保留，不追溯记为通过。
+
+### 开启证明只读切片
+
+新增 inspect_model_openings 从可信 Ledger 的精确有界前缀和实际 FactJournal
+读取、校验完整请求/准备/开启/完成链，返回不可反序列化、无公开构造器的
+验证结果。NotAdmitted、Completed 与 Uncertain 区分模型开启状态，不是
+工具安全、任务完成或重试许可。存储错误、边界耗尽及缺少协议标记均拒绝，
+不能把“没有看到”当作“没有开启”。首批只是只读基础，尚未接入强制写入器
+或 Task 重试消费，已有 Runtime 执行不会因此自动获得开启证明。
+
+审查增加 terminal-before-admission 的独立反例：ExecutionStarted(1)、
+TurnFailed(2)、ExecutionInputAdmitted(3)，查询至(3)，没有 Step。修复前
+两后端错误返回已验证 no_steps；修复后均 OrderingMismatch，不返回证明。
+修复前失败日志 `/tmp/kolyan-opening-proof-terminal-order-repro-v1.log` 和
+全部旧证据保留，原 162 个场景结果不变。冻结清单
+`/tmp/kolyan-opening-proof-freeze-v2.sha256` 的 12 项主控物理核对通过；
+10 个新文件精确导入，两个现有导出/事件枚举只合并必要 hunk。
+
+主干 Ledger 28、Runtime 63 passed，0 failed、0 ignored，终态 exit0；日志
+`/tmp/kolyan-opening-proof-main-module-v1.log`。Memory 和重新打开的 SQLite
+各输出 163 行完整来源及结果，分别位于 macOS 临时目录
+`kolyan-model-opening-proof-3KIY6G/actual.jsonl` 与
+`kolyan-model-opening-proof-m24eiv/actual.jsonl`，同步关闭后物理回读比较。
+这些是手工构造的协议数据，不是生产 count/GEN 或 MiniMax 验收。
+相同源码完整 workspace all-targets 严格 Clippy 终态 exit0，日志
+`/tmp/kolyan-opening-proof-main-strict-v1.log`；fmt、源码布局和差异检查通过。
+
+### 实际开启绑定的接线设计
+
+后续 Runtime 的 BindOpeningAttempt 消费 Provider，返回 associated Bound
+Provider；不在 Core 新增第二个模型接口，不提供 blanket/default Allow。
+这是待实现的接口方向，不是已存在的公共 API。Runtime 通过已实现的
+try_map_model_provider 在实际 attempt 上绑定，原配置与共享 deadline 保留。
+
+实际装配顺序为 AdvertisementProvider<ContextPreparingProvider<
+OpeningModelProvider<HostProvider>>>。外层显式转发绑定且完整保留原字段，
+原 stream 中的异步 Skills 当前来源检查、广告检查、上下文校验与 recorder
+确认照常发生。不能为满足同步 prepare_generation 而跳过异步守卫或阻塞
+执行线程；guard wrapper 只承担绑定和原 stream，不另暴露绕过守卫的同步
+prepared 入口。真实 HostProvider 实现 SDK 的 PreparedModelProvider。
+
+开启层在这些守卫之后准备一次 SDK owned generation plan，计量或采用显式
+WireBytes 政策，写入并回读准备事实，append_unless_cancelled 后消费私有
+一次性 permit，使用同一截止锚点及同一原始 plan 发送 GEN。Root、Child、
+恢复和 pump 必须沿用统一装配；重建不复用旧 bound provider 或旧 permit。
+这组写入器、强制 marker/完成注入及重试拒绝消费者仍待实现和实际验收。

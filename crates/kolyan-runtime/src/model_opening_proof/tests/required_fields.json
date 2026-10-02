@@ -1,0 +1,12 @@
+[
+ {"target":"admission","expected":"invalid_payload","fields":["key","model_request","max_steps","max_tool_calls","tool_timeout_ms","dispatch"]},
+ {"target":"prepared","expected":"invalid_payload","fields":["execution","step_id","model_requested","neutral_digest","mapping_identity","count_profile_digest","generation_wire_digest","generation_wire_bytes","count_input_digest","unsupported_count_fields","accounting"]},
+ {"target":"prepared","expected":"invalid_payload","fields":["mapping_identity/endpoint_id","mapping_identity/protocol","mapping_identity/model","mapping_identity/mapping_revision","mapping_identity/coverage_revision","mapping_identity/model/provider","mapping_identity/model/model"]},
+ {"target":"prepared","expected":"invalid_payload","fields":["accounting/kind","accounting/policy_revision","accounting/max_generation_wire_bytes"]},
+ {"target":"opening","expected":"invalid_payload","fields":["execution","step_id","model_requested","preparation","neutral_digest","generation_wire_digest","generation_wire_bytes","count_profile_digest","preparation/stream_id","preparation/position","preparation/fact_id","model_requested/event_id","model_requested/cursor"]},
+ {"target":"opening","expected":"unsupported","fields":["schema_version","opening_protocol"]},
+ {"target":"completed","expected":"invalid_payload","fields":["step_id","outcome","step","model_requested","step/response","step/outcome","step/step_id"]},
+ {"target":"completed","expected":"unsupported","fields":["opening_protocol"]},
+ {"target":"request","expected":"invalid_payload","fields":["request"]},
+ {"target":"start","expected":"invalid_payload","fields":["step_id"]}
+]
