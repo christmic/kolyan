@@ -88,9 +88,14 @@ Current mainline specifications:
 - [Context accounting and governed reduction](0034-context-engineering.md).
 - [Goal verification and usable Agent host](0035-goal-verification-and-agent-host.md).
 
-0032 and 0033 specifications are under implementation in isolated worktrees;
-their final implementation/evidence documents will be integrated with their
-reviewed source changes. Released slices are not yet acceptance receipts.
+Supporting specifications:
+
+- [Standalone Step liveness](0032-step-liveness-boundary.md).
+- [Typed Agent preparation errors](0033-agent-preparation-error-contract.md).
+
+Their reviewed source and complete test observations have been integrated;
+independent mainline verification is running. Isolated worktree receipts are
+not substitutes for integrated or actual-model acceptance.
 
 ## Goal and host design constraints
 

@@ -7,10 +7,16 @@ use thiserror::Error;
 
 mod approval;
 mod driver;
+mod effect_proof;
 mod execution;
 mod external;
 
 pub use approval::approval_decision_payload;
+pub use effect_proof::{
+    EffectProofCoordinate, EffectProofError, EffectProofRequest, EffectProofSources,
+    MAX_EFFECT_PROOF_INPUT_BYTES, MAX_EFFECT_PROOF_RESULT_BYTES, VerifiedEffectProof,
+    inspect_effect_proof,
+};
 mod reconciliation;
 
 pub use external::{

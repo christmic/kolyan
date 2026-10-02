@@ -1,0 +1,6 @@
+[
+  {"id":"completed","expected":"completed","provider_calls":2},
+  {"id":"completed_error_result","expected":"completed_error","provider_calls":2},
+  {"id":"failed_receipt","expected":"failed","provider_calls":1},
+  {"id":"uncertain_effect","expected":"missing","provider_calls":1}
+]

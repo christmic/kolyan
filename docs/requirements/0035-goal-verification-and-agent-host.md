@@ -193,6 +193,8 @@ trait TaskGoalVerifier: Send + Sync {
     fn validate_criterion(&self, criterion: &GoalCriterion) -> Result<(), TaskError>;
     fn verify_assessment(&self, snapshot: &TaskSnapshot,
         assessment: &GoalAssessment) -> Result<(), TaskError>;
+    fn verify_completion(&self, prefix: &TaskSnapshot,
+        evidence: &[CompletionEvidence]) -> Result<(), TaskError>;
 }
 ```
 
@@ -211,7 +213,12 @@ converted to semantic goals. The concrete implementation independently reloads
 Runtime source evidence and invokes a registered deterministic checker.
 
 Append and replay both enforce the port for registration, assessment and Task
-completion. The port receives the already-replayed Task prefix, so its Runtime
+completion. Unlike the existing post-apply input-source hook, goal validation
+runs against the event-before prefix: envelope/bounds validation, goal source
+verification, pure reducer apply, then append. Registration validates its
+criteria directly because there is no prefix yet. Input-source checks retain
+their necessary post-apply invocation binding check. The port receives the
+already-replayed Task prefix, so its Runtime
 reader must not call TaskCoordinator::snapshot or a helper that does so. That
 would recursively verify the same assessment. Source loading uses exact lookup
 or bounded query, not a full-history fallback. Physical Task membership and the
@@ -224,8 +231,23 @@ assessment is separate from AttemptOutcome::Completed: no retrofit changes the
 physical attempt or its usage. An assessment cannot masquerade as an ordinary
 AttemptObservation or mark_recovery event.
 
-The first integration assesses only the criterion's exact invocation and latest
+GoalAssessment.source is the exact physical terminal, equal to the latest
+stopped observation's source. Checker-specific effect coordinates belong in
+the strictly decoded proof. The observation FactRef is independently bound to
+that attempt, not taken from a caller's arbitrary terminal_fact. The first
+slice permits one assessment per exact criterion/attempt and identical fact
+retry; it does not silently re-evaluate a transient failure under a new ID.
+Storage faults, missing checker and unreadable/corrupt authoritative sources
+reject append without creating a replay-unstable verdict. Indeterminate covers
+deterministic incomplete coverage or uncertain effects. CheckerFailed may be
+persisted only for a deterministic checker failure with reproducible inputs;
+otherwise report an operational error outside authoritative goal history.
+
+The first integration assesses only the criterion's exact root invocation and latest
 physically completed attempt. No child or ordinary Continuation can satisfy it.
+Root admission verifies that all Goal anchor IDs equal the unique actual root;
+assessment rechecks its role and full binding. Physical observation validation
+explicitly rejects GoalSatisfied evidence; it belongs only to goal completion.
 The later correction slice extends this through explicit persisted correction
 edges; it must not simply remove this ownership check. Multiple identical fact
 retries remain idempotent; a changed payload under one fact ID conflicts. A new
@@ -239,11 +261,33 @@ records do not fabricate it. The reducer gathers this evidence separately from
 attempt observations and requires it alongside all existing physical and child
 consumption checks. Public complete_task and replay cannot bypass this check.
 
+The digest is explicitly assessment_digest, over the complete typed assessment,
+not merely its predicate. The Completed fact causes include every consumed
+assessment FactRef. verify_completion independently revalidates every admitted
+invocation's actual successful stopped outcome, as well as all GoalSatisfied
+references. Rechecking only the root goal would leave a bypass through forged
+child observations and the public coordinator completion method.
+
+The concrete SourceReader owns only bounded Ledger reads and the authenticated
+prefix/bindings, not a TaskExecutionService or coordinator. It independently
+verifies ExecutionBound, the actual FinalAnswer Step and terminal, conflicting
+terminals and unresolved effects. Runtime's selected effect helper does not
+prove that an entire attempt succeeded. Search must freeze its through cursor
+and enforce cumulative rows/bytes; exhausting the bounds is Indeterminate.
+Do not copy the generic 256-byte identity bound onto composed receipt event IDs.
+
 WaitingReason gains an explicit GoalAssessment/GoalUnmet reason. A completed
 physical attempt with no assessment or a non-satisfied verdict does not project
 as ordinary Ready. Cancellation and terminal states still dominate. Initial
 goal evaluation returns this waiting disposition; automatic correction is not
 enabled until the separate persisted budget/edge slice is verified.
+
+refresh derives waits from assessment history on every replay; a transient push
+into waiting is insufficient. TaskExecutionService collects goal evidence
+separately. Runner finalization reports unmet/indeterminate goal waiting rather
+than calling unconditional success or treating normal goal waiting as an
+unexpected finalization error. Those actual consumers must be migrated before
+the slice can claim acceptance.
 
 Hard bounds for this slice: at most 128 Goal criteria, 64 KiB per predicate,
 64 KiB per assessment proof, 8192 UTF-8 bytes per reason and 1024 referenced
@@ -268,6 +312,68 @@ reconstruction between assessment and Task completion. All actual rows and
 full source content are exported before comparison. Host live tests and bounded
 correction remain required subsequent consumers; this slice alone does not
 complete requirement 0035.
+
+Additional mandatory negatives: verifier must not invoke a second snapshot;
+public completion with forged physical observations; a valid target receipt
+alongside an unresolved effect; deterministic CheckerFailed reconstruction and
+operational storage failure followed by an identical retry. Each is tested at
+append and replay, not merely through a test-only validator.
+
+#### Released Server write set and source reader interface
+
+After two independent source reviews, the enforcing Server slice is released.
+It owns Task goal types, coordinator/reducer transitions, a concrete bounded
+Ledger reader, checker registry, TaskExecutionService assessment/completion
+consumers and independent data-driven tests. Agent-specific file predicates,
+Runner admission/finalization and production assembly are separate writes;
+the Server slice is not accepted as the whole goal capability without them.
+
+```rust,ignore
+GoalSourceReader<L>::inspect_stopped(
+    &self, prefix: &TaskSnapshot, binding: &AttemptBinding,
+    source: &ExecutionEvidence, limits: &GoalSourceLimits,
+) -> Result<VerifiedGoalSource, GoalSourceError>;
+trait GoalChecker: Send + Sync {
+    fn key(&self) -> &GoalCheckerKey;
+    fn validate_predicate(&self, criterion: &GoalCriterion) -> Result<(), TaskError>;
+    fn assess(&self, criterion: &GoalCriterion, source: &VerifiedGoalSource)
+        -> Result<ComputedGoalDecision, TaskError>;
+}
+```
+
+VerifiedGoalSource has private fields and no Deserialize/caller constructor.
+It exposes read-only exact binding, physical terminal, actual final response,
+coverage and verified effect proofs. ComputedGoalDecision includes verdict,
+bounded reason and strictly checked proof; the concrete LedgerTaskGoalVerifier
+combines the reader and exact-key registry and compares the complete computed
+decision against the candidate assessment. No network or executor port exists.
+Unknown registry entries reject Task registration, not just eventual completion.
+
+The reader's scan is scoped to the exact execution, using required query pages
+of at most 1024. It has hard ceilings of 4096 total rows, 32 MiB cumulative
+serialized evidence, 16 MiB per event and 16 MiB final response; caller limits
+may tighten them. No full-history helper is used. Read to a bounded observed
+end, freeze the observed last coordinate and validate the selected stopped
+source within it, including conflicting later physical terminal facts and
+unresolved effects. Exhaustion cannot imply absence or Satisfied. This is an
+observed immutable-source proof, not a guarantee against arbitrary future
+storage corruption; later completion/replay independently rechecks sources.
+
+Effect proof reads also count toward cumulative resource ceilings; at most 128
+effects are inspected for one source. Fully bound definitive Failed receipts
+are not successful effects. A corrupted source is an operational validation
+error, not a model-correctable goal miss. Deterministic coverage exhaustion or
+uncertainty is explicitly classified and cannot lead to automatic correction.
+The verifier must use the authenticated prefix, not recursively reload Task.
+
+First implementation exposes an actual service assessment operation that
+computes and appends its own decision; caller-supplied assessment submissions
+still pass the same pre-apply verification. Goals are not generated by
+record_stopped. Completion reconstructs GoalSatisfied from exact saved
+assessment facts and rechecks all physical invocations. No public command path
+is exempt. New tests may use an explicitly synthetic deterministic checker to
+exercise the enforcing paths; they do not replace the subsequent real file
+checker or MiniMax host gate.
 
 Persist goal assessments separately from already-stopped attempts. Reuse Task
 criteria, journal and completion; do not create a duplicate GoalTask entity.
@@ -331,3 +437,35 @@ Completion requires source-level integration through Task success, retained
 negative cases, a working real host, offline regression and actual-model evidence.
 A pure evaluator, interface, CLI stub or passing JSON-shape test alone is not
 the requested business-goal capability.
+
+## Runtime prerequisite integration receipt
+
+The Runtime effect reader is implemented and independently integrated on Main
+after `e93464c`, with the seven reviewed Runtime files and this specification.
+Public APIs are `inspect_effect_proof`, EffectProofRequest/Coordinate/Sources,
+VerifiedEffectProof and EffectProofError, exported from kolyan-runtime.
+Private preparation/grant validation is reused, not copied into Server.
+
+Main `cargo test --offline --locked -p kolyan-runtime -- --nocapture` exited 0:
+61 passed, no failed or ignored, doc tests zero. Log:
+`/tmp/kolyan-evolution-effect-proof-integrated-v1.log`. Added observations are
+76 memory, 76 rebuilt SQLite and 8 actual DurableTurnDriver rows driven by an
+explicitly scripted Provider/tool. They are not live model or physical file
+write receipts. Inspection repeats produce zero new model/tool calls, writes
+or unbounded reads. Existing 58 tests remain unchanged.
+
+Actual complete JSONL is exported before comparison and read back from disk.
+Main strengthened the new result projection from Debug to typed Result JSON;
+preparation, scope, receipt, terminal and all before/after facts remain complete.
+Artifacts from the independent Main run:
+
+- `kolyan-effect-proof-fRD5Wr/actual.jsonl` (memory).
+- `kolyan-effect-proof-cowJ4R/actual.jsonl` (rebuilt SQLite).
+- `kolyan-effect-proof-runtime-DMZbjc/actual.jsonl` (actual Runtime chain).
+
+Their temporary parent is
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/`;
+the exact paths are also emitted in the log. Normal workspace all-target
+Clippy passed in the `e93464c` pre-commit hook with these Runtime changes
+present; no hook was bypassed. Task membership, goal checker, correction and
+production host acceptance remain open and cannot be inferred from this gate.
