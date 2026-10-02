@@ -1789,3 +1789,371 @@ and durability evidence, not actual-model or trusted-token-budget acceptance:
 the counter remains Unsupported and budget mode Inspect. Keep the independent
 Strict Unknown and serialized-size refusal checks, and run the separate complete
 actual-model projection matrix before claiming network acceptance.
+
+The owner collected exit 101 for projection matrix handle 13015 after 3271.30
+seconds. Report `kolyan-r1-matrix-XxGHwT/report.json` contains all 38 terminal rows:
+19 Passed and 19 Failed, each with exactly one attempt. All 19 failure details
+report ToolTimedOut. MiniMax Anthropic is 0/2 passed, MiniMax OpenAI 2/2,
+Qwen Anthropic 12/16 and Qwen OpenAI 5/18. This historical binary used the earlier
+case-owned immutable worker copies, not the new run-scoped WorkerRun installation
+and readiness protocol. Preserve its original log
+`/tmp/kolyan-l5-long-positive-projection-actual-matrix-v1.log`, report and traces;
+later readiness, reader or finalizer gates do not retroactively pass these rows.
+This matrix also used host `service.complete`, not Runner role-aware finalization.
+
+### Mandatory-source Runner-finalized long graph: offline gate
+
+The migrated host uses Agent's public `prepare_root_input` before Task registration
+and invocation admission. It takes the returned snapshot, immutable ownership,
+selected request and verified Standalone source; it does not pre-save a competing
+root instance or encode Agent-private RootInput/ChildInput JSON. The Task retains
+its declared final-node criterion, not Runner.start's root-only auto-finalization.
+Every Continuation, in both full and explicit-projection mode, freezes its exact
+private initialization and calls `prepare_continuation_input` before admission.
+Agent retains the full root/current/source/plan/provenance as Required artifacts;
+InvocationAdmitted and AttemptStarted bind the exact returned source. Fresh
+Runners repeat preparation with the same evidence without new Task transitions
+or physical effects. The old host-only scene assertions remain in the target.
+
+The complete `agent_long_task` offline target finished with owner handle 76100
+exit 0: 16 passed, zero failed and five ignored, in 286.67 seconds. Its subsequent
+target strict Clippy also exited 0. Logs are
+`/tmp/kolyan-l5-long-required-source-full-offline-v1.log` and
+`/tmp/kolyan-l5-long-required-source-strict-v1.log`. The ignored network matrices
+and independent startup diagnostic are not counted as passed acceptance.
+
+The new Runner-finalized test executes all four independently scoped scenes:
+
+| Selector | Selection | Owner JSONL directory | Independent main JSONL directory |
+| --- | --- | --- | --- |
+| named | full | kolyan-long-continuation-VZwXp8 | kolyan-long-continuation-jZFAc4 |
+| named | explicit projection | kolyan-long-continuation-MJ7JFv | kolyan-long-continuation-sQ5YYM |
+| inline | full | kolyan-long-continuation-gwVzGq | kolyan-long-continuation-CQFcJP |
+| inline | explicit projection | kolyan-long-continuation-7KIQik | kolyan-long-continuation-f4DODT |
+
+Each directory exports `actual.jsonl`. Each scene verifies one Task/logical owner,
+ten admitted invocations (Root plus nine Continuations), 30 actually recorded
+model Steps, 20 actual OS tool receipts and eleven wait/rebuild boundaries,
+including a wait after an earlier receipt. Each invocation checks its physical
+artifact before progressing. Final completion retains and reads back the artifact.
+Runner role-aware finalization is called twice through rebuilt hosts: physical
+ledger snapshots are taken before the first call, after the first call and after
+the second call and must all be identical. The second call also leaves the Task
+journal unchanged; the first call may publish its legitimate Task verdict.
+
+The independent main focused gate 94158 exited 0 with one passed test in 166.85
+seconds, log `/tmp/kolyan-main-runner-long-offline-v2.log`, using the actual
+`--test agent_long_task runner_finalized_long_graph_complete_offline_real_os`
+target/filter. Main's v1 log used the wrong target and is not long-task acceptance.
+Main also reports full-workspace/all-target strict Clippy handle 75728 exit 0;
+this does not replace complete workspace test acceptance.
+
+All these model frames are explicitly offline/scripted; tools and persistence
+are real. Positive projection remains Inspect with an Unsupported token counter,
+not trusted-token acceptance. The new actual entrypoint
+`continuation::finalization::runner_finalized_long_graph_actual_model_matrices`
+plans 76 rows (19 deployments × named/inline × full/projection), but has not run.
+Network remains on host hold: workspace gate 80663 exited 101, log
+`/tmp/kolyan-main-workspace-offline-final-v1.log`, at the missing mandatory source
+in the cancellation JSON fixture described below. Preserve the earlier 32/6,
+36/2 and 19/19 live reports and all
+their failure traces unchanged. This offline gate does not complete L5 acceptance.
+
+#### Affected Server request-source fixtures and pending live scope
+
+`task_cancellation` deserialized a JSON AttemptBinding without its required
+input_source; governance/recovery setup and binding helpers contain the same
+omission. These Server-level fixtures must publish their actual host request and
+explicit topology origin through the public source publisher before admission,
+then reuse exactly that admitted reference for each positive or deliberately
+patched negative binding. Root is Standalone, child is Derived, and Continuation
+includes the exact predecessor completion cause. No default source or imitation
+of Agent-private bodies is permitted; preserve every original negative axis and
+assertion. Focused cancellation/governance/recovery and all affected offline
+targets plus strict all-target checks are pending this migration.
+
+The required-source contract also affects existing Server actual entrypoints:
+`task_execution_live_matrix` has nineteen planned deployment rows and
+`task_cancellation_live_matrix` has nineteen deployments × two cancellation
+policies, thirty-eight rows. These 57 rows need separately recorded fresh live
+regression after the offline repair; they are currently not run and on network
+hold. They supplement, rather than replace or count toward, Agent's 380-row base
+allocation or the separate new 57-row native-effect matrix. Old live successes
+cannot establish acceptance of the new mandatory-source binding.
+
+### Stopped cancellation with a committed external wait
+
+The late-child export `kolyan-agent-finalization-late-mJlFrD/actual.jsonl`
+contains both ExecutionCancelled and TurnCancelled after a committed compound
+external-wait suspension, yet the root is observed as RecoveryRequired.
+Evidence inspection currently selects cancellation intent before the physical
+terminal and checks only the current resumable suspension, which cancellation
+correctly invalidates. Thus a previously committed wait is misclassified as an
+unrecorded external effect. This is a Server evidence classification defect.
+
+Prefer an actual Turn terminal over cancellation intent as the stopped source.
+For cancellation published at a suspension boundary, inspect the validated
+pre-cancellation compound suspension solely as historical effect evidence.
+The cancellation must follow that stopped boundary without a new admission,
+checkpoint or execution effect. Every unresolved effect still requires its exact
+prepared, authorized and externally-waiting publication; corrupt or missing proof
+remains RecoveryRequired or an explicit refusal. Cancellation intent alone is
+not that historical-terminal exception, and an earlier suspension invalidated
+by resumed work must never satisfy it. Do not change the active suspension loader
+or authorize resumption, new consumption, receipt fabrication or child rollback.
+Add independent data-driven Server tests and rerun the Agent late-child gate.
+
+The fresh joint regression passed all 84 Agent and 106 Server tests, plus doc
+tests, with exit zero in `/tmp/kolyan-l5-cancelled-wait-joint-v2.log`.
+Strict Agent and Server all-target Clippy also finished with exit zero in
+`/tmp/kolyan-l5-cancelled-wait-joint-clippy-v2.log`. The new nine-case export
+`kolyan-cancelled-wait-proof-7w2fJ0/actual.jsonl` checks stopped handoff,
+intent-only refusal, missing or unknown wait proof, resumed work, a new effect
+after intent, post-terminal proof backfill, foreign grant and foreign suspension
+scope. Every observation is exported before comparison, and inspection leaves
+the ledger unchanged. A cancelled wait never becomes active resume authority.
+
+The joint Agent export `kolyan-agent-finalization-late-t7QtFe/actual.jsonl`
+keeps the incomplete-stop case refused and observes the actually stopped parent
+as Cancelled after late child completion, allowing the independent finalizer to
+record TaskFailed without reviving or consuming for that parent. The separate
+whole-Task cancellation retains TaskCancelled; that verdict does not itself
+claim every physical execution is terminal. These are offline regression
+results, not acceptance of the outstanding real-model or Continuation gates.
+
+A subsequent independent data case publishes a complete StepCompleted after
+cancellation intent but before the suspension-boundary TurnCancelled. The old
+classifier incorrectly returned Cancelled in
+`kolyan-cancelled-wait-proof-81IVSu/actual.jsonl`; its gate exited 101. A late
+completion is evidence of activity, even when no new StepStarted appears in that
+interval, so it invalidates the historical stopped-wait exception. The new guard
+refuses that exception without changing active suspension or receipt semantics.
+The original nine cases and assertions remain intact; the tenth is additive.
+Full Server regression then passed 109 tests and doc tests with exit zero in
+`/tmp/kolyan-l5-cancelled-wait-late-step-server.log`. Strict Agent/Server all-target
+Clippy passed with exit zero. The joint Agent run retained 84 passing tests but
+failed its newly added Continuation finalization test, exposing a separate reader
+schema mismatch; that joint gate is not green.
+
+### Worker readiness and run-scoped immutable installation proposal
+
+Status: design approved for implementation; runtime acceptance remains pending. This design
+changes test-fixture/Host assembly, not Turn authority, normal tool deadlines,
+macOS security policy or the interpretation of the failed acceptance matrices.
+Use the explicitly separate preparation budget below; tool deadlines remain unchanged.
+
+#### Evidence and limits
+
+The complete offline gate `/tmp/kolyan-agent-topology-full-offline-v2.log`
+ended exit 101: eleven tests passed and three test targets failed. Those targets
+contain four failed data rows, including the new child-approval row. Four actual
+worker paths match AMFI/ASP observations for PIDs 60307, 60308, 60309 and 60348.
+All four corresponding tool futures were dropped near the original 30-second
+deadline without returning an inner result. The earlier two-row offline pass
+does not replace this failed complete gate. The queued network gate 79904 was
+stopped with exit 130 before test entry; it is not a real-model execution.
+
+The independent startup experiment completed twelve predeclared measurements
+in `kolyan-worker-startup-uP28E0/actual.jsonl`. Four existing failed pins, each
+launched twice, returned exit zero in approximately 32–50 ms. Two new copies of
+the same SHA-256 bytes, each launched twice, exceeded 30 seconds on all four
+launches. Their four samples show `_dyld_start` and approximately 96 KiB footprint,
+not worker Rust frames. The new copies' actual PIDs 62630, 62659, 62708 and 62772
+match AMFI/ASP startup events; deadline cleanup coincides with ASP interruption.
+
+This supports an independent pre-application startup wait for fresh copies on
+this host, not a universal inode-only cause: path and inode changed together.
+The second launch also timed out, so it is not evidence of a completed assessment
+or a warm executable. The experiment uses a direct native read-only request and
+regular-file stdin, not the production sandbox/pipe or an effect-less bootstrap.
+Its exit-zero test result means evidence/invariants were collected, not that all
+workers launched successfully or that the original tool failure was repaired.
+Retain `/tmp/kolyan-agent-worker-startup-uP28E0-system.json` and all PID samples.
+
+#### Existing source and API boundaries
+
+`tests/agent/tools/worker.rs::initialize_from` reads the build input once, creates
+a new case-owned `trusted-worker/worker`, fsyncs it and writes a SHA-256 manifest.
+`verified_worker` reopens that exact case path and rejects symlinks, missing pins
+or changed bytes. Recovery correctly avoids the mutable Cargo output, but each
+fresh case currently creates another executable inode and path. Root, restart,
+delegation, topology, parallel and long-task fixtures use this initializer.
+
+`kolyan-tool-worker/src/main.rs` has no clap dependency or help/bootstrap branch.
+It requires exactly four arguments, then builds `WorkerConfig` and calls
+`execute_request`. Invalid argument counts return `WorkerError::Configuration`
+before stdin consumption or file-operation execution. A failed `--help` or empty
+argv invocation is not a supported successful readiness handshake. There is no
+executed effect-less readiness evidence yet; do not rename the existing successful
+read experiment into such evidence. `WorkerConfig::validate` alone does not prove
+the OS can enter the native executable.
+
+#### Proposed preparation and execution phases
+
+1. A trusted test-run/Host installation context reads a selected build input once
+   and creates one private immutable installed executable. Persist the installation
+   manifest before attempting readiness. Do not hard-link, symlink or repeatedly
+   hash/reselect the mutable Cargo artifact during recovery.
+2. Launch exactly one native effect-less bootstrap for that installation. Proposed
+   explicit worker mode: a sole `--bootstrap-check` argument, recognized before
+   normal workspace/limit argument parsing. It receives EOF, no workspace, no
+   provider keys, no model data and no file-operation request. The dedicated branch
+   returns a bounded versioned JSON success marker and exits zero; it must never
+   call `execute_request`, `execute_exact` or initialize a tool workspace/stage.
+   This flag and marker are proposals, not current APIs. Invalid modes still fail.
+3. The Host verifies exit zero, the exact marker/version, output bounds and the
+   same installed path/hash/identity before persisting a Ready observation. Marker
+   output alone cannot authenticate a substituted executable. Failure, timeout,
+   unexpected output or recorder failure blocks preparation; no model admission.
+4. Each fresh case persists its own immutable reference pin to that Ready installed
+   executable, then enters normal Runner admission. Every subsequent tool execution
+   still performs exact preparation, grant validation, sandbox enforcement and its
+   unchanged 30-second tool deadline. Readiness never issues a tool grant or receipt.
+
+The bootstrap has an independently explicit finite Host preparation timeout and
+bounded process cleanup, distinct from `Turn` tool execution time. The new test-run
+installation dataset supplies a 600-second preparation ceiling; this is a Host
+setup allowance, not a larger tool limit or a promise that assessment completes.
+Native test executables on this host were observed waiting several minutes before
+Rust entry, so the existing 30-second operation deadline cannot represent that
+separate preparation phase. A single bootstrap timeout remains a failed preparation,
+preserves its evidence and refuses every case's model admission. Export it
+as preparation time rather than hiding it in model latency or reporting an enlarged
+tool limit. Use one launch, not retries, repeated help calls or a warm-until-success
+loop. OS provenance/security assessment can itself have operating-system side
+effects; "effect-less" means no model/tool/domain operation, not zero OS activity.
+
+Bootstrap readiness proves that application entry and the small handshake worked
+at that observation. It does not promise permanent OS admission, sandbox availability,
+future timely tool completion or safe arbitrary operations. A later actual tool
+timeout remains a failure under the original deadline and cannot trigger a hidden
+bootstrap, retry, unsandboxed fallback or automatic effect replay.
+
+#### Installed artifact and durable case pin
+
+Prefer an explicit suite/run-scoped installation context passed to case Host
+assembly, rather than a process-global secret directory or implicit mutable cache.
+One run installs once outside all model workspaces and uses the same physical
+executable for its cases and reconstructed Hosts. Separate runs install separately;
+concurrent owners do not overwrite, re-sign or warm an active artifact. A digest
+is a content coordinate, not authority to attach to an arbitrary existing path.
+
+Proposed installation evidence binds a schema version, host-issued installation ID,
+exact physical path, SHA-256, observed device/inode and bootstrap observation ID.
+Each case persists its own required versioned pin with that exact reference.
+Reconstruction checks the manifest, non-symlink path/components, protected ownership,
+hash and same observed identity; missing or changed artifacts fail closed. Do not
+recopy a current build, choose another equal-hash path or silently reinstall at resume.
+Device/inode comparisons are host observations, not immortal object generations.
+
+Keep the installation root private, outside every model-writable root, and explicitly
+protected by file and shell assembly. Preserve only the narrow executable-loader
+access actually required by the existing sandbox; do not grant general filesystem
+access to share a worker. Never place credentials in this root or inherit their
+environment into bootstrap/tools. Case state and staging remain independent.
+Cross-process recovery retains the installed artifact and pin for the complete
+case lifecycle, including approvals; cleanup occurs only after its dependent cases
+are no longer resumable. A missing installation after restart is explicit failure.
+
+This replaces, rather than aliases, the case-local executable-copy contract after
+review. Existing pin replacement/deletion, approval exact-preparation and one-effect
+tests must migrate their fixture installation inputs without weakening assertions.
+A changed build input must leave an admitted installation intact; changed installed
+bytes/path/identity must still refuse approval before effects.
+
+#### Evidence and acceptance before rollout
+
+Record every installation selection and bootstrap intent before spawn, then the
+actual child PID, argv, empty stdin contract, environment policy, UTC observation
+times, elapsed preparation time, explicit timeout, stdout/stderr, exit or kill/reap
+outcome and available stack/system evidence. Preserve failure records. Recorder
+failure refuses Ready. Export every actual model request and all normal tool/ledger
+events unchanged, showing that Ready precedes the first model admission. Bootstrap
+is a separate Host preparation event, never ModelRequested or EffectReceipt.
+
+Data-driven gates must establish: successful effect-less marker with zero file
+operations; readiness failure/timeout/unknown marker blocks all model and tool ports;
+one installation/one bootstrap shared across multiple cases; fixed path/hash across
+Host reconstruction and approval; unchanged source-build replacement; changed/missing
+installed artifact refusal; zero second bootstrap after rebuilding from a valid pin;
+and exact sandbox protection of the shared installation from sibling tools.
+Unknown Ready evidence and unsupported manifest versions fail without old-format
+fallback. Actual startup tests report all planned outcomes without retry selection.
+
+Only after those gates, run a new complete offline Agent gate with
+the original case inputs, assertions and tool deadlines. Keep 39465 failed. If the
+new full gate passes, start one separately recorded topology real-model matrix for
+all configured deployments, then the affected root/restart/delegation/long-task
+matrices. A bootstrap pass or two-scene pass alone cannot establish that rollout
+fixed the original complete regression or full L5 acceptance.
+
+#### Interpreter controls versus native readiness: proposed test boundary
+
+Status: design approved for implementation; complete-gate acceptance pending.
+This refinement changes only fault-control fixtures and the test-owned process
+observer. It does not add a configurable production bootstrap launcher.
+
+The focused bounded-control gate 19127 completed exit zero, but complete offline
+gates 39042 and 4198 each failed with seventeen tests passing and one failing.
+In gate 39042, the copied `nonzero_exit` executable (PID 68367) timed out instead
+of reaching its expected nonzero exit. Gate 4198 exported all seven controls
+before comparison; `malformed_json` (PID 68773) and `nonzero_exit` (PID 68778)
+both timed out with empty output. The remaining controls included a parent that
+exited zero with a valid marker while a descendant held its pipes: it correctly
+failed at the existing deadline rather than becoming Ready.
+
+The exact failed control paths/PIDs match ASP interrupted waits and subsequent
+provenance observations in `/tmp/kolyan-bootstrap-full-v2-fault-system.log` and
+`/tmp/kolyan-bootstrap-full-v3-fault-system.log`. A freshly copied executable
+script can therefore encounter startup assessment before the intended fault is
+observed. This does not establish a permanent security denial or general scheduler
+overload. Preserve these failed gates; do not increase their deadlines, retry,
+clear attributes or treat the expected-error mismatch as a passing timeout.
+
+Use a private, test-owned explicit `LaunchPlan` with two non-interchangeable
+variants and one shared bounded process-observation implementation:
+
+- `NativeBootstrap`: constructed only by the normal readiness entrypoint from
+  the verified `InstalledWorker`; program is its exact pinned physical path and
+  argv is solely `--bootstrap-check`. There is no interpreter selection, fallback
+  or automatic warm call. Reverify the installation before issuing Ready.
+- `InterpreterFixture`: available only to fault-control tests, with the fixed
+  system `/bin/sh` interpreter and a literal absolute path to a read-only,
+  non-executable data script. Record the script's physical path, SHA-256 and
+  observed file identity separately from the actual program. Reject symlinks,
+  executable/writable scripts and unsupported interpreter selections. Scripts
+  remain trusted test data; neither a model nor a provider supplies them.
+
+Both variants clear the environment, receive EOF stdin, use a dedicated process
+group and preserve the same bounded stdout/stderr and full EOF-wait deadline.
+Cleanup uses group termination and finite nonblocking reap polling. No blocking
+capture thread join or unconditional `Child::wait` is allowed. Export direct-child
+exit, EOF state, timeout/overflow, kill/reap result, cleanup exhaustion and total
+elapsed time through cleanup, not merely the time before capture completes.
+OS scheduling, process creation and evidence filesystem operations are not
+hard-real-time guarantees; expose failure to reap instead of claiming completion.
+
+The shared observer returns typed process observations, never `ReadyEvidence`.
+Native readiness alone validates the exact marker, clean exit, complete capture,
+deadline and installed identity and persists Ready. Interpreter controls interpret
+their observations against dataset expectations and can never create Ready,
+installation authorization, tool receipts or model admission—even if their script
+prints the exact native marker. Use distinct observation kind/event provenance
+and export actual program, argv and script digest before spawn, then PID/timing.
+Do not label an interpreter execution as an actual native-worker bootstrap.
+
+The control dataset owns scripts, existing expected errors, preparation/cleanup
+and output bounds, total elapsed bound and direct-exit expectations. Retain the
+one-second fault deadline and the existing comparisons. Export every planned
+case's complete observation before comparing any case. Independent tests must
+prove that valid-marker interpreter output does not yield Ready, actual recorded
+program/argv differ from native mode, changed scripts fail before spawn, recorder
+failure refuses launch, and direct-child exit with inherited descendant pipes
+cannot make total capture unbounded. Keep the actual native success/reconstruction
+tests separate; interpreter success cannot substitute for native acceptance.
+
+After main review, implement the shared observer and data-script controls, then
+run the complete offline Agent gate and strict Clippy. Start no new actual-model
+matrix until that complete offline gate passes. Normal native preparation remains
+one launch with its approved 600-second setup ceiling; normal tool execution
+remains thirty seconds, with no new retry or fallback.
