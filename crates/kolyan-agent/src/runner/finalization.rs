@@ -3,6 +3,9 @@
 pub(super) mod continuation;
 pub use continuation::projection::{ContinuationProjectionConfig, ContinuationProjectionRequest};
 
+#[cfg(test)]
+pub(in crate::runner) use continuation::projection::tests::decode as decode_continuation_test_body;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 

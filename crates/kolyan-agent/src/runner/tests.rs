@@ -4,6 +4,7 @@
 mod error_feedback;
 mod goals;
 mod resume;
+mod skills;
 pub(super) mod support;
 
 use std::sync::Arc;

@@ -1,0 +1,8 @@
+[
+  {"id":"saved_binding_current","mutation":"none","dispatches":1},
+  {"id":"revoked_after_binding","mutation":"revoke","dispatches":0},
+  {"id":"changed_acl_after_binding","mutation":"acl","dispatches":0},
+  {"id":"missing_schema","mutation":"missing","dispatches":0},
+  {"id":"changed_schema","mutation":"changed","dispatches":0},
+  {"id":"duplicate_schema","mutation":"duplicate","dispatches":0}
+]

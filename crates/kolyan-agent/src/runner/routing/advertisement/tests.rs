@@ -1,6 +1,7 @@
 //! Discovery matrix exports exact schemas and examples before comparisons.
 
 mod semantics;
+mod skills;
 
 use super::*;
 use crate::{AgentDefinitionInput, AgentKey, AgentSnapshot, EnvironmentTool};

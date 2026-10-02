@@ -5,7 +5,7 @@
 本需求落实阶段计划 E3：模型先看到有界元数据，按精确版本调用 skill.load，
 正文作为真实 ToolResult 回填到现有 Turn 的下一 Step。Skills 提供任务知识，
 不能授予权限、执行脚本或创建另一套 Agent loop。A 批基础能力已集成并通过
-主干模块验证，B 批执行接线按下述契约开发；完整能力尚未验收，不把目录
+主干模块验证，B 批执行接线与独立数据门已接入主干；完整能力尚未验收，不把目录
 类型或局部存储测试当作完整 Skills 能力。
 
 ## 数据与存储边界
@@ -150,6 +150,41 @@ policy/prepared grant 校验完整 scope、snapshot、revision、当前 ACL、�
 `/tmp/kolyan-skills-load-main-strict-v1.log`；fmt 与 diff 检查通过。这批证明
 实际正文读取和授权执行器，不证明 Runner 下一 Step 或真实供应商加载；
 后者仍由接线与 C 批验证。
+
+## Runner 接线与独立数据门证据
+
+主干接线提交 `484b94d` 实现 Root、Child、Continuation 的精确来源绑定、
+库存广告、实际读取路由及恢复开启守卫。未配置明确保存 null，缺字段拒绝；
+历史恢复不重选 Skill，当前开启与读取重新检查 ACL 和撤销。已有测试只迁移
+构造字段，原场景与断言保留；新增执行验证在独立测试文件和数据集中。
+
+主干 Agent 107、Policy 32 passed，0 failed、0 ignored，终态 exit0；日志
+`/tmp/kolyan-skills-b-main-module-v1.log`。其中 29 行执行数据包括 13 行读取
+adapter、8 行 Runner 消费、6 行开启守卫及 2 行 Continuation。测试先输出
+实际请求、ToolResult、来源和事实，再同步关闭 JSONL，物理回读后比较。
+这证明真实 Runner/Core/存储路径，模型响应仍是显式 scripted fixture。
+
+macOS 临时目录中的实际文件分别为 `kolyan-skills-adapter-ojpOpp/actual.jsonl`、
+`kolyan-skills-consumer-EDs2YY/actual.jsonl`、
+`kolyan-skills-continuation-slvvo5/actual.jsonl` 与
+`kolyan-skill-opening-AmZqQC/actual.jsonl`（同一父目录）。
+全部 workspace all-targets 严格 Clippy 终态 exit0，日志
+`/tmp/kolyan-skills-b-main-strict-v1.log`；fmt 与差异检查通过。
+
+本批不证明 MiniMax 的实际 Skill 加载、原生文件工具和 Goal 验证。C 批
+仍须使用生产宿主跑两协议、具名及内联组合，并保留独立网络结果；确定性
+撤销和恶意正文门不替代真实模型门。
+
+相同主干源码执行原有 Agent 本机集成回归，终态 exit0：74 passed、
+0 failed、22 ignored，58.32 秒；日志
+`/tmp/kolyan-skills-b-main-agent-root-offline-v1.log`。此门包括真实本机工具、
+审批重建及委派，但显式 ignored 的网络用例没有运行，不把旧场景回归
+当作 C 批的新 Skill 网络验收。
+
+相同冻结源码完整 workspace 回归终态 exit0：83 个结果组，876 passed、
+0 failed、66 ignored，日志 `/tmp/kolyan-skills-b-main-workspace-v1.log`。
+包含原有长任务、HTTP、审批及本机工具回归；ignored 的供应商网络门仍待
+显式执行。源码布局检查通过，没有把新增测试实现放进生产文件。
 
 ## 验收
 

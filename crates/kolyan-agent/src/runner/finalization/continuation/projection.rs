@@ -11,6 +11,9 @@ use kolyan_server::{VerifiedHistoricalContext, VerifiedPrivateContextInitializat
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(test)]
+pub(in crate::runner) mod tests;
+
 /// Configure the actual host counter, never a replayed/fabricated trusted count.
 #[derive(Clone)]
 pub struct ContinuationProjectionConfig {

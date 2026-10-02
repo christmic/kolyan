@@ -1,0 +1,4 @@
+[
+  {"id":"continuation_exact_saved_skill","revoke":false,"requests":4,"receipts":2},
+  {"id":"continuation_revoked_before_opening","revoke":true,"requests":2,"receipts":1}
+]
