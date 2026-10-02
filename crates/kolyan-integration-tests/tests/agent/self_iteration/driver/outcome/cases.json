@@ -1,0 +1,14 @@
+[
+  {"id":"final_answer","input":"final","expected_result":"completed","expected_terminal":"FinalAnswer","failure_contains":null},
+  {"id":"max_steps_outcome","input":"max_steps","expected_result":"completed","expected_terminal":"MaxSteps","failure_contains":"TurnOutcome::MaxSteps"},
+  {"id":"refused","input":"refused","expected_result":"completed","expected_terminal":"Refused","failure_contains":"TurnOutcome::Refused"},
+  {"id":"incomplete","input":"incomplete","expected_result":"completed","expected_terminal":"Incomplete","failure_contains":"TurnOutcome::Incomplete"},
+  {"id":"approval_rejected","input":"rejected","expected_result":"completed","expected_terminal":"Rejected","failure_contains":"actual approval rejection"},
+  {"id":"approval_expired","input":"expired","expected_result":"completed","expected_terminal":"Expired","failure_contains":"actual approval expiry"},
+  {"id":"cancelled_error","input":"cancelled","expected_result":"error","expected_terminal":"Cancelled","failure_contains":"turn was cancelled"},
+  {"id":"timed_out_error","input":"timed_out","expected_result":"error","expected_terminal":"TimedOut","failure_contains":"turn timed out"},
+  {"id":"max_steps_error","input":"max_steps_error","expected_result":"error","expected_terminal":"MaxSteps","failure_contains":"maximum step count"},
+  {"id":"no_progress","input":"no_progress","expected_result":"error","expected_terminal":"NoProgress","failure_contains":"repeated tool file.write"},
+  {"id":"original_provider","input":"provider","expected_result":"error","expected_terminal":"Failed","failure_contains":"current HTTP authentication failure"},
+  {"id":"provider_diagnostics","input":"provider_diagnostics","expected_result":"error","expected_terminal":"Failed","failure_contains":"local_http_opening_retry"}
+]
