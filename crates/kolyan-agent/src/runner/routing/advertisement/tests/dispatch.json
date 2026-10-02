@@ -1,0 +1,8 @@
+[
+  {"id":"unchanged_exact_named","expected":true,"request":"exact","dispatches":1},
+  {"id":"revoked_on_restore","expected":false,"request":"exact","dispatches":0},
+  {"id":"omitted_advertisement","expected":true,"request":"none","dispatches":0},
+  {"id":"duplicate_advertisement","expected":true,"request":"duplicate","dispatches":0},
+  {"id":"invented_revision","expected":true,"request":"changed","dispatches":0},
+  {"id":"no_admitted_targets","expected":false,"request":"none","dispatches":1}
+]

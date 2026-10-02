@@ -1,0 +1,23 @@
+[
+  {"id":"named","source_case":"named","mutations":[],"schema":true,"decoded":true,"prepared":true},
+  {"id":"inline","source_case":"inline","mutations":[],"schema":true,"decoded":true,"prepared":true},
+  {"id":"self_call","source_case":"saved-self-ignores-replacement-catalog","mutations":[],"schema":true,"decoded":true,"prepared":true},
+  {"id":"inline_optional_display","source_case":"inline","mutations":[{"op":"remove","pointer":"/children/0/target/value/display_name"}],"schema":true,"decoded":true,"prepared":true},
+  {"id":"parallel","source_case":"parallel-intent-does-not-expand-host-concurrency","mutations":[],"schema":true,"decoded":true,"prepared":true},
+  {"id":"unknown_top","source_case":"unknown-top-field","mutations":[],"schema":false,"decoded":false,"prepared":false},
+  {"id":"unknown_child","source_case":"unknown-child-field","mutations":[],"schema":false,"decoded":false,"prepared":false},
+  {"id":"unknown_target","source_case":"unknown-target-field","mutations":[],"schema":false,"decoded":false,"prepared":false},
+  {"id":"missing_parallel","source_case":"missing-explicit-parallel","mutations":[],"schema":false,"decoded":false,"prepared":false},
+  {"id":"unknown_inline_model","source_case":"unknown-inline-model-field","mutations":[],"schema":false,"decoded":false,"prepared":false},
+  {"id":"unknown_permission","source_case":"named","mutations":[{"op":"set","pointer":"/children/0/permissions/unknown","value":true}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"missing_allow_self","source_case":"named","mutations":[{"op":"remove","pointer":"/children/0/permissions/delegation/allow_self"}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"observed_named_targets_string","source_case":"named","mutations":[{"op":"set","pointer":"/children/0/permissions/delegation/named_targets","value":""}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"named_targets_null_is_not_an_empty_array","source_case":"named","mutations":[{"op":"set","pointer":"/children/0/permissions/delegation/named_targets","value":null}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"wrong_self_tag","source_case":"named","mutations":[{"op":"set","pointer":"/children/0/target","value":{"kind":"self"}}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"missing_named_revision","source_case":"named","mutations":[{"op":"remove","pointer":"/children/0/target/value/revision"}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"invalid_tool_enum","source_case":"named","mutations":[{"op":"set","pointer":"/children/0/permissions/tools","value":["agent.invoke"]}],"schema":false,"decoded":false,"prepared":false},
+  {"id":"empty_batch","source_case":"empty-batch","mutations":[],"schema":false,"decoded":true,"prepared":false},
+  {"id":"blank_input_preflight","source_case":"blank-child-input","mutations":[],"schema":true,"decoded":true,"prepared":false},
+  {"id":"byte_ceiling_preflight","source_case":"child-input-byte-limit","mutations":[],"schema":true,"decoded":true,"prepared":false},
+  {"id":"permission_preflight","source_case":"child-permission-expansion","mutations":[],"schema":true,"decoded":true,"prepared":false}
+]

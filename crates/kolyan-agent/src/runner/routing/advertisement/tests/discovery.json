@@ -1,0 +1,15 @@
+[
+  {"id":"none","parent_named":false,"host_named":true,"catalog_revision":"r1","parent_self":false,"host_self":true,"parent_inline":false,"host_inline":true,"expected_named":false,"expected_self":false,"expected_inline":false},
+  {"id":"named_only","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":false,"host_self":true,"parent_inline":false,"host_inline":true,"expected_named":true,"expected_self":false,"expected_inline":false},
+  {"id":"self_only","parent_named":false,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":false,"host_inline":true,"expected_named":false,"expected_self":true,"expected_inline":false},
+  {"id":"inline_only","parent_named":false,"host_named":true,"catalog_revision":"r1","parent_self":false,"host_self":true,"parent_inline":true,"host_inline":true,"expected_named":false,"expected_self":false,"expected_inline":true},
+  {"id":"named_self","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":false,"host_inline":true,"expected_named":true,"expected_self":true,"expected_inline":false},
+  {"id":"named_inline","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":false,"host_self":true,"parent_inline":true,"host_inline":true,"expected_named":true,"expected_self":false,"expected_inline":true},
+  {"id":"self_inline","parent_named":false,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":true,"host_inline":true,"expected_named":false,"expected_self":true,"expected_inline":true},
+  {"id":"all","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":true,"host_inline":true,"expected_named":true,"expected_self":true,"expected_inline":true},
+  {"id":"missing_exact_revision","parent_named":true,"host_named":true,"catalog_revision":"r2","parent_self":false,"host_self":true,"parent_inline":false,"host_inline":true,"expected_named":false,"expected_self":false,"expected_inline":false},
+  {"id":"host_named_revoked","parent_named":true,"host_named":false,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":true,"host_inline":true,"expected_named":false,"expected_self":true,"expected_inline":true},
+  {"id":"host_self_revoked","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":false,"parent_inline":true,"host_inline":true,"expected_named":true,"expected_self":false,"expected_inline":true},
+  {"id":"host_inline_revoked","parent_named":true,"host_named":true,"catalog_revision":"r1","parent_self":true,"host_self":true,"parent_inline":true,"host_inline":false,"expected_named":true,"expected_self":true,"expected_inline":false},
+  {"id":"host_all_revoked","parent_named":true,"host_named":false,"catalog_revision":"r1","parent_self":true,"host_self":false,"parent_inline":true,"host_inline":false,"expected_named":false,"expected_self":false,"expected_inline":false}
+]

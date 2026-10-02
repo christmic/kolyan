@@ -1,0 +1,79 @@
+[
+  {
+    "id": "named_root_preparation_exact_retry",
+    "named": true,
+    "mutation": "none",
+    "expected_retry_error": false,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "inline_root_preparation_exact_retry",
+    "named": false,
+    "mutation": "none",
+    "expected_retry_error": false,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "named_changed_input_refused",
+    "named": true,
+    "mutation": "input",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "inline_changed_input_refused",
+    "named": false,
+    "mutation": "input",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "changed_permissions_refused",
+    "named": true,
+    "mutation": "permissions",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "changed_revision_refused",
+    "named": false,
+    "mutation": "revision",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "changed_inventory_refused",
+    "named": true,
+    "mutation": "inventory",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "changed_execution_refused",
+    "named": true,
+    "mutation": "execution",
+    "expected_retry_error": true,
+    "expected_attempt_error": false
+  },
+  {
+    "id": "foreign_attempt_session_refused",
+    "named": true,
+    "mutation": "attempt_session",
+    "expected_retry_error": false,
+    "expected_attempt_error": true
+  },
+  {
+    "id": "foreign_attempt_turn_refused",
+    "named": true,
+    "mutation": "attempt_turn",
+    "expected_retry_error": false,
+    "expected_attempt_error": true
+  },
+  {
+    "id": "foreign_attempt_execution_refused",
+    "named": true,
+    "mutation": "attempt_execution",
+    "expected_retry_error": false,
+    "expected_attempt_error": true
+  }
+]

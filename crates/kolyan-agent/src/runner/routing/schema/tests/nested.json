@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "host_tools": ["file.read"],
+  "source_case": "inline",
+  "cases": [
+    {"id":"inline_arrays_valid","mutations":[],"schema":true,"decoded":true,"prepared":true,"static_tools":["file.read"]},
+    {"id":"nested_named_targets_empty_string","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/delegation/named_targets","value":""}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"nested_tools_object","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/tools","value":{"file.read":true}}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"nested_tools_empty_string","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/tools","value":""}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"nested_named_targets_object","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/delegation/named_targets","value":{"definition_id":"child","revision":"1"}}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"nested_named_targets_array","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/delegation/named_targets","value":[{"definition_id":"child","revision":"1"}]}],"schema":true,"decoded":true,"prepared":true,"static_tools":["file.read"]},
+    {"id":"both_empty_arrays_valid","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/tools","value":[]},{"op":"set","pointer":"/children/0/permissions/tools","value":[]}],"schema":true,"decoded":true,"prepared":true,"static_tools":[]},
+    {"id":"static_ceiling_not_host_grant","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/tools","value":["file.read","shell"]}],"schema":true,"decoded":true,"prepared":true,"static_tools":["file.read","shell"]},
+    {"id":"outer_named_targets_empty_string","mutations":[{"op":"set","pointer":"/children/0/permissions/delegation/named_targets","value":""}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"outer_tools_object","mutations":[{"op":"set","pointer":"/children/0/permissions/tools","value":{"file.read":true}}],"schema":false,"decoded":false,"prepared":false,"static_tools":null},
+    {"id":"static_ceiling_cannot_expand_request","mutations":[{"op":"set","pointer":"/children/0/target/value/permissions/tools","value":["file.read","shell"]},{"op":"set","pointer":"/children/0/permissions/tools","value":["shell"]}],"schema":true,"decoded":true,"prepared":false,"static_tools":null}
+  ]
+}

@@ -1,0 +1,317 @@
+{
+  "schema_version": 1,
+  "contexts": {
+    "all": {
+      "definition_tools": ["file.read", "file.write"],
+      "tools": [
+        "file.read",
+        "file.write"
+      ],
+      "host_tools": [
+        "file.read"
+      ],
+      "named": true,
+      "self_call": true,
+      "inline": true,
+      "branches": [
+        "self_call",
+        "named",
+        "inline"
+      ]
+    },
+    "named_only": {
+      "definition_tools": ["file.read"],
+      "tools": [
+        "file.read"
+      ],
+      "host_tools": [
+        "file.read"
+      ],
+      "named": true,
+      "self_call": false,
+      "inline": false,
+      "branches": [
+        "named"
+      ]
+    },
+    "zero_tools_self": {
+      "definition_tools": ["file.read"],
+      "tools": [],
+      "host_tools": ["file.read"],
+      "named": false,
+      "self_call": true,
+      "inline": false,
+      "branches": [
+        "self_call"
+      ]
+    },
+    "none": {
+      "definition_tools": ["file.read"],
+      "tools": [
+        "file.read"
+      ],
+      "host_tools": [
+        "file.read"
+      ],
+      "named": false,
+      "self_call": false,
+      "inline": false,
+      "branches": []
+    }
+  },
+  "cases": [
+    {
+      "id": "named_empty_array",
+      "context": "all",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": true,
+      "expected_prepared": true,
+      "expected_error": null
+    },
+    {
+      "id": "named_empty_string",
+      "context": "all",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": "",
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "invalid"
+    },
+    {
+      "id": "copied_target_is_not_child_authority",
+      "context": "all",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [
+            {
+              "definition_id": "child",
+              "revision": "r1"
+            }
+          ],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "named_self_authority_forbidden",
+      "context": "all",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": true,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "named_inline_authority_forbidden",
+      "context": "all",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": true
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "self_allowed_future_self",
+      "context": "all",
+      "target": "self_call",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": true,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": true,
+      "expected_prepared": true,
+      "expected_error": null
+    },
+    {
+      "id": "inline_static_ceiling_not_grant",
+      "context": "all",
+      "target": "inline",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": true,
+      "expected_prepared": true,
+      "expected_error": null
+    },
+    {
+      "id": "host_narrowing_blocks_write",
+      "context": "all",
+      "target": "self_call",
+      "permissions": {
+        "tools": [
+          "file.write"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "zero_tools_empty_array",
+      "context": "zero_tools_self",
+      "target": "self_call",
+      "permissions": {
+        "tools": [],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": true,
+      "expected_prepared": true,
+      "expected_error": null
+    },
+    {
+      "id": "zero_tools_empty_string",
+      "context": "zero_tools_self",
+      "target": "self_call",
+      "permissions": {
+        "tools": "",
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "invalid"
+    },
+    {
+      "id": "zero_tools_cannot_grant_descendant_read",
+      "context": "zero_tools_self",
+      "target": "self_call",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "named_only_self_branch_unavailable",
+      "context": "named_only",
+      "target": "self_call",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "named_only_inline_branch_unavailable",
+      "context": "named_only",
+      "target": "inline",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    },
+    {
+      "id": "no_delegation_no_advertisement",
+      "context": "none",
+      "target": "named",
+      "permissions": {
+        "tools": [
+          "file.read"
+        ],
+        "delegation": {
+          "named_targets": [],
+          "allow_self": false,
+          "allow_inline": false
+        }
+      },
+      "expected_schema": false,
+      "expected_prepared": false,
+      "expected_error": "permission"
+    }
+  ]
+}
