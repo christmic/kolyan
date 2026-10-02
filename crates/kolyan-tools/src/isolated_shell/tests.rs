@@ -23,6 +23,7 @@ fn config(root: &Path) -> IsolatedShellConfig {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::*;
+    mod observation;
 
     use kolyan_policy::{
         ApprovalEvidence, ExecutionConstraints, PolicyDecision, PolicyDecisionKind,

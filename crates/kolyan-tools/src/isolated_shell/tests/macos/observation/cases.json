@@ -1,0 +1,5 @@
+[
+  {"id":"shell_phase_explicit_cancel","command":"n=$((0+1)); printf 'ACTUAL_SHELL_PHASE\n'; while :; do n=$((n+1)); done","marker":"ACTUAL_SHELL_PHASE\n","control":"explicit","expected_cause":"explicit_control","expected_exit":null,"stdout":null,"stderr":null},
+  {"id":"shell_phase_drop_cleanup","command":"n=$((0+1)); printf 'ACTUAL_DROP_PHASE\n'; while :; do n=$((n+1)); done","marker":"ACTUAL_DROP_PHASE\n","control":"drop","expected_cause":"dropped_future","expected_exit":null,"stdout":null,"stderr":null},
+  {"id":"shell_raw_streams_exit_preserved","command":"printf 'out'; printf 'err' >&2; exit 7","marker":null,"control":"none","expected_cause":null,"expected_exit":7,"stdout":"out","stderr":"err"}
+]

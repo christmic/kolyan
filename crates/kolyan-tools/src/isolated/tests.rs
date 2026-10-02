@@ -150,6 +150,9 @@ mod macos {
                 })
                 .await
                 .unwrap();
+            let kolyan_core::ToolOutcome::Completed(result) = result else {
+                panic!("isolated shell must complete without external waiting");
+            };
             assert!(result.is_error);
             let content: serde_json::Value = serde_json::from_str(&result.content).unwrap();
             assert_eq!(content["stdout"]["data"], "");

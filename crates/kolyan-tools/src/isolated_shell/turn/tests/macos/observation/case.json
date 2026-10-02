@@ -1,0 +1,1 @@
+{"id":"trait_exact_pipe_phase","command":"printf trait-effect > effect; n=$((0+1)); printf 'TRAIT_PHASE\n'; while :; do n=$((n+1)); done","marker":"TRAIT_PHASE\n","content":"trait-effect","phase_timeout_ms":3000,"cleanup_timeout_ms":3000,"expected_cause":"explicit_control"}

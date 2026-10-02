@@ -70,6 +70,7 @@ impl std::error::Error for IsolatedShellError {}
 #[derive(Debug, Clone)]
 pub struct IsolatedShellTool {
     config: IsolatedShellConfig,
+    observer: Option<kolyan_sandbox::SandboxProcessObservationSender>,
 }
 
 impl IsolatedShellTool {
@@ -98,18 +99,33 @@ impl IsolatedShellTool {
         {
             return Err(invalid("invalid trusted workspace or execution limits"));
         }
-        let adapter = Self { config };
+        let adapter = Self {
+            config,
+            observer: None,
+        };
         adapter.sandbox()?;
         Ok(adapter)
+    }
+
+    /// Attach bounded telemetry; this is not a preparation or authorization port.
+    pub fn with_process_observer(
+        mut self,
+        observer: kolyan_sandbox::SandboxProcessObservationSender,
+    ) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     pub fn tool_definition() -> ToolDefinition {
         ToolDefinition {
             name: "shell".into(),
-            description: Some("Execute a bounded nonlogin shell command in the sandboxed workspace. Network and protected control paths are denied.".into()),
+            description: Some("Execute a bounded nonlogin shell command in the sandboxed workspace. Network and protected control paths are denied. Omit path, use null or use '.' for the workspace root; never use an empty string.".into()),
             input_schema: serde_json::json!({
                 "type":"object", "properties":{
-                    "command":{"type":"string"}, "path":{"type":"string"}
+                    "command":{"type":"string","minLength":1,
+                        "description":"Nonempty, NUL-free shell command; whitespace-only commands are rejected. Instance byte/time/output limits apply."},
+                    "path":{"type":["string","null"],"minLength":1,"maxLength":4096,
+                        "description":"Existing workspace-relative directory. Omitted/null means the workspace root; '.' is explicit root. Empty strings, absolute paths, '..' components and NUL are rejected. UTF-8 byte length must also be at most 4096; symlink containment and protected roots are checked during preparation."}
                 }, "required":["command"], "additionalProperties":false
             }),
         }
@@ -159,6 +175,15 @@ impl IsolatedShellTool {
             .constraints()
             .timeout_ms
             .ok_or_else(|| invalid("missing timeout ceiling"))?;
+        let sandbox = if let Some(observer) = crate::process_observation::bind_observer(
+            self.observer.as_ref(),
+            prepared,
+            expected_scope,
+        ) {
+            sandbox.with_process_observer(observer)
+        } else {
+            sandbox
+        };
         sandbox
             .execute(
                 SandboxRequest {
@@ -301,3 +326,6 @@ fn invalid(message: &str) -> IsolatedShellError {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(all(test, target_os = "macos"))]
+mod contract_tests;

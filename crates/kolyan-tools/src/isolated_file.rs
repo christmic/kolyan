@@ -70,6 +70,7 @@ impl std::error::Error for IsolatedFileError {}
 pub struct IsolatedFileTools {
     config: IsolatedFileConfig,
     staging_binding: ExactDirectoryBinding,
+    observer: Option<kolyan_sandbox::SandboxProcessObservationSender>,
 }
 
 impl IsolatedFileTools {
@@ -141,7 +142,17 @@ impl IsolatedFileTools {
         Ok(Self {
             config,
             staging_binding,
+            observer: None,
         })
+    }
+
+    /// Attach bounded telemetry without altering preparation/grant semantics.
+    pub fn with_process_observer(
+        mut self,
+        observer: kolyan_sandbox::SandboxProcessObservationSender,
+    ) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Validate model arguments and derive claims without performing file effects.
@@ -370,6 +381,15 @@ impl IsolatedFileTools {
             .await
             .map_err(|error| IsolatedFileError::Invalid(error.to_string()))?
             .map_err(IsolatedFileError::Sandbox)?;
+        let sandbox = if let Some(observer) = crate::process_observation::bind_observer(
+            self.observer.as_ref(),
+            prepared,
+            expected_scope,
+        ) {
+            sandbox.with_process_observer(observer)
+        } else {
+            sandbox
+        };
         let output = sandbox
             .execute(
                 SandboxRequest {

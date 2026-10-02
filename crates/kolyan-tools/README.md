@@ -53,6 +53,21 @@ real local subprocess tests, not actual-model or multi-Agent acceptance.
 
 ## Trusted file operations (0030)
 
+The isolated file, shell and combined four-tool adapters optionally accept
+`with_process_observer(sender)` from a host-owned bounded Sandbox observation
+channel. After normal exact preparation/grant validation, each launch binds a
+strict `ToolProcessObservationContext` containing tool name, independent host
+scope and prepared digest. It never takes scope from a grant or changes input,
+policy, executable, deadline, output ceiling or tool result. Receiver loss is
+explicit; the host must not interpret missing events as process completion.
+
+Data-driven module tests demonstrate actual shell arithmetic entry followed by
+existing explicit cancellation or dropped-future cleanup, and unchanged raw
+stdout/stderr/nonzero exit. They record successful wait separately from group
+cleanup and capture. This is local shell-native evidence, not Agent/Provider
+network acceptance or ordinary file-worker inflight evidence. That file-native
+gap remains open: the ordinary worker protocol has no progress handshake.
+
 `FileOperations` (exported at the crate root) is a separate synchronous primitive for trusted
 worker assembly; it does not change `RestrictedFileTool` or `RestrictedShellTool`.
 It supplies `file.read`, `file.write`, and `file.edit` through a strictly decoded

@@ -1,6 +1,8 @@
 //! Turn port for exact file execution. No authority issuance or legacy executor.
 
-use kolyan_core::{ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolOutcome, ToolPreparationFuture,
+};
 use kolyan_model::{ToolCall, ToolResult};
 use kolyan_sandbox::{SandboxCancellation, SandboxError};
 
@@ -36,7 +38,7 @@ impl ToolExecutor for IsolatedFileTools {
                         Err(error) => Err(error),
                     }
                 }
-                result = &mut executing => result,
+                result = &mut executing => result.map(ToolOutcome::Completed),
             }
         })
     }

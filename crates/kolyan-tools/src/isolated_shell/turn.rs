@@ -15,7 +15,9 @@
 //! Cancellation awaits the process owner after signalling; future drop delegates
 //! to the sandbox's independent reaper. Effects are not rolled back or retried.
 
-use kolyan_core::{ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolOutcome, ToolPreparationFuture,
+};
 use kolyan_model::{ToolCall, ToolResult};
 use kolyan_sandbox::{
     SandboxCancellation, SandboxCommand, SandboxError, SandboxOutput, SandboxRequest,
@@ -68,7 +70,7 @@ impl ToolExecutor for IsolatedShellTool {
                         Err(error) => Err(error),
                     }
                 }
-                result = &mut executing => result,
+                result = &mut executing => result.map(ToolOutcome::Completed),
             }
         })
     }
@@ -114,6 +116,15 @@ async fn execute(
         .constraints()
         .timeout_ms
         .ok_or_else(|| failed("missing timeout ceiling"))?;
+    let sandbox = if let Some(observer) = crate::process_observation::bind_observer(
+        adapter.observer.as_ref(),
+        &invocation.prepared,
+        &invocation.scope,
+    ) {
+        sandbox.with_process_observer(observer)
+    } else {
+        sandbox
+    };
     let output = sandbox
         .execute(
             SandboxRequest {

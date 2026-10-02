@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"omitted_root","arguments":{"command":"true"},"prepared":true},
+    {"id":"null_root","arguments":{"command":"true","path":null},"prepared":true},
+    {"id":"explicit_root","arguments":{"command":"true","path":"."},"prepared":true},
+    {"id":"existing_child","arguments":{"command":"true","path":"sub"},"prepared":true},
+    {"id":"empty_path","arguments":{"command":"true","path":""},"prepared":false},
+    {"id":"absolute_path","arguments":{"command":"true","path":"/tmp"},"prepared":false},
+    {"id":"parent_path","arguments":{"command":"true","path":"sub/.."},"prepared":false},
+    {"id":"nul_path","arguments":{"command":"true","path":"a\u0000b"},"prepared":false},
+    {"id":"missing_path","arguments":{"command":"true","path":"absent"},"prepared":false},
+    {"id":"empty_command","arguments":{"command":""},"prepared":false},
+    {"id":"whitespace_command","arguments":{"command":" \n\t"},"prepared":false},
+    {"id":"nul_command","arguments":{"command":"true\u0000"},"prepared":false},
+    {"id":"unknown_property","arguments":{"command":"true","environment":{}},"prepared":false},
+    {"id":"wrong_path_type","arguments":{"command":"true","path":[]},"prepared":false}
+  ]
+}

@@ -92,6 +92,17 @@ impl IsolatedToolSet {
         })
     }
 
+    /// Share a bounded observation queue across the original four adapters.
+    /// Each executed call independently binds its verified scope and digest.
+    pub fn with_process_observer(
+        mut self,
+        observer: kolyan_sandbox::SandboxProcessObservationSender,
+    ) -> Self {
+        self.files = self.files.with_process_observer(observer.clone());
+        self.shell = self.shell.with_process_observer(observer);
+        self
+    }
+
     /// Advertised schemas match the strict typed adapter inputs. The host must
     /// filter this inventory using the effective Agent tool ceiling; advertising
     /// a definition is never authority to invoke it.

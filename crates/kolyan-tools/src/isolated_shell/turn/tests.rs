@@ -89,6 +89,7 @@ fn stream_tags_preserve_readable_unicode_and_every_binary_byte() {
 #[cfg(target_os = "macos")]
 mod macos {
     use super::*;
+    mod observation;
     use crate::IsolatedShellConfig;
     use kolyan_core::TurnControl;
     use kolyan_policy::{
@@ -185,7 +186,12 @@ mod macos {
         )
         .unwrap();
         eprintln!("shell Turn trace: {}", trace.display());
-        result
+        result.map(|outcome| match outcome {
+            kolyan_core::ToolOutcome::Completed(result) => result,
+            kolyan_core::ToolOutcome::AwaitingExternal(wait) => {
+                panic!("shell unexpectedly suspended: {wait:?}")
+            }
+        })
     }
 
     #[tokio::test]
