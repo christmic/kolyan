@@ -2931,3 +2931,360 @@ successful validation. In the retained revised run, all four invocation exports
 left the aggregate Task Ready and the host rejected acceptance without recording
 that final failure. This is a test-host lifecycle gap to correct in the revised
 workflow, not evidence that the original run finalized as Failed or Completed.
+
+### Fresh complete gate findings
+
+The complete offline workspace gate retained in
+`/tmp/kolyan-main-workspace-offline-final-v5.log` exited 101 at three HTTP process
+tests. Their actual Turn JSON contains `pending_approvals` and `external_waits`,
+whereas the checked-in OpenAPI still required `pending_approval`. The canonical
+schema and affected HTTP consumers were migrated without a compatibility fallback
+or weaker response validation. Their full target passed six offline tests; the
+independent schema dataset exported 19 rows, including 15 rejected shapes.
+
+The next complete offline gate exited 101 later at the JSON-RPC process test.
+Its actual suspension returned `waiting.pending_approvals`, but an old consumer
+read `approval.approval_id` and sent null on approval. The retained artifact is
+`kolyan-process-offline-jQuUIK`; this is an observed caller contract error, not a
+Provider failure. All three process readers, including live branches, were
+migrated to the verified nested waiting coordinates. The complete process target
+passed six offline tests with one network test ignored. Nine new coordinate rows
+were exported before comparison. The fresh complete workspace gate in
+`/tmp/kolyan-main-workspace-offline-final-v7.log` and strict workspace gate in
+`/tmp/kolyan-main-workspace-strict-final-v7.log` both exited zero for the frozen
+implementation, including these repairs and the supplemental inventory.
+The selected Agent
+plan is 475 existing rows plus 76 supplemental rows, 551 total; Server contributes
+57 additional rows. These 608 planned rows were released for fresh actual network
+execution after the complete gates passed; they are not yet accepted. The main
+host owns 228 ordinary Root/delegation rows, with separate owners for 57 native
+effect rows, 76 native-running rows and 190 long-task plus 57 Server rows. Each
+entry executes once, exports every failed row, and retains earlier failed reports.
+The separate self-iteration experiment does not replace them. Newly migrated
+HTTP and JSON-RPC live consumers also require their own affected acceptance audit;
+the 608-row Agent and Task selection is not a claim that outer APIs were rerun.
+
+The native-effects actual matrix finished its single attempt in 445.80 seconds:
+41 of 57 rows passed and 16 failed. Its report is retained at
+`kolyan-r1-matrix-EWzTaL/report.json`, with the complete log in
+`/tmp/kolyan-native57-actual-release-20261002-v1.log`. This is not acceptance.
+The fixture constructed the whole plan before execution but persisted its
+aggregate report only after all observations; interrupted host execution could
+lose in-memory row summaries despite retained individual JSONL files. Move future
+plan and per-row state persistence before their respective execution boundaries,
+without repeating or rewriting this matrix's results.
+
+The supplemental native-running matrix remains in flight and already has failed
+rows. One exact retained sample is `kolyan-agent-native-running-live-apmHDa`:
+the model generated a short Shell write-and-read call at step zero, followed by a
+different Shell call with the phase marker and long loop at step one. Each native
+observer context matches its own original prepared call and scope. The test host
+captured only the first invocation and rejected later events as a scope mismatch.
+That is an observation-model limitation, not evidence of a substituted production
+grant. The sample also violates the current case's explicit single-call condition.
+A future observer must retain original per-invocation and per-launch identities;
+whether preparatory calls are allowed requires an explicit revised case contract,
+not silently weaker assertions. Preserve the running frozen matrix unchanged.
+
+The affected outer API inventory adds 152 planned rows after the owner's original
+247-row allocation: HTTP process scenarios 76, HTTP ledger isolation 19, and
+JSON-RPC process scenarios 57. Their explicit plan is retained in
+`/tmp/kolyan-l5-allocated-outer-api-live-v1-plan.jsonl`. These rows have not started
+and cannot be counted as part of the previously selected 608 rows. The combined
+selected acceptance scope is therefore 760 planned rows, not 760 passed rows.
+
+### Developer owned native observation repair
+
+This reviewed design authorizes developer implementation in the separate
+`Kolyan-feedback` worktree. Fresh network allocation follows local acceptance. Preserve the
+mainline implementation, all existing one-call inputs/assertions, and the failed
+actual matrix unchanged. This is developer-authored fixture repair, not a
+model-authored Kolyan candidate or acceptance of self iteration.
+
+The sole actual native-running matrix finished with owner handle `15068` exiting
+101: 36 Passed, 40 Failed, zero Skipped/NotRun, 76 total attempts and exactly one
+attempt per row. The retained report is `kolyan-r1-matrix-Y6hrqK/report.json`, the
+upfront plan is its `planned_inventory.json`, and the log is
+`/tmp/kolyan-agent-native-running-live-76-20261002-v1.log`. All 76 individual JSONL
+files contain their actual summary. Duration was 1417.10 seconds. By scenario:
+Cancel 6/19, Drop 6/19, Loss 12/19, Natural 12/19 passed. These are observed
+outcomes, not complete acceptance; no failed row was retried or overwritten.
+
+The 40 failures have the following disjoint diagnostic buckets, using priority
+matcher error, cwd refusal, historical conflict, observation loss, physical
+content, absent native cancellation, absent phase. Other failures can coexist in
+a row, so these are evidence-based primary classifications, not exclusive root
+cause claims or model rankings:
+
+| Primary observed failure | Rows |
+| --- | --- |
+| First-invocation matcher rejects a legitimate later invocation | 3 |
+| Workspace-relative cwd preparation refused | 5 |
+| Historical reader reports conflicting physical terminal outcomes | 1 |
+| Observation loss prevents native cleanup proof | 10 |
+| Physical bytes differ from the declared case expectation | 16 |
+| Phase bytes exist, but no native cancellation event exists | 4 |
+| Required phase is not realized | 1 |
+
+No recorded `original_provider_error` or fixture model timeout was present in
+this batch. This does not establish universal SDK correctness. The historical
+conflict row `kolyan-agent-native-running-live-vhYlWm` actually received a response
+with MaxOutputTokens, 8192 output tokens and no tool call; its Ledger has two
+TurnCompleted facts encoding Incomplete differently. Keep that independent
+terminal-proof investigation outside the observer repair rather than calling it
+a transport failure or fabricating a successful file effect.
+
+#### Original invocation and launch registry
+
+Replace the test host's single captured invocation with a bounded registry keyed
+by the exact independently received execution/step/snapshot scope, tool name and
+prepared digest. Retain the original prepared call (including its native call ID
+and arguments), scoped grant, policy revision, control and monotonic capture
+instant. The digest already binds the call ID and arguments; do not derive any
+identity from a scripted step number, model prose, marker, or an assumed command.
+Do not impose a new host-ID character restriction on native Provider call IDs.
+
+Registration is observation only: forward the same ToolInvocation unchanged,
+without a permit, replacement control, altered arguments or a wait for observer
+approval. A duplicate/overflow record is an explicit fixture failure and cannot
+overwrite a previous original record or masquerade as an admitted new grant.
+Registry capacity is a declared test-host memory bound; overflow requires cleanup
+of known original controls and dropping the original future, with untracked
+cleanup explicitly unproven. Production authorization remains independent.
+
+Resolve every process event against its exact original registry record, then
+bind a fresh launch only on that record's actual Spawned event. Retain launch UUID,
+PID and process group separately per invocation. Unknown scope/digest, substituted
+launch/PID, duplicate launch or missing Spawned cannot contribute proof. Legitimate
+later calls with their own recorded bindings are not foreign scopes. Export raw
+rejected events and the precise mismatch reason, but never admit them by checking
+only tool name, execution ID, or a matching marker. Do not share stdout accumulators
+or reap/capture counters across launches.
+
+The root factory's effective Agent permission is already Shell-only, and actual
+requests in the retained MiniMax sample advertise only Shell. Keep this explicit
+scope; do not fix a multi-Shell problem by pretending a file call was captured.
+Other matrices cover file tools. A file process event cannot become this matrix's
+Shell phase witness even if its bytes contain the marker.
+
+#### Preserve one-call cases; add a separate preparatory contract
+
+Existing offline/live one-call cases keep their original input, expected call
+count, physical content, exact phase marker, causal assertions and verdict.
+The repaired registry should diagnose a second legitimate invocation accurately,
+but it must still fail a one-call scenario as extra invocation. It must not turn
+`Y6hrqK` into a passed report or select a replacement sample silently.
+
+New data-driven cases separately declare one short preparatory Shell invocation
+followed by one long-running target invocation. Require successful original
+preparation result plus actual preparation launch cleanup, then choose the target
+only from an exactly matched later invocation's actual stdout phase. Preserve
+both call IDs, arguments, scopes, digests and launches. The declared preparation
+count/order and actual physical effects are independent assertions; a phase-like
+marker from the preparatory call or Provider text is not a target witness.
+Ambiguous target markers, multiple eligible targets and extra calls fail rather
+than letting the host pick a convenient successful process. Never classify a
+command string as read-only authority or rewrite it into the requested scenario.
+
+Each invocation keeps its original capture-based phase clock; inference and
+preparation do not consume the later target's clock. Bound every actual model
+open/stream as before. Cancellation/drop starts one independent cleanup clock.
+Use the selected target's original control and the ordinary Runtime durable
+cancel path, or drop the original root future; do not construct new authority.
+Signal delivery, successful wait/reap, group cleanup and capture completion must
+be verified for that target, not borrowed from the completed preparation process.
+Failed phase/scope matching still triggers cleanup and complete failure export.
+Keep production tool deadlines, output ceilings and channel semantics unchanged.
+
+Actual phase output alone cannot prove the process is still running when host
+control arrives. A finite command may already have naturally exited. Require
+actual native cancellation and raw termination evidence for the positive
+interruption claim; retain natural-exit races as explicit failed realization.
+Observation loss likewise remains insufficient proof, not a reason to retry,
+ignore diagnostics, enlarge production limits or infer TaskStopped from reap.
+
+#### Proposed owned files and local acceptance
+
+After review, changes are confined to feedback-worktree `tests/agent/native_running`
+and its module declarations, with new private registry/observer modules and
+separate unit tests, additional data fixtures and expected JSONL. Reuse the real
+AgentRunner and original production IsolatedToolSet. No Root registration,
+shared helper, SDK, Core/Runtime, Sandbox authority or worker protocol change is
+needed for this batch. Existing one-call tests remain intact.
+
+Separate data rows cover short preparation then long target Cancel/Drop, same-step
+multiple native call IDs, reused IDs in different steps, foreign scope/digest,
+substituted launch/PID, missing Spawned, duplicate/overflow registry entries,
+preparation marker spoofing, naturally ended target and loss/timeout cleanup.
+Export all rows before comparison, including errors. Re-run the existing offline
+four cases, the new exact-binding and real-OS preparatory cases, then focused
+strict checks and a fresh whole-workspace gate. Any later network matrix requires
+a new explicit allocation and independently versioned evidence. File-worker
+native operation-entry/interruption remains unproven and is not covered by Shell.
+
+### Native effect feedback repair scope
+
+The retained 57-row report remains 41 Passed and 16 Failed. Read-only inspection
+classified nine exact child-input mismatches, two invalid field types, two exact
+write-content mismatches and three unexpected child waits. The recorded neutral
+requests and completed tool arguments do not establish lost context or a Provider
+stream decoding defect. There is no independent outbound wire capture in this
+inspection; do not claim SDK wire equivalence from neutral records alone.
+
+Developer repair is limited to test Host scenario assembly and state handling.
+Direct-write cases must grant only Write; only the declared late-child case may
+grant its exact named delegation target. A returned unexpected suspension must be
+exported and rejected as an unexpected scenario path before stopped-execution
+recovery or reconciliation is attempted. Preserve existing cases and all exact
+input, type, content and effect assertions. Add separate data-driven regressions
+for permission assembly and unexpected-suspension handling; do not coerce invalid
+field types, trim write bytes or accept mismatched private input. Report parameter
+mismatch separately from a genuinely foreign execution scope.
+
+All these fixes are Codex developer feedback, not Kolyan model-authored candidate
+repairs. Preserve the failed candidate, original actual reports and original
+mainline running jobs. New passing offline gates cannot rewrite prior verdicts.
+
+### Historical reads of unsuccessful completed Turns
+
+The retained native-running trace `kolyan-agent-native-running-live-vhYlWm`
+contains a canonical TurnCompleted boundary with reason Incomplete and a separate
+TurnCompleted observation describing the same incomplete response. Task evidence
+correctly classifies this as Failed because no admitted final answer exists.
+The historical result reader incorrectly treats every TurnCompleted kind as
+successful and rejects that lawful failed observation as a conflicting terminal.
+This is a Server proof-classification bug, not a Provider decode failure.
+
+Correct the historical contradiction predicate: only a TurnCompleted boundary
+explicitly proving FinalAnswer contradicts an observed Failed attempt. Completion
+notifications without that positive success proof cannot upgrade a failed result.
+Keep exact attempt binding, observation source, physical inspect, failure reason,
+size ceilings and actual contradictory cancellation/failure checks unchanged.
+Do not parse Debug response text into authority or convert Incomplete to success.
+Add separate data-driven regressions for Incomplete, Refused and MaxSteps with
+their completion notifications, genuine successful completion contradictions,
+and cancellation contradictions. Export observations before comparisons and prove
+the read does not mutate either journal. Existing historical tests remain intact.
+
+The feedback-worktree implementation passed all six historical/result tests,
+including seven new exported data rows. Four unsuccessful completion variants
+remain Failed and readable; genuine FinalAnswer, TurnCancelled and
+ExecutionCancelled contradictions remain rejected. Both journals stayed unchanged
+and repeated reads matched. The retained JSONL is
+`kolyan-history-incomplete-7P2AkV/actual.jsonl`. The whole Server target passed 116
+tests, and its warning-denied all-target Clippy gate passed. This is offline proof,
+not a fresh Provider matrix. An initial fixture construction failure omitted a
+cross-stream input-source cause; the corrected fixture copies the full declared
+causal predecessors into a separate journal, without weakening production checks.
+
+The feedback whole-workspace gate in
+`/tmp/kolyan-feedback-workspace-offline-v1.log` failed at the native sandbox
+detached-session probe: its nested test executable under the separately selected
+temporary build target was denied launch. The probe did not execute, so this does
+not prove escaped isolation or successful isolation for that row. The exact cause
+is not yet established. Preserve this failure and diagnose it before claiming
+complete workspace acceptance; do not enlarge executable authority to make the
+test pass. Parallel observer and native-effect repairs still require their own
+finished local gates and a subsequent fresh whole-workspace gate.
+
+### Physical terminal proof ordering
+
+Independent source review found additional proof boundaries that must be closed
+before accepting the historical-reader batch. A successful result must derive
+its response from an admitted Step before its exact physical terminal boundary;
+no later Step or model activity may backfill or replace that stopped response.
+A completed observation must reject a later contradictory non-FinalAnswer Turn
+boundary, even when both facts use the TurnCompleted lifecycle kind. Repeated
+diagnostic notifications of the same terminal must not become new success proof.
+
+ExecutionCancelled records a durable control intention. Without a verified Turn
+stop boundary it cannot prove a physically stopped Cancelled invocation; leave
+the physical proof unresolved rather than inventing stopped work. Preserve the
+ordinary waiting-cancellation protocol's explicit stop facts and the distinction
+between read-only historical proof and active reconciliation authority.
+
+Add independent exported data for a genuine completed result, an unsuccessful
+boundary after completion, a Step after the terminal and a backfilled final answer,
+a genuine stopped cancellation and cancellation intention without stop. Include
+real Core-produced MaxSteps coverage rather than only an Incomplete Step under a
+MaxSteps label. Keep existing tests and positive stopped outcomes intact. Migrate
+incorrect implementation semantics; do not add a compatibility branch or weaken
+proof because an older fixture assumed control intent was physical termination.
+This is a new required Server proof repair, not yet implemented acceptance.
+
+### Actual model preparatory Shell acceptance
+
+Add an independent 38-row actual-model plan: each of the 19 configured deployment
+and protocol combinations runs one preparatory-call Cancel case and one Drop case.
+These are new explicit two-call cases, not replacements for the original four
+single-call cases or their failed 76-row report. The dataset contains no scripted
+model frames. Trusted input asks for one short preparation call, successful result
+feedback, then a separate foreground target that emits its exact phase and remains
+running until Host cancellation. The Host never constructs either model tool call.
+
+Plan and export every row before execution; each gets one attempt. Observe target
+index one only through its original exact binding and launch. Compare two actual
+model requests and invocations, preparation cleanup before target phase, target
+native cancellation before reap, independent cleanup and capture, exact physical
+bytes and no model/effect replay during reconstruction. Retain full actual calls,
+results, reasoning and both journals before comparisons, including failed rows.
+New input may specify foreground execution and exact bytes clearly; it cannot
+relax existing cases, normalize model commands or increase production deadlines.
+Local inventory proof is not network acceptance. This adds 38 planned rows to the
+previous 760 selected rows, for 798 selected rows; none of the new rows has run yet.
+
+The added inventory exported all 38 unique deployment/case labels with zero
+scripted frames and zero attempts at
+`kolyan-native-preparatory-plan-U1IUzG/plan.json`. The focused native-running
+target passed 11 offline tests, including the original four causal cases and
+the two additional real-OS preparatory cases; two actual-network entries remained
+explicitly ignored. No network outcome is implied by this gate.
+
+The canonical-path feedback whole-workspace gate in
+`/tmp/kolyan-feedback-workspace-private-v2.log` exited zero, including the existing
+detached-session sandbox probe. This validates that compiled snapshot only;
+later physical-proof, bounded-workflow and actual-preparatory additions require
+fresh final gates. Separately, the frozen mainline actual approval-restart matrix
+finished all 38 rows Passed, with report `kolyan-r1-matrix-HoVOB7/report.json`.
+The other mainline matrix entries continue; earlier failed reports are retained.
+
+### Independent review before candidate merge
+
+The bounded self-iteration workflow passed 20 offline tests, with four actual
+network entries ignored, in `/tmp/kolyan-feedback-self-independent-final-v4.log`.
+Fresh read proof now verifies the exact model Step, prepared effect, authorization,
+start, receipt and completion in causal cursor order, together with the candidate
+content digest. Nineteen receipt dataset rows include a real native-worker positive
+case and explicitly non-authoritative adversarial copies. This is framework
+verification, not acceptance of a model-authored candidate.
+
+The independent physical-terminal gate passed its 22 exported dataset rows in
+`/tmp/kolyan-feedback-terminal-independent-v2.log`. A real Core NoProgress run
+issues three model requests and executes two tools before TurnFailed; it does
+not first publish a NoProgress completion boundary. Therefore the suspected
+double-boundary conflict was not reproduced and did not justify changing the
+producer contract. Keep control intention separate from physical stop evidence.
+
+Both owner batches are frozen. Fresh whole-workspace, strict lint and format gates
+are running against the combined feedback snapshot. The fresh r3 model experiment
+has not started and its candidate remains at the pinned original baseline. Merge
+authorization remains conditional on independent candidate acceptance; no candidate
+or feedback code has been merged on the strength of these focused gates alone.
+
+The combined feedback snapshot subsequently passed the complete workspace gate
+in `/tmp/kolyan-feedback-workspace-independent-v3.log`, strict all-target lint in
+`/tmp/kolyan-feedback-strict-independent-v3.log` and the format check in
+`/tmp/kolyan-feedback-format-independent-v3.log`, each with exit zero. Source is
+frozen for the new live runs. The r3 model-authored experiment started once with
+trace `self-iteration-run-3MRLAf/actual.jsonl` in the pinned r3 private Host directory.
+The new 38-row preparatory Shell matrix started once with report
+`kolyan-r1-matrix-DiqmN9/report.json`. Neither live run is yet accepted.
+
+The frozen mainline delegation matrix finished 68 Passed and eight Failed out of
+76 rows in `kolyan-r1-matrix-rNITJj/report.json`; no rows were skipped. Root report
+Teycao's failed named Qwen Flash row belongs to trace `kolyan-agent-root-VD4LHF`,
+not the following successful inline row. In its second Turn the actual request
+includes earlier tool results and the new instruction to read and run Shell.
+The model issues the read only, then claims both checks completed without a new
+Shell call or receipt. Keep that row Failed; this trace does not establish lost
+context or a transport decoding defect.
