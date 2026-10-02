@@ -1,0 +1,39 @@
+[
+  {
+    "id":"two_level_saved_self","mode":"recursive","max_depth":3,"max_steps":3,"slots":null,"approval_order":[],
+    "scripts":[
+      {"input":"Root private seed","answer":"Root joined answer","call":{"id":"root/self/调用","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Middle private seed","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":true}}}]}}},
+      {"input":"Middle private seed","answer":"Middle joined answer","call":{"id":"middle/self/调用","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Leaf private seed","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}},
+      {"input":"Leaf private seed","answer":"Leaf answer","call":null}
+    ],
+    "expected":[
+      {"name":"root_waiting","requests":1,"effects":0,"waiting":1,"available_slots":null},
+      {"name":"children_waiting","requests":2,"effects":0,"waiting":1,"available_slots":null},
+      {"name":"repeated_waiting","requests":2,"effects":0,"waiting":1,"available_slots":null},
+      {"name":"middle_completed","requests":4,"effects":0,"waiting":0,"available_slots":null},
+      {"name":"duplicate_middle","requests":4,"effects":0,"waiting":0,"available_slots":null},
+      {"name":"root_completed","requests":5,"effects":0,"waiting":0,"available_slots":null},
+      {"name":"duplicate_root","requests":5,"effects":0,"waiting":0,"available_slots":null}
+    ]
+  },
+  {
+    "id":"two_approval_waits_restored","mode":"multiple_approvals","max_depth":3,"max_steps":3,"slots":2,"approval_order":[1,0],
+    "scripts":[
+      {"input":"Root parallel seed","answer":"Root joined answer","call":{"id":"root/parallel/调用","name":"agent.invoke","arguments":{"parallel":true,"children":[{"target":{"kind":"self_call"},"input":"First private seed","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},{"target":{"kind":"self_call"},"input":"Second private seed","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}},
+      {"input":"First private seed","answer":"First answer","call":{"id":"first/read/调用","name":"file.read","arguments":{"path":"input.txt"}}},
+      {"input":"Second private seed","answer":"Second answer","call":{"id":"second/read/调用","name":"file.read","arguments":{"path":"input.txt"}}}
+    ],
+    "expected":[
+      {"name":"root_waiting","requests":1,"effects":0,"waiting":1,"available_slots":2},
+      {"name":"children_waiting","requests":3,"effects":0,"waiting":2,"available_slots":2},
+      {"name":"repeated_waiting","requests":3,"effects":0,"waiting":2,"available_slots":2},
+      {"name":"approved_0","requests":4,"effects":1,"waiting":1,"available_slots":2},
+      {"name":"duplicate_approval_0","requests":4,"effects":1,"waiting":1,"available_slots":2},
+      {"name":"partial_join","requests":4,"effects":1,"waiting":1,"available_slots":2},
+      {"name":"approved_1","requests":5,"effects":2,"waiting":0,"available_slots":2},
+      {"name":"duplicate_approval_1","requests":5,"effects":2,"waiting":0,"available_slots":2},
+      {"name":"root_completed","requests":6,"effects":2,"waiting":0,"available_slots":2},
+      {"name":"duplicate_root","requests":6,"effects":2,"waiting":0,"available_slots":2}
+    ]
+  }
+]

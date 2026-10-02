@@ -1,0 +1,7 @@
+[
+  {"id":"revoke_root_before_pump","base_case":"two_level_saved_self","action":"revoke_root","slots":2,"delay_ms":10,"max_tokens":null,"expected_requests":4,"expected_effects":0,"expected_peak":1,"expected_denied":true},
+  {"id":"revoke_nested_before_pump","base_case":"two_level_saved_self","action":"revoke_nested","slots":2,"delay_ms":10,"max_tokens":null,"expected_requests":3,"expected_effects":0,"expected_peak":1,"expected_denied":true},
+  {"id":"bound_one_recursive_restore","base_case":"two_level_saved_self","action":"bound_one","slots":1,"delay_ms":10,"max_tokens":null,"expected_requests":5,"expected_effects":0,"expected_peak":1,"expected_denied":false},
+  {"id":"simultaneous_approvals_shared_hosts","base_case":"two_approval_waits_restored","action":"simultaneous_approvals","slots":2,"delay_ms":75,"max_tokens":null,"expected_requests":6,"expected_effects":2,"expected_peak":2,"expected_denied":false},
+  {"id":"finite_task_simultaneous_approvals","base_case":"two_approval_waits_restored","action":"simultaneous_approvals","slots":4,"delay_ms":75,"max_tokens":1000,"expected_requests":6,"expected_effects":2,"expected_peak":1,"expected_denied":false}
+]
