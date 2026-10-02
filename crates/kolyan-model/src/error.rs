@@ -32,6 +32,8 @@ pub struct ProviderError {
     pub message: String,
     pub provider: Option<String>,
     pub status: Option<u16>,
+    /// Optional bounded local diagnostics, not remote wire data or credentials.
+    pub diagnostics: Option<serde_json::Value>,
 }
 
 impl ProviderError {
@@ -58,6 +60,7 @@ impl ProviderError {
             message: message.into(),
             provider: None,
             status: None,
+            diagnostics: None,
         }
     }
 }
