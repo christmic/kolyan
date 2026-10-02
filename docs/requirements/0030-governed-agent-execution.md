@@ -1370,6 +1370,305 @@ ToolResult consumption. Verify the proof appropriate to the topology role;
 explicitly unsupported roles are a pending implementation boundary, not evidence
 that long-task acceptance is complete.
 
+### Continuation finalization proof ports (approved implementation)
+
+The host approved implementation of these read-only ports and exact reconstruction
+rules. Approval is not an implemented Agent finalizer or a passing acceptance gate.
+A Continuation's parent coordinate denotes its completed predecessor, not a
+delegated child whose result must be consumed by that predecessor. Validate the
+admitted Continuation role, exact predecessor, explicit dependency and its existing
+`task.result_consumed` proof in the successor-to-predecessor direction. The current
+historical consumption reader can verify that already committed successful edge;
+do not replace it with an invented agent.invoke result or consume a second time.
+
+Server provides a read-only `PrivateContextService::load_verified_initialization`
+port taking `(&PrivateContextOwner, &FactRef /* exact ownership */, usize /* maxBytes */)`.
+It returns the original
+`SessionInitialization`, initialization FactRef and ownership FactRef after verifying
+the one-record namespace, critical schema/subject/causes, canonical initialization
+digest and exact Agent ownership callback. The supplied ownership FactRef must
+equal the initialization fact's one and only causal reference. It must never call `initialize`, create
+a Session or overwrite later history. Server owns this verifier; Agent owns the
+role-aware finalizer. The host approved this implementation boundary.
+
+Initialization alone establishes owner and selected-message identity, not source
+derivation. The trusted host must additionally bind the full durable predecessor
+trajectory or explicit projection source/plan/provenance to the successor's selected
+initial messages before admission. Historical verification must reconstruct that
+exact derivation and retain full source evidence. No opaque digest, empty context,
+model-authored proof or unsupported-role rejection completes long-task acceptance.
+
+The host orchestrating the complete graph owns its finalization decision. The
+historical host-only integration long graph uses `TaskExecutionService::complete`
+only after all ten admitted invocations and per-invocation artifact checks; those
+historical executions do not establish AgentRunner Continuation finalization.
+The separately validated Runner-finalized scenes below exercise the new role-aware
+finalizer. That finalizer must
+verify every current physical terminal, topology-appropriate dependency and context
+proof, and existing Task criteria without new effects/grants/consumption. Root-only
+completion cannot close a graph containing unfinished successors. Cancellation and
+uncertainty remain refusals under the existing evidence contract.
+
+Approved implementation type/boundary details:
+
+`VerifiedPrivateContextInitialization` contains `initialization:
+SessionInitialization`, `initialization_fact: FactRef`, and `ownership_fact:
+FactRef`. The original immutable `SessionRecord.initialization`, not its later
+messages, supplies the selected projection. Recompute the existing canonical
+Server initialization from exact owner and original messages and compare the
+complete stored value and initialization draft. `maxBytes` must be nonzero and
+at most 16 MiB (the existing Storage initialization ceiling); bound the complete
+serialized return envelope, not just its message text. It is a host ceiling,
+independent of tool output grants. Missing/null/foreign initialization is refused.
+
+Historical predecessor context is a separate proof, not this initialization.
+`HistoricalContextRequest` contains the already verified exact predecessor
+`AttemptBinding`, terminal `FactRef`, exact prepared and committed
+`ExecutionEvidence` coordinates, and a host byte ceiling. These existing evidence
+coordinates bind execution, event ID and cursor; do not substitute journal FactRef
+for physical ledger evidence. `VerifiedHistoricalContext` returns the
+same binding/terminal/endpoints, the Runtime-verified admission coordinate, the
+reconstructed `Vec<Message>` and its canonical digest. Its complete serialized
+envelope is bounded by nonzero `maxBytes <= 16 MiB`. These are Server
+types, not additional persisted history or a second Runtime admission schema.
+
+Runtime `driver/admission.rs::InputAdmission` remains private. The public
+`verified_execution_input(&ledger, &RuntimeTurnKey, max_bytes)` reader reuses that
+same strict decoder, returning `VerifiedExecutionInput` with key, immutable
+`model_request`, saved nullable `agent_snapshot_digest`, exact `event_id` and
+`cursor`. Both the saved event and full returned envelope must fit the nonzero
+host ceiling of at most 16 MiB. Server uses this port, never a second local
+admission wire decoder. None of these proof reads admits or executes work.
+
+Current Server completion endpoints are exactly
+`<execution>/session/Completed/prepared` and
+`<execution>/session/Completed/committed`. Prepared payload has `session_id`,
+`status`, `messages`, `context_messages`; committed payload has `session_id`,
+`status`. The prepared context is a per-Turn delta, not the whole Session history.
+Require exact IDs/idempotency keys/kinds/turn/session, strict known payload fields,
+Completed status and ordered physical terminal/prepared/committed cursors. Require
+the exact terminal FactRef to match the independently verified completed attempt.
+Runtime's public verified admission supplies the immutable complete
+`ModelRequest.messages`. Build `delta` only from the actual Engine
+`<execution>/turn-event/` namespace's cursor-ordered `StepCompleted` and
+`ToolExecutionCompleted`: each Step appends the complete Assistant content, and
+each tool completion appends its complete User ToolResult block. Preserve every
+block and original tool pairing. StepCompleted strictly requires the existing
+Runtime fields `step_id`, `outcome`, `step`, with matching outer/inner outcomes.
+Step IDs must derive from the exact Turn and ordered Step index; physical
+turn-event IDs must match their idempotency keys. FinalAnswer is the last Step:
+later Step/tool content, including publication after the physical terminal, is
+refused rather than omitted from the reconstructed delta. The sole reconstruction is
+`frozenFullContext = admission.messages + delta`.
+
+Use `Session.inputs[exactTurn]` only as a cross-check: require its exact original
+`messages` and `history_len` to satisfy
+`admission.messages[history_len..] == input.messages`, with checked bounds, and
+require the exact Completed prepared payload's `context_messages` to equal
+`input.messages + delta`. Its `messages` must match the separately derived
+completed conversational commit. An ambiguous input partition must never alter
+the immutable reconstructed context. Do not read current
+`Session.context_messages` or derive a prefix from latest mutable history.
+
+Freeze all physical reads with `LedgerStore::query(LedgerQuery)` and explicit
+`through: Some(exactCommitted.cursor)`, exact `execution_id`, ascending cursor
+pages and an exclusive `after` advanced only from validated returned events.
+The existing LedgerQuery accepts limits 1..=1024; the reader uses pages
+of at most 32, checks page scope/order/limit itself, and refuses overflow or
+incomplete evidence rather than falling back to an unbounded audit method.
+The independent scan ceilings are 16 MiB cumulative serialized physical
+events and 65,536 events, in addition to the caller's complete return-envelope
+ceiling. These constants are host-reviewed limits, not token counts or tool grant
+widening; pagination/serialization bounds do not claim allocation-free storage.
+Require `terminal.cursor < prepared.cursor < committed.cursor`, exact endpoint
+identities and all known payload fields. No `execution_events_after(..., 0)`
+without a frozen through boundary substitutes for this read.
+
+Later Session history, a newer commit, guessed role prefixes, or incomplete
+commit gaps cannot authenticate the requested frozen context. Full omitted source
+and explicit projection provenance remain separate required evidence when the
+predecessor's admitted input itself was projected.
+
+Dispatch is exhaustive over the current roles `Root`, `SelfCall`, `Delegation`,
+`Continuation`. Root verifies its exact root binding/criteria. SelfCall and
+Delegation retain parent-to-child result consumption. Continuation verifies its
+completed predecessor, successor-to-predecessor dependency consumption, exact
+private initialization, and full-source or explicit-range derivation against that
+frozen predecessor context. There is no current `ContextReduction` topology enum
+variant: explicit context selection is an operation on the Continuation input,
+not a fabricated role. Unknown/corrupt/missing proofs refuse without mutations;
+active recovery readers and cancellation/uncertain-effect rules are unchanged.
+
+### Invocation source admission fence (approved atomic binding)
+
+The current Agent projection recorder checks a Task snapshot and then appends
+to a separate projection stream. A concurrent AttemptStarted can commit between
+those actions. Finalization must not accept such a late projection as evidence
+that exact source selection preceded execution. Snapshot checks or wall-clock
+timestamps do not close this race. The host approved the smaller pre-invocation
+source preparation and atomic InvocationAdmitted binding below. There is no
+InputBound event/state, optional source, serde default or compatibility path.
+
+Agent owns exact source reconstruction, immutable source/plan/provenance artifact,
+original initialization and ownership binding, known projection kind/schema,
+canonical digest and the selected request equality. Server must not deserialize
+Agent projection payloads or perform context selection. A generic Server source
+admission carries a generic identity envelope and an exact immutable FactRef.
+
+`InvocationInputSource` has required variants `Standalone { fact: FactRef }` and
+`Derived { fact: FactRef }`. `InvocationDefinition.input_source` and
+`AttemptBinding.input_source` are both required and bind exactly the same variant
+and reference. Root requires Standalone containing its actual immutable input;
+SelfCall and Delegation require Derived from the actual authorized invocation;
+Continuation requires Derived from the exact completed predecessor. An ownership
+fact alone is not a standalone input or a derived context proof.
+
+#### Host-orchestrated root preparation boundary (approved public contract)
+
+The long-graph host must not encode Agent-private RootInput/ChildInput bodies or
+copy their JSON schema into integration fixtures. The existing Runner.start
+registers a root-completion criterion and automatically finalizes a terminal root;
+that coupled entry point cannot represent a host's already declared ten-node Task
+criterion. Do not evade it by deliberately suspending the first root and using a
+different execution entry to skip finalization.
+
+Provide an Agent-owned public root-input preparation operation for production
+host orchestration. Its request supplies the exact execution coordinates, named
+or inline selector, requested permissions and original tool-free ModelRequest.
+It reuses the existing root resolver, stable instance reservation, immutable owner,
+trusted inventory advertisement, selected request construction and Required input
+archive (16 MiB host ceiling). Its typed result contains the resolved snapshot,
+exact ownership reference, selected ModelRequest and the verified Standalone
+source returned by Server's publisher. It does not register or alter a Task,
+admit an invocation, start an attempt, invoke a Provider/tool or issue a grant.
+Changed owner/input/inventory retries fail rather than overwriting any source.
+
+The host retains responsibility for its previously declared Task objective,
+criteria, limits and cancellation policy; it atomically admits the returned exact
+source and runs the returned selected request under that same snapshot. Agent's
+ordinary start path must reuse this preparation implementation, not maintain a
+second RootInput encoder. Runner role-aware finalization then verifies the real
+root source and each derived Continuation, without prematurely closing the Task
+after the first completed invocation. Sagan owns the production Agent operation;
+the long-task integration owner owns its callers. Concrete public names/signatures
+are frozen below; implementation and validation receipts remain independent.
+
+```rust
+pub struct RootInputPreparationRequest {
+    pub task_id: String,
+    pub invocation_id: String,
+    pub execution: ExecutionRef,
+    pub selector: AgentSelector,
+    pub requested_permissions: AgentPermissions,
+    pub model_request: ModelRequest,
+}
+pub struct PreparedRootInput {
+    pub snapshot: AgentSnapshot,
+    pub ownership: FactRef,
+    pub selected_input: ModelRequest,
+    pub input_source: VerifiedInvocationInputSource,
+}
+// Receiver: self: &Arc<Self>; blocking preparation runs on spawn_blocking.
+pub async fn prepare_root_input(
+    self: &Arc<Self>, request: RootInputPreparationRequest,
+) -> Result<PreparedRootInput, RunnerError>;
+```
+
+The logical Session must already exist. Tool-free original input and a nonzero
+explicit output ceiling are mandatory. Factory inventory construction may occur,
+but no Provider is constructed or streamed and no tool executes. The archive also
+binds the requested execution coordinates; attempts cannot substitute another
+execution. Exact retries preserve immutable identity/source; changed requests,
+definitions or inventory cannot overwrite an existing source. Cancelling the
+async waiter does not roll back a running blocking publisher; inspect/retry exact
+facts, never infer absence of preparation from a dropped future. No Task closure
+mode is added: the host owns its declared criteria and explicit finalization;
+ordinary start retains its existing coupled lifecycle through shared preparation.
+
+Ordering: reserve immutable identity; persist exact owner and initialization;
+Agent prepares and verifies the real input/full source/selection proof; persist
+the source fact; atomically admit InvocationDefinition with its required source;
+then start the exact source-bound attempt. The current projection recorder's
+requirement that the successor already exist is an implementation ordering
+restriction, not a necessary storage dependency: migrate it to accept the host's
+proposed definition and verify the completed predecessor before successor admission.
+Predecessor admission already exists; successor identity/owner/init are independently
+persistable. No model/tool enters during source preparation. A preparation interrupted
+before admission may leave retained artifacts but never an executable invocation.
+
+The shared source fact has critical schema version 1, subject kind
+`task.invocation-input-source` and subject ID equal to the invocation ID. This
+dotted subject is exported as `INVOCATION_INPUT_SOURCE_SUBJECT_KIND`; the earlier
+undotted draft was incompatible with the unchanged Ledger kind validator. Its fixed
+fact kind is `task.invocation_input_source`; its public payload envelope is
+`InvocationInputEnvelope {kind, scope, body}`. `kind` is the typed
+`InvocationInputKind::{Standalone, Derived}`, matching the source variant;
+`scope: InvocationInputScope` contains
+`task_id`, `invocation_id`, `agent: AgentIdentity`, `constraints_digest`. These
+scope coordinates must exactly equal the Task and proposed definition. Server
+strictly decodes that envelope/scope but leaves `body` opaque for Agent validation.
+Agent owns the body's known schema, request/origin/initialization/artifact binding.
+The public read port is
+`TaskCoordinator::load_verified_invocation_input_source(&source, &scope, max_bytes)`.
+It returns `VerifiedInvocationInputSource {reference, envelope, causes}` so Agent
+never re-decodes the Server wrapper. The nonzero host ceiling is at most 16 MiB,
+bounding the source record and complete return envelope. Ledger's independent
+128 KiB fact-payload ceiling still applies: larger original ModelRequest/full
+source must be stored by Agent as Required artifacts referenced by its body,
+under the approved 16 MiB archive bound, not silently truncated or refused by
+an undocumented 64 KiB context limit. Require 1..=32
+distinct exact causal FactRefs; resolve each bounded critical causal record.
+For Continuation, causes include its predecessor's exact completed terminal FactRef.
+Server must not infer permission, parse private Agent body fields or issue a grant.
+
+Server alone owns namespace and publication:
+`TaskCoordinator::publish_invocation_input_source(envelope, causes)` returns the
+typed verified result. Its stream is `task.invocation-input-source.<digest>`,
+where digest is lowercase SHA-256 of compact serde JSON array
+`["kolyan.server.invocation-input-source.v1", task_id, invocation_id]`.
+Fact ID equals stream and position is exactly 1; this dedicated domain stream
+never contains Task transition events. Agent callers use the returned reference,
+never duplicate the coordinate calculation. Exact raw body/scope/kind/causes retry
+returns the same record; changed candidate conflicts and cannot replace an admitted
+source. Publisher attempts one CAS then reads the exact winner without overwrite.
+Both reader and publisher validate unique critical exact causal references,
+reject cycles/nonhistorical same-stream references and refuse unresolved closure.
+Causal scanning is bounded independently to 1,024 unique records and 16 MiB
+cumulative serialized evidence; it neither performs a global audit nor claims
+allocation-free journal reads. It uses explicit enter/exit DFS with gray/black
+sets, never recursive calls: cycles are refused and a shared DAG node contributes
+one record/read/byte charge. The caller's `max_bytes` bounds the source record and
+complete returned envelope, not this independent causal-scan budget; a small
+return ceiling is not represented as a total-I/O/peak-allocation guarantee.
+Publisher is evidence preparation, not permission
+to create an invocation after cancellation; actual admission remains authoritative.
+
+Before InvocationAdmitted append, Server resolves the source's exact
+stream/position/fact ID, critical kind/schema/subject/scope/causes and validates
+the candidate through the ordinary Task reducer. The admission draft includes
+the source reference as a cause beside the previous Task fact. The existing
+same-stream CAS atomically commits topology and source, so there is never an
+admitted invocation awaiting source backfill. Same fact/content retries are
+idempotent; changed source is a command conflict. AttemptStarted compares its
+required source to the admitted definition and includes that source in causes.
+Replay rejects missing/foreign source, inconsistent causes, wrong role variant,
+changed attempt source and noncanonical records. Same-Task causal references must
+precede their dependent Task event; different-stream positions are not comparable
+timestamps. Existence plus immutable causal reference is the boundary, not a
+wall-clock claim. Cancellation/terminal admission rejection stays unchanged.
+
+Data-driven evidence must cover preprepared-source admission, concurrent CAS
+loss/replay, exact retry, changed/foreign/missing/noncritical source, attempted
+late-source backfill, cancellation/terminal rejection, corrupt replay and
+fresh store reconstruction. Export all observations before comparison. Agent
+additionally checks wrong projection schema/body/ownership and selected immutable
+request, including refusal of a physically entered successor followed by late
+source publication. Root input proof must contain the real request, and delegated
+child source must bind the actual invoke admission, not a manufactured owner-only fact.
+Only after the source fence and these gates may the new Runner-finalized long
+graph claim source-before-Turn acceptance. Its full and projected named/inline
+offline cases precede separately recorded complete real-model matrices.
+
 ### Canonical serialization with preserved insertion order
 
 The separate command `cargo test -p kolyan-policy --features serde_json/preserve_order`
