@@ -1,0 +1,8 @@
+[
+ {"id":"prepared-invalid","cause":{"Prepared":{"Invalid":"bad preparation"}},"expected":"invalid_batch"},
+ {"id":"prepared-binding","cause":{"Prepared":"BindingMismatch"},"expected":"invalid_batch"},
+ {"id":"prepared-denied","cause":{"Prepared":{"Denied":"current authority denied"}},"expected":"policy_denied"},
+ {"id":"snapshot","cause":{"Agent":"SnapshotMismatch"},"expected":"invalid_batch"},
+ {"id":"capacity","cause":{"Agent":"Capacity"},"expected":"invalid_batch"},
+ {"id":"multibyte","cause":{"Invalid":"long"},"expected":"failed"}
+]

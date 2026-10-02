@@ -6,17 +6,22 @@ mod schema;
 
 use std::sync::Arc;
 
-use kolyan_core::{ToolExecutor, ToolFuture, ToolInvocation, ToolOutcome, ToolPreparationFuture};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolOutcome, ToolPreparationFuture,
+};
 use kolyan_model::{ToolCall, ToolDefinition};
-use kolyan_policy::ApprovalMode;
+use kolyan_policy::{ApprovalMode, PreparedError};
 use kolyan_server::AttemptBinding;
 
 use super::delegation::denied;
 use super::tools::SnapshotTools;
 use super::*;
 use crate::{
-    AGENT_INVOKE_NAME, AgentInvocationBinding, InvokePrepareLimits, prepare_agent_invocation,
+    AGENT_INVOKE_NAME, AgentError, AgentInvocationBinding, InvokePrepareError, InvokePrepareLimits,
+    prepare_agent_invocation,
 };
+
+const MAX_PREPARATION_CAUSE_BYTES: usize = 1280;
 
 /// Host-selected preparation bounds and dynamic approval mode.
 #[derive(Debug, Clone)]
@@ -51,6 +56,23 @@ where
                 .delegation
                 .as_ref()
                 .ok_or_else(|| denied("delegation not configured"))?;
+            // Validate trusted host state before classifying shared Invalid variants
+            // as model-correctable input. The pure preparer still checks its inputs.
+            config.limits.validate().map_err(invalid_host)?;
+            self.saved.validate().map_err(invalid_host)?;
+            self.runner.host.validate().map_err(invalid_host)?;
+            for id in [
+                &self.parent.execution.session_id,
+                &self.parent.execution.turn_id,
+                &self.parent.execution.execution_id,
+            ] {
+                crate::identity(id).map_err(invalid_host)?;
+            }
+            if self.saved.private_session_id != self.parent.execution.session_id {
+                return Err(denied(
+                    "parent execution ownership differs from saved binding",
+                ));
+            }
             prepare_agent_invocation(
                 call,
                 &self.saved,
@@ -60,7 +82,7 @@ where
                 &config.limits,
             )
             .map(|plan| plan.prepared().clone())
-            .map_err(denied)
+            .map_err(preparation_error)
         })
     }
 
@@ -105,6 +127,44 @@ where
             Ok(ToolOutcome::AwaitingExternal(wait))
         })
     }
+}
+
+fn invalid_host(error: impl std::fmt::Display) -> ToolError {
+    ToolError::InvalidBatch {
+        message: bounded_cause(error),
+    }
+}
+
+fn preparation_error(error: InvokePrepareError) -> ToolError {
+    let message = bounded_cause(&error);
+    match error {
+        InvokePrepareError::Invalid(_)
+        | InvokePrepareError::Agent(
+            AgentError::Invalid(_) | AgentError::NotFound | AgentError::Conflict,
+        ) => ToolError::Failed { message },
+        InvokePrepareError::Agent(AgentError::PermissionDenied)
+        | InvokePrepareError::Prepared(PreparedError::Denied(_)) => {
+            ToolError::PolicyDenied { message }
+        }
+        InvokePrepareError::Agent(AgentError::Capacity | AgentError::SnapshotMismatch)
+        | InvokePrepareError::Prepared(
+            PreparedError::Invalid(_) | PreparedError::BindingMismatch,
+        ) => ToolError::InvalidBatch { message },
+    }
+}
+
+fn bounded_cause(error: impl std::fmt::Display) -> String {
+    let mut message = error.to_string();
+    if message.len() > MAX_PREPARATION_CAUSE_BYTES {
+        const MARKER: &str = " [truncated]";
+        let mut end = MAX_PREPARATION_CAUSE_BYTES - MARKER.len();
+        while !message.is_char_boundary(end) {
+            end -= 1;
+        }
+        message.truncate(end);
+        message.push_str(MARKER);
+    }
+    message
 }
 
 pub(super) use advertisement::AdvertisementProvider;
@@ -172,3 +232,6 @@ where
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod preparation_error_tests;
