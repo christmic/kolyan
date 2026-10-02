@@ -1,0 +1,204 @@
+[
+  {
+    "id": "neutral_exact",
+    "target": "neutral",
+    "delta": 0,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "neutral_over",
+    "target": "neutral",
+    "delta": 1,
+    "expected": "refused",
+    "error_contains": "neutral source"
+  },
+  {
+    "id": "generation_exact",
+    "target": "generation",
+    "delta": 0,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "generation_over",
+    "target": "generation",
+    "delta": 1,
+    "expected": "refused",
+    "error_contains": "generation wire"
+  },
+  {
+    "id": "count_exact",
+    "target": "count",
+    "delta": 0,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "count_over",
+    "target": "count",
+    "delta": 1,
+    "expected": "refused",
+    "error_contains": "count input"
+  },
+  {
+    "id": "provider_exact",
+    "target": "provider",
+    "mutation": "exact",
+    "limit": 128,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "provider_over",
+    "target": "provider",
+    "mutation": "over",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "provider_control",
+    "target": "provider",
+    "mutation": "control",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "provider_blank",
+    "target": "provider",
+    "mutation": "blank",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "model_exact",
+    "target": "model",
+    "mutation": "exact",
+    "limit": 512,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "model_over",
+    "target": "model",
+    "mutation": "over",
+    "limit": 512,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "model_control",
+    "target": "model",
+    "mutation": "control",
+    "limit": 512,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "model_blank",
+    "target": "model",
+    "mutation": "blank",
+    "limit": 512,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "mapping_revision_exact",
+    "target": "mapping_revision",
+    "mutation": "exact",
+    "limit": 128,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "mapping_revision_over",
+    "target": "mapping_revision",
+    "mutation": "over",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "mapping_revision_control",
+    "target": "mapping_revision",
+    "mutation": "control",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "mapping_revision_blank",
+    "target": "mapping_revision",
+    "mutation": "blank",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "coverage_revision_exact",
+    "target": "coverage_revision",
+    "mutation": "exact",
+    "limit": 128,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "coverage_revision_over",
+    "target": "coverage_revision",
+    "mutation": "over",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "coverage_revision_control",
+    "target": "coverage_revision",
+    "mutation": "control",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "coverage_revision_blank",
+    "target": "coverage_revision",
+    "mutation": "blank",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "counter_revision_exact",
+    "target": "counter_revision",
+    "mutation": "exact",
+    "limit": 128,
+    "expected": "success",
+    "error_contains": null
+  },
+  {
+    "id": "counter_revision_over",
+    "target": "counter_revision",
+    "mutation": "over",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "counter_revision_control",
+    "target": "counter_revision",
+    "mutation": "control",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  },
+  {
+    "id": "counter_revision_blank",
+    "target": "counter_revision",
+    "mutation": "blank",
+    "limit": 128,
+    "expected": "refused",
+    "error_contains": null
+  }
+]

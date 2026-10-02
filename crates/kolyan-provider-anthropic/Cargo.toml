@@ -15,4 +15,7 @@ kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
 serde_json.workspace = true
 
 [dev-dependencies]
+serde.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "net", "io-util", "time"] }
+tempfile = "3"
 kolyan-protocol-http = { path = "../kolyan-protocol-http" }

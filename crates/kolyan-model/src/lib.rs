@@ -1,5 +1,6 @@
 //! Provider-neutral model invocation types and interfaces.
 
+mod accounting;
 mod cache;
 mod capability;
 mod error;
@@ -12,6 +13,11 @@ mod tool;
 mod types;
 mod usage;
 
+pub use accounting::{
+    ContextProtocol, CountCoverage, CountProfile, CountSource, MAX_CONTEXT_JSON_BYTES,
+    MappingIdentity, PreparedContextWire, ProviderInputCount, context_json_bytes, digest_json,
+    endpoint_identity,
+};
 pub use cache::{CacheBreakpoint, CacheRetention, PromptCacheConfig};
 pub use capability::{ModelDescriptor, ModelFeature, ModelFeatures, ModelRef};
 pub use error::{ProviderError, ProviderErrorKind, ProviderErrorPhase};

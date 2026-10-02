@@ -1,0 +1,72 @@
+[
+  {
+    "id": "same_instance",
+    "mode": "same",
+    "expected": "success"
+  },
+  {
+    "id": "clone_token",
+    "mode": "clone",
+    "expected": "success"
+  },
+  {
+    "id": "foreign_token",
+    "mode": "foreign",
+    "expected": "refused"
+  },
+  {
+    "id": "endpoint_mismatch",
+    "mode": "endpoint",
+    "expected": "refused"
+  },
+  {
+    "id": "protocol_mismatch",
+    "mode": "protocol",
+    "expected": "refused"
+  },
+  {
+    "id": "model_mismatch",
+    "mode": "model",
+    "expected": "refused"
+  },
+  {
+    "id": "mapping_revision",
+    "mode": "mapping",
+    "expected": "refused"
+  },
+  {
+    "id": "coverage_revision",
+    "mode": "coverage_revision",
+    "expected": "refused"
+  },
+  {
+    "id": "profile_revision",
+    "mode": "profile",
+    "expected": "refused"
+  },
+  {
+    "id": "default_unsupported",
+    "mode": "unsupported",
+    "expected": "refused"
+  },
+  {
+    "id": "coverage_incomplete",
+    "mode": "coverage",
+    "expected": "refused"
+  },
+  {
+    "id": "wire_digest_corrupt",
+    "mode": "body",
+    "expected": "refused"
+  },
+  {
+    "id": "count_digest_corrupt",
+    "mode": "count_body",
+    "expected": "refused"
+  },
+  {
+    "id": "wire_size_corrupt",
+    "mode": "size",
+    "expected": "refused"
+  }
+]
