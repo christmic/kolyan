@@ -1,4 +1,7 @@
+mod initialization;
 mod session;
+
+pub use initialization::SessionInitialization;
 
 use kolyan_core::ApprovalRequest;
 use kolyan_model::Message;
@@ -37,6 +40,9 @@ pub struct FileApprovalStore {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SessionRecord {
     pub session_id: String,
+    /// Immutable host-bound initial projection, separate from later history.
+    #[serde(deserialize_with = "initialization::required_option")]
+    pub initialization: Option<SessionInitialization>,
     pub version: u64,
     pub turns: Vec<SessionTurn>,
     pub messages: Vec<Message>,
@@ -81,6 +87,13 @@ pub enum SessionTurnStatus {
 }
 
 pub trait SessionStore: Send + Sync {
+    /// Atomically create the full initial context or verify an identical retry.
+    /// Persistence does not authenticate the host's ownership or permission proof.
+    fn initialize(
+        &self,
+        session_id: &str,
+        initialization: &SessionInitialization,
+    ) -> Result<SessionRecord, StorageError>;
     fn begin_turn_with_projection(
         &self,
         _session_id: &str,

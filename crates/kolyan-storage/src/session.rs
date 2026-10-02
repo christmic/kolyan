@@ -12,7 +12,7 @@ impl FileSessionStore {
         })
     }
 
-    fn path(&self, session_id: &str) -> Result<PathBuf, StorageError> {
+    pub(super) fn path(&self, session_id: &str) -> Result<PathBuf, StorageError> {
         if session_id.is_empty()
             || session_id == "."
             || session_id == ".."
@@ -24,7 +24,10 @@ impl FileSessionStore {
         Ok(self.root.join(format!("{session_id}.json")))
     }
 
-    fn read(path: &std::path::Path, session_id: &str) -> Result<SessionRecord, StorageError> {
+    pub(super) fn read(
+        path: &std::path::Path,
+        session_id: &str,
+    ) -> Result<SessionRecord, StorageError> {
         let payload = fs::read(path).map_err(|error| {
             if error.kind() == std::io::ErrorKind::NotFound {
                 StorageError::NotFound(session_id.to_owned())
@@ -35,7 +38,10 @@ impl FileSessionStore {
         Ok(serde_json::from_slice(&payload)?)
     }
 
-    fn write(path: &std::path::Path, record: &SessionRecord) -> Result<(), StorageError> {
+    pub(super) fn write(
+        path: &std::path::Path,
+        record: &SessionRecord,
+    ) -> Result<(), StorageError> {
         let temp = path.with_extension("json.tmp");
         use std::io::Write;
         let mut file = fs::File::create(&temp)?;
@@ -48,7 +54,7 @@ impl FileSessionStore {
         Ok(())
     }
 
-    fn file_lock(&self) -> Result<fs::File, StorageError> {
+    pub(super) fn file_lock(&self) -> Result<fs::File, StorageError> {
         let file = fs::OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -108,6 +114,13 @@ impl FileSessionStore {
 }
 
 impl SessionStore for FileSessionStore {
+    fn initialize(
+        &self,
+        session_id: &str,
+        initialization: &SessionInitialization,
+    ) -> Result<SessionRecord, StorageError> {
+        self.initialize_context(session_id, initialization)
+    }
     fn create(&self, session_id: &str) -> Result<SessionRecord, StorageError> {
         let _guard = self.lock.lock().expect("session lock must not be poisoned");
         let _file_lock = self.file_lock()?;
@@ -117,6 +130,7 @@ impl SessionStore for FileSessionStore {
         }
         let record = SessionRecord {
             session_id: session_id.to_owned(),
+            initialization: None,
             version: 0,
             turns: Vec::new(),
             messages: Vec::new(),

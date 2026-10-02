@@ -1,9 +1,5 @@
 use super::*;
-use kolyan_core::{StepOutcome, StepResult};
-use kolyan_model::{
-    ContentBlock, Message, MessageRole, ModelRef, ModelResponse, StopReason, TokenUsage,
-};
-use serde_json::json;
+use kolyan_model::{ContentBlock, Message, MessageRole};
 
 #[test]
 fn versioned_turn_input_survives_reopen_and_serializes_pending_turns() {
@@ -74,57 +70,7 @@ fn request() -> ApprovalRequest {
         call_id: "call-1".into(),
         tool_name: "file.write".into(),
         reason: "requires approval".into(),
-        state: kolyan_core::ApprovalState::Pending,
         expires_at_ms: None,
-        continuation: kolyan_core::TurnContinuation {
-            continuation_id: "continuation-1".into(),
-            approval_id: "approval-1".into(),
-            turn_id: "turn-1".into(),
-            model_request: serde_json::from_value(json!({
-                "request_id":"r", "model":{"provider":"p","model":"m"},
-                "system":[], "messages":[], "tools":[], "tool_choice":"auto",
-                "output_format":null, "prompt_cache":null, "reasoning":null,
-                "max_output_tokens":null, "extensions":{}
-            }))
-            .unwrap(),
-            assistant_content: vec![],
-            pending_calls: vec![],
-            steps: vec![StepResult {
-                step_id: "s".into(),
-                response: ModelResponse {
-                    id: "r".into(),
-                    model: ModelRef {
-                        provider: "p".into(),
-                        model: "m".into(),
-                    },
-                    content: vec![],
-                    structured_output: None,
-                    stop_reason: StopReason::ToolUse,
-                    usage: TokenUsage::default(),
-                    metadata: json!({}),
-                },
-                outcome: StepOutcome::ToolCalls,
-            }],
-            max_steps: 2,
-            next_step_index: 1,
-            call_id: "call-1".into(),
-            tool_name: "file.write".into(),
-            args_fingerprint: "fp".into(),
-            policy_version: "v1".into(),
-            // Storage round-trips this opaque fixture; it is not executable authority.
-            prepared_calls: Vec::new(),
-            preparation_errors: Vec::new(),
-            execution_scope: serde_json::from_value(json!({
-                "execution": {"session_id":"session-1", "turn_id":"turn-1", "execution_id":"execution-1"},
-                "step_id":"turn-1-step-0", "agent_snapshot_digest":null
-            })).unwrap(),
-            approved_call_ids: Vec::new(),
-            max_tool_calls: None,
-            tool_calls_used: 0,
-            deadline_at_ms: None,
-            tool_dispatch: Default::default(),
-            tool_timeout_ms: None,
-        },
     }
 }
 
