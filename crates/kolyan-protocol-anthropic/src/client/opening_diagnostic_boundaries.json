@@ -1,0 +1,4 @@
+[
+  {"id":"pre_send_zero_attempts","attempts":0},
+  {"id":"eligible_send_no_remaining_window","attempts":1}
+]

@@ -9,6 +9,9 @@ workspace = true
 
 [dependencies]
 kolyan-protocol-sse = { path = "../kolyan-protocol-sse" }
+kolyan-protocol-http = { path = "../kolyan-protocol-http" }
+tokio.workspace = true
+fastrand = "2"
 bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
@@ -19,3 +22,5 @@ thiserror.workspace = true
 
 [dev-dependencies]
 http = "1"
+tempfile = "3"
+tokio = { workspace = true, features = ["rt", "net", "io-util"] }

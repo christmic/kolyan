@@ -9,4 +9,7 @@ pub mod sse;
 pub use client::AnthropicClient;
 pub use config::AnthropicConfig;
 pub use error::{AnthropicError, ResponseDiagnostics};
+pub use kolyan_protocol_http::{
+    HttpRetryPolicy, ResponseWithRetryReport, RetryProfile, RetryReport,
+};
 pub use messages::{Message, MessageCreateRequest, MessageStream, MessageStreamEvent, Tool};

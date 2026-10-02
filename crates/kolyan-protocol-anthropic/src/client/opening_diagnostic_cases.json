@@ -1,0 +1,7 @@
+[
+  {"id":"single_401","statuses":[401],"mode":"http","attempts":1,"status":401,"stop":"Ineligible"},
+  {"id":"single_unknown_429","statuses":[429],"mode":"http","attempts":1,"status":429,"stop":"UnknownRateLimit"},
+  {"id":"single_headers_expire","statuses":[200],"mode":"headers","attempts":1,"status":null,"stop":"ElapsedLimit"},
+  {"id":"single_401_body_expire","statuses":[401],"mode":"body","attempts":1,"status":401,"stop":"ElapsedLimit"},
+  {"id":"529_then_401","statuses":[529,401],"mode":"http","attempts":2,"status":401,"stop":"Ineligible"}
+]

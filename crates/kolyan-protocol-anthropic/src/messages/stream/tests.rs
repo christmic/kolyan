@@ -18,6 +18,7 @@ fn fixture(chunks: Vec<Vec<u8>>) -> MessageStream {
         },
         capture_tail: false,
         tail: Vec::new(),
+        retry_report: Default::default(),
     }
 }
 

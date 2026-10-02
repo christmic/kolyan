@@ -15,6 +15,7 @@ pub struct MessageStream {
     diagnostics: ResponseDiagnostics,
     capture_tail: bool,
     tail: Vec<u8>,
+    retry_report: kolyan_protocol_http::RetryReport,
 }
 
 impl MessageStream {
@@ -42,7 +43,18 @@ impl MessageStream {
             diagnostics,
             capture_tail,
             tail: Vec::new(),
+            retry_report: Default::default(),
         }
+    }
+
+    pub(crate) fn with_retry_report(mut self, report: kolyan_protocol_http::RetryReport) -> Self {
+        self.retry_report = report;
+        self
+    }
+
+    /// Local opening observations, not Anthropic wire metadata. Stream errors never reopen.
+    pub fn retry_report(&self) -> &kolyan_protocol_http::RetryReport {
+        &self.retry_report
     }
 
     fn record_bytes(&mut self, bytes: &[u8]) {
@@ -64,6 +76,7 @@ impl MessageStream {
             source,
             diagnostics: Some(self.diagnostics.clone()),
         }
+        .with_retry_report(&self.retry_report)
     }
 }
 
@@ -76,7 +89,9 @@ impl Stream for MessageStream {
                 if event == "error" {
                     self.done = true;
                     self.pending.clear();
-                    return Poll::Ready(Some(Err(AnthropicError::Api(data))));
+                    return Poll::Ready(Some(Err(
+                        AnthropicError::Api(data).with_retry_report(&self.retry_report)
+                    )));
                 }
                 if !matches!(
                     event.as_str(),
@@ -105,14 +120,18 @@ impl Stream for MessageStream {
                     self.done = true;
                     self.pending.clear();
                 }
-                return Poll::Ready(Some(result));
+                return Poll::Ready(Some(
+                    result.map_err(|error| error.with_retry_report(&self.retry_report)),
+                ));
             }
             if self.done {
                 return Poll::Ready(None);
             }
             if let Some(error) = self.decoder.take_error() {
                 self.done = true;
-                return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
+                return Poll::Ready(Some(Err(
+                    AnthropicError::Framing(error).with_retry_report(&self.retry_report)
+                )));
             }
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {
@@ -123,7 +142,8 @@ impl Stream for MessageStream {
                             .extend(events.into_iter().map(|event| (event.kind, event.data))),
                         Err(error) => {
                             self.done = true;
-                            return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
+                            return Poll::Ready(Some(Err(AnthropicError::Framing(error)
+                                .with_retry_report(&self.retry_report))));
                         }
                     }
                 }
@@ -134,7 +154,9 @@ impl Stream for MessageStream {
                 Poll::Ready(None) => {
                     self.done = true;
                     if let Err(error) = self.decoder.finish() {
-                        return Poll::Ready(Some(Err(AnthropicError::Framing(error))));
+                        return Poll::Ready(Some(Err(
+                            AnthropicError::Framing(error).with_retry_report(&self.retry_report)
+                        )));
                     }
                 }
                 Poll::Pending => return Poll::Pending,

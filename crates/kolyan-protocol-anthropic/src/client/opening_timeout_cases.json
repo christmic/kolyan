@@ -1,0 +1,127 @@
+[
+  {
+    "id": "initial_401_body_timeout",
+    "http_retries": 2,
+    "transport_retries": 1,
+    "window_ms": 80,
+    "server_delay_ms": 60,
+    "mode": "stream",
+    "expected_error": "http",
+    "expected_stop": null,
+    "expected_basis": null,
+    "expected_http_body": "error body read exceeded opening budget",
+    "responses": [
+      {
+        "status": 401,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 1,
+    "expected_http_status": 401
+  },
+  {
+    "id": "after_529_401_body_timeout",
+    "http_retries": 2,
+    "transport_retries": 1,
+    "window_ms": 80,
+    "server_delay_ms": 60,
+    "mode": "stream",
+    "expected_error": "http",
+    "expected_stop": "ElapsedLimit",
+    "expected_basis": null,
+    "expected_http_body": "error body read exceeded opening budget",
+    "responses": [
+      {
+        "status": 529,
+        "body": "{\"error\":{\"code\":\"overloaded_error\"}}",
+        "headers": {
+          "retry-after-ms": "1"
+        }
+      },
+      {
+        "status": 401,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 2,
+    "expected_http_status": 401
+  },
+  {
+    "id": "initial_429_body_timeout",
+    "http_retries": 2,
+    "transport_retries": 1,
+    "window_ms": 80,
+    "server_delay_ms": 60,
+    "mode": "stream",
+    "expected_error": "http",
+    "expected_stop": null,
+    "expected_basis": null,
+    "expected_http_body": "error body read exceeded opening budget",
+    "responses": [
+      {
+        "status": 429,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 1,
+    "expected_http_status": 429
+  },
+  {
+    "id": "after_529_429_body_timeout",
+    "http_retries": 2,
+    "transport_retries": 1,
+    "window_ms": 80,
+    "server_delay_ms": 60,
+    "mode": "stream",
+    "expected_error": "http",
+    "expected_stop": "ElapsedLimit",
+    "expected_basis": null,
+    "expected_http_body": "error body read exceeded opening budget",
+    "responses": [
+      {
+        "status": 529,
+        "body": "{\"error\":{\"code\":\"overloaded_error\"}}",
+        "headers": {
+          "retry-after-ms": "1"
+        }
+      },
+      {
+        "status": 429,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 2,
+    "expected_http_status": 429
+  },
+  {
+    "id": "after_529_header_timeout_is_transport_not_prior_http",
+    "http_retries": 2,
+    "transport_retries": 1,
+    "window_ms": 80,
+    "server_delay_ms": 60,
+    "mode": "stream",
+    "expected_error": "transport",
+    "expected_stop": "ElapsedLimit",
+    "expected_basis": null,
+    "expected_http_body": null,
+    "responses": [
+      {
+        "status": 529,
+        "body": "{\"error\":{\"code\":\"overloaded_error\"}}",
+        "headers": {
+          "retry-after-ms": "1"
+        }
+      },
+      {
+        "status": 200,
+        "body": "",
+        "stall_ms": 160
+      }
+    ],
+    "expected_requests": 2
+  }
+]
