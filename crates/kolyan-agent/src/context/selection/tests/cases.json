@@ -1,0 +1,2040 @@
+[
+  {
+    "id": "reused_original_pairs",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          3,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          4,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          7,
+          10
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "zero_candidates",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 0,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          10
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "batch_reversed_results_with_empty_message",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "b",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "b",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": []
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "a",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          7
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          5,
+          7
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          6,
+          7
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "mixed_result_latest_input_protects_call",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "a",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          },
+          {
+            "type": "text",
+            "text": "New objective"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          4
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          4
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "same_anchor_all_tail",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "a",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          4
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "ten_groups_eight_candidates",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          3,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          4,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          5,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          6,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          8,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          9,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          10,
+          12
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          11,
+          12
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "no_optional_groups",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          2
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "reasoning_opaque_unicode",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "reasoning",
+            "text": "思考",
+            "opaque": {
+              "signature": "opaque",
+              "nested": [
+                1,
+                null
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          3
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          2,
+          3
+        ]
+      ]
+    ],
+    "projection_error": null
+  },
+  {
+    "id": "identity",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "identity",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "bytes",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "bytes",
+    "expected": "size_limit",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "messages",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "messages",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "blocks",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "blocks",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "over_candidate_limit",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 9,
+    "mutation": "none",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "no_anchor",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "dangling_result",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "absent",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "duplicate_active_call",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          },
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "duplicate_result",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "a",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "a",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          },
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "a",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "none",
+    "expected": "invalid",
+    "ranges": [],
+    "projection_error": null
+  },
+  {
+    "id": "missing_output_not_normalized",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "missing_output",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          3,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          4,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          7,
+          10
+        ]
+      ]
+    ],
+    "projection_error": "invalid"
+  },
+  {
+    "id": "unknown_strict_budget",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "reuse",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "reuse",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "text",
+            "text": "History"
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "Objective"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "call": {
+              "id": "now",
+              "name": "file.read",
+              "arguments": {
+                "path": "safe/proof.txt"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "result": {
+              "call_id": "now",
+              "content": "完整 actual result",
+              "is_error": false
+            }
+          }
+        ]
+      }
+    ],
+    "limit": 8,
+    "mutation": "strict",
+    "expected": "passed",
+    "ranges": [
+      [
+        [
+          0,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          3,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          4,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      [
+        [
+          0,
+          1
+        ],
+        [
+          7,
+          10
+        ]
+      ]
+    ],
+    "projection_error": "unknown_budget"
+  },
+  {
+    "id":"cache_breakpoints_preserved",
+    "messages":[
+      {"role":"user","content":[{"type":"text","text":"Objective"}]},
+      {"role":"assistant","content":[{"type":"text","text":"Old complete history"}]},
+      {"role":"user","content":[{"type":"text","text":"Current"}]}
+    ],
+    "limit":8,"mutation":"cache","expected":"passed",
+    "ranges":[[[0,3]],[[0,1],[2,3]]],"projection_error":null
+  }
+]

@@ -170,6 +170,19 @@ fn source_bytes(source: &ModelRequest, bounds: &ContextPolicy) -> Result<Vec<u8>
 }
 
 fn preserve_original_pairs(source: &ModelRequest, retained: &[bool]) -> Result<(), ContextError> {
+    visit_original_pairs(source, |call_index, result_index| {
+        if retained[call_index] != retained[result_index] {
+            return Err(invalid("projection split an original tool pair"));
+        }
+        Ok(())
+    })
+}
+
+/// Visit source-position pairs, releasing IDs after their original results.
+pub(super) fn visit_original_pairs(
+    source: &ModelRequest,
+    mut visit: impl FnMut(usize, usize) -> Result<(), ContextError>,
+) -> Result<(), ContextError> {
     let mut pending = BTreeMap::new();
     for (index, message) in source.messages.iter().enumerate() {
         for block in &message.content {
@@ -183,9 +196,7 @@ fn preserve_original_pairs(source: &ModelRequest, retained: &[bool]) -> Result<(
                         .ok_or_else(|| invalid("source tool result has no call"))?;
                     // Step-scoped IDs may recur. Validate the original pair,
                     // not an accidental match across omitted historical Steps.
-                    if retained[call_index] != retained[index] {
-                        return Err(invalid("projection split an original tool pair"));
-                    }
+                    visit(call_index, index)?;
                 }
                 _ => {}
             }

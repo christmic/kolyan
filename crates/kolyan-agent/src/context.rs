@@ -3,12 +3,14 @@
 //! invisibly inside a Provider. Strict budgets require a trusted model counter.
 
 mod projection;
+mod selection;
 mod validation;
 
 pub use projection::{
     ContextProjectionPlan, ProjectedContext, ProjectionProvenance, context_source_digest,
     project_context,
 };
+pub use selection::{SelectionPolicy, selection_candidates};
 
 use kolyan_model::{ModelDescriptor, ModelRequest};
 use serde::{Deserialize, Serialize};
