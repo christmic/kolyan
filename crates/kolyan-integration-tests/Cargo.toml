@@ -54,6 +54,10 @@ name = "agent_root"
 path = "tests/agent/root.rs"
 
 [[test]]
+name = "agent_host"
+path = "tests/agent_host.rs"
+
+[[test]]
 name = "agent_long_task"
 path = "tests/agent/long_task.rs"
 
@@ -175,6 +179,7 @@ sha2 = "0.10"
 # OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
 kolyan-core = { path = "../kolyan-core" }
 kolyan-agent = { path = "../kolyan-agent" }
+kolyan-agent-host = { path = "../kolyan-agent-host" }
 kolyan-types = { path = "../kolyan-types" }
 kolyan-storage = { path = "../kolyan-storage" }
 kolyan-model = { path = "../kolyan-model" }

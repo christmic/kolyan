@@ -804,3 +804,26 @@ Main 库门禁 `/tmp/kolyan-agent-host-main-module-v1.log` 退出 0，三项
 测试通过；其中共享 Skills 仓重建的四行 JSONL 已关闭并物理回读，未产生
 独立 skills 存储。这仅证明基础装配及仓重建，实际 localhost/native 宿主
 场景、Main 完整联合门和唯一 MiniMax Skills 矩阵仍待下一批验证。
+
+### Main 宿主真实 OS 场景
+
+随后 Main `agent_host` localhost/native 门禁退出 0，日志
+`/tmp/kolyan-agent-host-main-native-v1.log`，54.63 秒。18 行数据场景分别
+通过 OpenAI Responses 与 Anthropic Messages，共 36 行：具名/内联、
+无 Goal 回答/读取、实际写入满足/不满足、根及子审批、重建、撤权、缺密钥、
+错误逻辑 Session、重复确认、多审批、串行子任务写入和取消均比较。
+这些由实际 Host、SDK、SQLite、文件 Session 与原生 worker 完成；模型
+回复是明确标记的 localhost fixture，不是 MiniMax。
+
+审查发现隔离 worker 原测试用 4096 超过 FactJournal 每页 1024 上限，
+原 36 行 `task_facts` 是错误对象，而旧断言未检查。Main 保留该失败证据
+F2Qycj，只修新增框架为连续分页读取，并加强每行非空 facts/events 与
+错误字段断言；原 18 场景、输入和预期不改，生产宿主代码未因此改动。
+重新导出的
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-agent-host-native-gqGXOp/actual.jsonl`
+已关闭回读，36 行 facts/events 均为完整数组且无导出错误。
+
+同源码 workspace/all-target Clippy 退出 0，日志
+`/tmp/kolyan-agent-host-main-strict-v1.log`。完整 Main 联合回归、产品服务/CLI
+入口、当前 ACL Skills 场景和唯一 MiniMax 矩阵仍是独立后续门，不能由本节
+推断整个 E0–E5 演进已经完成。

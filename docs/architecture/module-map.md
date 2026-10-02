@@ -16,7 +16,8 @@
 | `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-provider-anthropic` | Anthropic 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-tools` | Tool trait、注册、执行 | 长期记忆 |
-| `kolyan-agent` | Immutable definitions, named/inline resolution and permission snapshots; execution integration is in progress | HTTP transport, SDK or sandbox internals |
+| `kolyan-agent` | 具名/内联定义、权限快照、Root/Child/Continuation 执行与治理、Skills 选择性加载 | HTTP 传输、SDK 或 OS 隔离实现 |
+| `kolyan-agent-host` | 配置实际 Provider、原生工具、持久化仓与 Goal checker，复用 AgentRunner 装配产品宿主 | HTTP/CLI 传输、另一个 Agent loop、用户鉴权、分布式租约 |
 | `kolyan-sandbox` | Host-admitted macOS process isolation and cleanup | Permission issuance or Agent scheduling |
 | `kolyan-tool-worker` | One-shot trusted file helper with bounded typed stdin | Authorization, ambient shell execution or self-established sandbox |
 | `kolyan-policy` | 权限、审批、治理策略 | 模型推理 |
