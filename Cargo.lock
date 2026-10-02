@@ -869,6 +869,7 @@ dependencies = [
  "kolyan-model",
  "kolyan-policy",
  "kolyan-runtime",
+ "kolyan-sandbox",
  "kolyan-server",
  "kolyan-storage",
  "kolyan-tools",

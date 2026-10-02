@@ -885,3 +885,49 @@ passed, zero failed and 67 ignored. The terminal receipt and complete log were
 checked without restarting the live gate. Ignored provider-network cases were
 not executed. This is the integrated foundation regression, not acceptance of
 the still-unwired mandatory opening consumer.
+
+### Mandatory Driver binding and authenticated resume deadlines
+
+The next Runtime slice is released for implementation. Add mandatory
+`ModelOpeningServices::new(Arc<dyn FactJournal>, ModelOpeningInspectionLimits)`
+to Driver construction. There is no default journal, unlimited inspection
+fallback or no-op binding. All model-driving start/resume/recovery paths require
+`BindOpeningAttempt`; standalone Core/SDK and pure approval Deny remain separate.
+Server passes the actual configured journal; Agent guard wrappers forward the
+binding without dropping their asynchronous checks. Host explicitly chooses the
+opening accounting policy instead of promoting its Inspect estimator to tokens.
+
+Replace the attempt's initial-only constructor with `from_prefix` and a required
+exact through-coordinate. The reader exposes the authenticated effective deadline,
+its Ledger source, and the actual typed completed StepResult. Without a validated
+merge, the opening cutoff must still exactly equal initial admission. A tighter
+cutoff becomes effective only through a strictly validated TurnCheckpointMerged:
+schema, canonical identity/digest, publication source, independently admitted
+scope/ceilings, exact completed Step history and physical event ordering. Each
+merge can only tighten the previously effective cutoff; an opening must exactly
+match that current cutoff. Merely checking `opening <= initial` is insufficient.
+The retained no-merge `initial=null/opening=1000` negative must still reject.
+
+Approval/external/committed recovery inspect the complete bounded prefix before
+hydration, external recovery or effects. Uncertain openings forbid redispatch.
+Validated checkpoint restoration, merge, commit, binding, count, GEN and Core use
+the same control and deadline anchor; bind only after the durable merged source.
+Checkpoint history comparison consumes the reader's authenticated typed results,
+not a three-field payload equality that would reject new opening references.
+
+Recorder append returns the exact acknowledgement. It publishes ModelRequested
+from that source, injects private opening references only into Core's actual
+StepCompleted after validated stream EOF, then verifies the completion ack.
+The Driver consumes retained typed causes, not only their Provider error string.
+Count timeout is distinct from execution deadline; storage cause and failed
+physical closure must both remain visible. RuntimeError gains typed Opening,
+OpeningClosure and OpeningUncertain outcomes. No pre-start terminal is invented.
+
+The Runtime worker owns Driver/recorder plus narrow reader/attempt migrations and
+independent tests. Server constructor/bounds and module fixture migration form a
+separate reviewed write set; Main owns Agent/Host/service entrypoints and central
+integration. Existing 163 reader and 20 consumer expectations remain intact;
+synthetic test providers explicitly exercise prepared/count/admitted generation,
+never implement a pass-through Bind or fabricate proof. Actual Host SDK, guards,
+root/child/resume/pump and public retry/failure enforcement are acceptance gates,
+not consequences of this specification or a private Runtime-only test pass.

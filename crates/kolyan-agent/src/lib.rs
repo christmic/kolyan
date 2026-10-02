@@ -10,6 +10,7 @@ mod catalog;
 pub mod context;
 mod definition;
 mod goals;
+pub mod hooks;
 mod invoke;
 mod permission;
 pub mod provider;

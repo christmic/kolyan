@@ -268,3 +268,18 @@ operation_id 绑定原 binding，重复 dispatch 拒绝；Started 无 Completed 
 直接依赖 kolyan-sandbox（Tokio 显式 time feature）、integration Cargo 的 agent_hooks
 test target 指向 tests/agent/hooks.rs。原 lib/Cargo/lock 与既有测试均保持基线字节。
 所有 proof 在 target 外；缓存约 1.3 GiB，所有本批 gate 终态，无网络/commit/push。
+
+## Main production foundation integration
+
+Main verified all 21 source/fixture digests before import. This first code batch
+integrates the eight production files, public module and direct Sandbox/time
+dependencies. Cargo.lock adds only the existing local Sandbox dependency edge,
+not a new package. The test module declaration is added with its independent
+tests in the immediately following batch; no existing test was removed or edited.
+
+The production module compiles and existing Agent regression exited 0 with
+109 passed, zero failed or ignored in
+`/tmp/kolyan-hooks-main-foundation-module-v1.log`. Workspace/all-target strict
+Clippy exited 0 in `/tmp/kolyan-hooks-main-foundation-strict-v1.log`. This proves
+foundation integration and existing regression, not Main's new 62 data rows,
+native 16-row gate, Runner/Runtime consumers or actual-model acceptance.
