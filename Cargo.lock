@@ -891,6 +891,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "kolyan-agent-host"
+version = "0.1.0"
+dependencies = [
+ "kolyan-agent",
+ "kolyan-core",
+ "kolyan-ledger",
+ "kolyan-model",
+ "kolyan-policy",
+ "kolyan-protocol-anthropic",
+ "kolyan-protocol-http",
+ "kolyan-protocol-openai",
+ "kolyan-provider-anthropic",
+ "kolyan-provider-openai",
+ "kolyan-runtime",
+ "kolyan-server",
+ "kolyan-storage",
+ "kolyan-tools",
+ "kolyan-trace",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "kolyan-cli"
 version = "0.1.0"
 

@@ -1,0 +1,6 @@
+[
+  {"id":"same_namespace_rebuild","namespace":"host-skills","body":"Exact trusted recipe\n","revoke":false,"same_fact":true,"conflict":false},
+  {"id":"changed_acl_rebuild","namespace":"host-skills","body":"Exact trusted recipe\n","revoke":false,"same_fact":true,"conflict":false},
+  {"id":"immutable_body_conflict","namespace":"host-skills","body":"substituted recipe","revoke":false,"same_fact":false,"conflict":true},
+  {"id":"revoked_history_retained","namespace":"host-skills","body":"Exact trusted recipe\n","revoke":true,"same_fact":true,"conflict":false}
+]

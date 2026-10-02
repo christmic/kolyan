@@ -784,3 +784,23 @@ Agent 根/子拒绝或 MiniMax 验收。那些消费者仍待分批集成与 Mai
 Provider factory 不可用、错误 owner/checkpoint/scope，以及 RootOnly 与
 AllInvocations 取消策略的区别。拒绝不增加模型请求、不产生工具效果；
 所有旧测试断言保持。这个消费者门禁不替代生产 Host 或真实模型验收。
+
+### 生产宿主库装配
+
+Main 随后合入 `kolyan-agent-host`。宿主复用真实 Runner、Task/Session/
+Runtime、SQLite、Required ArtifactStore、原生四工具与独立 Goal checker，
+提供 start/query/cancel/审批决定；不复制模型 loop、不增加自动纠错。
+Provider 由精确配置选择，密钥仅在执行 factory 中从环境读取。query、
+cancel、Deny 与纯库装配不为此创建 HTTP client。
+
+`AgentHost::open_with_skills(config, HostSkillsConfig { namespace, limits, policy })`
+使用同一 `facts.sqlite` 与 Required 内容仓，`skill_catalog()` 只提供可信
+管理入口。Runner.with_skills 在 Arc 和 child verifier attach 前接入。
+重建显式传入当前 ACL，历史 provenance 不成为当前执行许可；未配置 Skills
+明确不装配这一能力。HostProvider 转发真实 SDK opaque prepared plan，
+不重新映射或混用两协议的计量结果。
+
+Main 库门禁 `/tmp/kolyan-agent-host-main-module-v1.log` 退出 0，三项
+测试通过；其中共享 Skills 仓重建的四行 JSONL 已关闭并物理回读，未产生
+独立 skills 存储。这仅证明基础装配及仓重建，实际 localhost/native 宿主
+场景、Main 完整联合门和唯一 MiniMax Skills 矩阵仍待下一批验证。

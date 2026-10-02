@@ -1,0 +1,9 @@
+[
+  {"id":"workspace","path":".","allowed":true},
+  {"id":"child","path":"child","allowed":true},
+  {"id":"empty","path":"","allowed":false},
+  {"id":"absolute","path":"/private/tmp","allowed":false},
+  {"id":"parent","path":"../outside","allowed":false},
+  {"id":"embedded-parent","path":"child/../child","allowed":false},
+  {"id":"missing","path":"missing","allowed":false}
+]

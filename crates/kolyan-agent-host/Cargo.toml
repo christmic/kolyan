@@ -1,0 +1,34 @@
+[package]
+name = "kolyan-agent-host"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+kolyan-agent = { path = "../kolyan-agent" }
+kolyan-core = { path = "../kolyan-core" }
+kolyan-ledger = { path = "../kolyan-ledger" }
+kolyan-model = { path = "../kolyan-model" }
+kolyan-policy = { path = "../kolyan-policy" }
+kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
+kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
+kolyan-protocol-http = { path = "../kolyan-protocol-http" }
+kolyan-provider-anthropic = { path = "../kolyan-provider-anthropic" }
+kolyan-provider-openai = { path = "../kolyan-provider-openai" }
+kolyan-runtime = { path = "../kolyan-runtime" }
+kolyan-server = { path = "../kolyan-server" }
+kolyan-storage = { path = "../kolyan-storage" }
+kolyan-tools = { path = "../kolyan-tools" }
+kolyan-trace = { path = "../kolyan-trace" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt", "sync"] }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt", "time"] }
