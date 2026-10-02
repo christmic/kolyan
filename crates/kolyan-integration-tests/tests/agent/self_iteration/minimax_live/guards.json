@@ -1,0 +1,32 @@
+{
+  "cases": [
+    {
+      "mutation": "valid",
+      "expected_valid": true
+    },
+    {
+      "mutation": "family",
+      "expected_valid": false
+    },
+    {
+      "mutation": "path",
+      "expected_valid": false
+    },
+    {
+      "mutation": "budget",
+      "expected_valid": false
+    },
+    {
+      "mutation": "identity",
+      "expected_valid": false
+    },
+    {
+      "mutation": "review_write",
+      "expected_valid": false
+    },
+    {
+      "mutation": "missing_stage",
+      "expected_valid": false
+    }
+  ]
+}

@@ -1,0 +1,393 @@
+{
+  "task": {
+    "schema_version": 1,
+    "case_revision": "minimax-independent-v1",
+    "task_facts": {
+      "module_entry": "crates/kolyan-server/src/tasks.rs",
+      "public_export_entry": "crates/kolyan-server/src/lib.rs",
+      "initial_candidate_file_presence": [
+        true,
+        true,
+        false,
+        false
+      ],
+      "dataset_requirements": "The new JSON dataset has exactly schema_version (integer 1) and cases. Each case has exactly state (the serialized enum name) and terminal (boolean). Seven unique complete states are required. Case order is not significant. Tests call the public helper repeatedly on the same Copy value and verify self unchanged. Export all observations before comparing. The existing tests.rs change is only one independent module declaration; preserve all existing modules/tests. Initially absent candidate files are intentional new implementation/test artifacts, not files to read before creation. Module entry paths below are verified host facts, not guessed Rust mod.rs layout. Actual case observations use stdout single-line JSON with event candidate_invocation_state_v1, schema_version 1, plain enum names for state/before/after, and results containing three booleans. Collect/export ALL seven rows BEFORE any case assertion. Host validates these observations and independently compiles the public oracle. JSON content \"\\n\" decodes to LF; \"\\\\n\" is literal backslash+n. Include actual final LF when a file requires it; the host never trims or formats."
+    },
+    "family": "minimax",
+    "surface": "anthropic_compat",
+    "model": "MiniMax-M3",
+    "task_id": "kolyan-self-iteration-minimax-independent-v1",
+    "logical_session_id": "self-iteration-minimax-independent-v1",
+    "instructions": "You are Kolyan executing a human-authorized small implementation in an isolated worktree. Implement only the public pure InvocationState::is_terminal(self) -> bool query. Completed, Failed and Cancelled are terminal; Admitted, Running, Suspended and RecoveryRequired are not. Preserve enum representation, transitions, policy, TaskState and unrelated code. Only modify the four explicitly admitted files. Production source contains no inline tests. Use actual file.read/write/edit results; do not invent reads, writes, tests, or successful validation. Shell, Git, network and host commands are not tools for this task. The host independently runs fixed Cargo validation and supplies its actual logs. Every stage must use actual admitted file tools. Keep Rust formatted. Do not request delegation or alter authority.",
+    "allowlist": [
+      "crates/kolyan-server/src/tasks/types.rs",
+      "crates/kolyan-server/src/tasks/tests.rs",
+      "crates/kolyan-server/src/tasks/tests/invocation_state.rs",
+      "crates/kolyan-server/src/tasks/tests/invocation_state.json"
+    ],
+    "expected_states": [
+      {
+        "state": "Admitted",
+        "terminal": false
+      },
+      {
+        "state": "Running",
+        "terminal": false
+      },
+      {
+        "state": "Suspended",
+        "terminal": false
+      },
+      {
+        "state": "Completed",
+        "terminal": true
+      },
+      {
+        "state": "Failed",
+        "terminal": true
+      },
+      {
+        "state": "Cancelled",
+        "terminal": true
+      },
+      {
+        "state": "RecoveryRequired",
+        "terminal": false
+      }
+    ],
+    "stages": [
+      {
+        "id": "inspect",
+        "writable": false,
+        "input": "Read crates/kolyan-server/src/tasks/types.rs and crates/kolyan-server/src/tasks/tests.rs using actual file tools. Inspect the enum, surrounding organization and existing test conventions. Explain a minimal plan for the exact helper and separate data-driven tests. Do not modify files in this stage.",
+        "kind": "inspect"
+      },
+      {
+        "id": "implement",
+        "writable": true,
+        "input": "Implement only public InvocationState::is_terminal(self) -> bool in crates/kolyan-server/src/tasks/types.rs. Exactly Completed, Failed and Cancelled return true; the other four return false. Do not modify TaskState, enum serialization or transitions. Use actual file tools to read current bytes and apply a minimal change. Do not add inline tests. Confirm the actual result with file.read.",
+        "kind": "implement"
+      },
+      {
+        "id": "tests",
+        "writable": true,
+        "input": "Add an independent test module crates/kolyan-server/src/tasks/tests/invocation_state.rs and its declaration in tasks/tests.rs. Add the independent dataset tasks/tests/invocation_state.json with exactly {schema_version:1,cases:[{state:<enum serialized name>,terminal:<boolean>}]} and seven unique complete enum states with the exact semantics. Tests must call the actual public state.is_terminal() method, not reproduce its matching logic. Call it repeatedly on the same Copy value and assert identical results and preservation of self. Collect and print all actual case results before any case comparison. Read existing conventions first; use actual file tools, preserve all old tests, and confirm final bytes. Print all seven observations to stdout before any comparison, with exact fields event, schema_version, state, before, after and results:[bool,bool,bool]. No stderr observations. before/after are plain enum variant names, not quoted serialized JSON embedded inside strings.",
+        "kind": "tests"
+      },
+      {
+        "id": "initial-review",
+        "kind": "initial_review",
+        "writable": false,
+        "input": "Read ALL four candidate paths with actual file.read calls in this stage. Return exactly ONE final Text JSON object <=32768 UTF-8 bytes: {schema_version:1,candidate_digests:{each exact admitted path:current SHA-256 from actual reads},verdict:\"accept\"|\"repair\",findings:[{path:exact admitted path,issue:nonempty string}]}. No markdown, prose, extra fields or duplicate keys. Accept requires zero findings; repair requires 1..16. Reasoning is not the verdict. Digest values must match actual current candidate bytes. Honest independent host failures cannot be overridden. This stage is read-only."
+      },
+      {
+        "id": "repair",
+        "kind": "repair",
+        "writable": true,
+        "input": "Exactly one predefined repair continuation. Use supplied actual host validation observations, candidate digests and initial review findings. Read current candidate bytes and make only corrective edits within the same four admitted paths. Keep all previous tests and seven states. Format Rust manually with file tools; no Shell or host commands. Do not fabricate successful checks. Confirm resulting bytes with actual reads."
+      },
+      {
+        "id": "final-review",
+        "kind": "final_review",
+        "writable": false,
+        "input": "Read ALL four candidate paths with actual file.read calls in this stage. Return exactly ONE final Text JSON object <=32768 UTF-8 bytes: {schema_version:1,candidate_digests:{each exact admitted path:current SHA-256 from actual reads},verdict:\"accept\"|\"repair\",findings:[{path:exact admitted path,issue:nonempty string}]}. No markdown, prose, extra fields or duplicate keys. Accept requires zero findings; repair requires 1..16. Reasoning is not the verdict. Digest values must match actual current candidate bytes. Honest independent host failures cannot be overridden. This stage is read-only. This is the final review: only accept plus passing independent fixed checks permits success. A repair verdict or failed checks closes this Task; no further repair is available."
+      }
+    ],
+    "max_steps": 16,
+    "max_tool_calls": 40,
+    "output_reserve_tokens": 16384,
+    "inspection_window_assumption_tokens": 65536,
+    "host_validation_timeout_ms": 600000,
+    "host_validation_max_bytes": 1048576,
+    "workflow": "bounded_repair"
+  },
+  "flows": [
+    {
+      "id": "pass-no-repair",
+      "initial_checks": true,
+      "initial_verdict": "accept",
+      "initial_reads": 4,
+      "post_checks": true,
+      "final_verdict": "accept",
+      "final_reads": 4,
+      "repair_writable": true,
+      "expected_stages": [
+        "inspect",
+        "implement",
+        "tests",
+        "initial_review",
+        "final_review"
+      ],
+      "expected_success": true
+    },
+    {
+      "id": "format-repair",
+      "initial_checks": false,
+      "initial_verdict": "accept",
+      "initial_reads": 4,
+      "post_checks": true,
+      "final_verdict": "accept",
+      "final_reads": 4,
+      "repair_writable": true,
+      "expected_stages": [
+        "inspect",
+        "implement",
+        "tests",
+        "initial_review",
+        "repair",
+        "final_review"
+      ],
+      "expected_success": true
+    },
+    {
+      "id": "missing-review-receipt",
+      "initial_checks": false,
+      "initial_verdict": "repair",
+      "initial_reads": 3,
+      "post_checks": true,
+      "final_verdict": "accept",
+      "final_reads": 4,
+      "repair_writable": true,
+      "expected_stages": [
+        "inspect",
+        "implement",
+        "tests",
+        "initial_review"
+      ],
+      "expected_success": false
+    },
+    {
+      "id": "second-failure",
+      "initial_checks": false,
+      "initial_verdict": "repair",
+      "initial_reads": 4,
+      "post_checks": false,
+      "final_verdict": "accept",
+      "final_reads": 4,
+      "repair_writable": true,
+      "expected_stages": [
+        "inspect",
+        "implement",
+        "tests",
+        "initial_review",
+        "repair",
+        "final_review"
+      ],
+      "expected_success": false
+    },
+    {
+      "id": "readonly-repair-blocked",
+      "initial_checks": false,
+      "initial_verdict": "repair",
+      "initial_reads": 4,
+      "post_checks": true,
+      "final_verdict": "accept",
+      "final_reads": 4,
+      "repair_writable": false,
+      "expected_stages": [],
+      "expected_success": false
+    }
+  ],
+  "review_cases": [
+    {
+      "id": "accept",
+      "mutation": "none",
+      "expected_valid": true
+    },
+    {
+      "id": "repair",
+      "mutation": "repair",
+      "expected_valid": true
+    },
+    {
+      "id": "wrong-schema",
+      "mutation": "wrong_schema",
+      "expected_valid": false
+    },
+    {
+      "id": "unknown-field",
+      "mutation": "unknown_field",
+      "expected_valid": false
+    },
+    {
+      "id": "duplicate-root",
+      "mutation": "duplicate_root",
+      "expected_valid": false
+    },
+    {
+      "id": "duplicate-digest",
+      "mutation": "duplicate_digest",
+      "expected_valid": false
+    },
+    {
+      "id": "wrong-digest",
+      "mutation": "wrong_digest",
+      "expected_valid": false
+    },
+    {
+      "id": "foreign-path",
+      "mutation": "foreign_path",
+      "expected_valid": false
+    },
+    {
+      "id": "empty-issue",
+      "mutation": "empty_issue",
+      "expected_valid": false
+    },
+    {
+      "id": "accept-findings",
+      "mutation": "accept_findings",
+      "expected_valid": false
+    },
+    {
+      "id": "repair-no-findings",
+      "mutation": "repair_no_findings",
+      "expected_valid": false
+    },
+    {
+      "id": "too-many-findings",
+      "mutation": "too_many_findings",
+      "expected_valid": false
+    },
+    {
+      "id": "wrong-type",
+      "mutation": "wrong_type",
+      "expected_valid": false
+    },
+    {
+      "id": "oversized",
+      "mutation": "oversized",
+      "expected_valid": false
+    },
+    {
+      "id": "unknown-verdict",
+      "mutation": "unknown_verdict",
+      "expected_valid": false
+    },
+    {
+      "id": "two-texts",
+      "mutation": "two_texts",
+      "expected_valid": false
+    },
+    {
+      "id": "reasoning-is-not-text",
+      "mutation": "reasoning_only",
+      "expected_valid": false
+    },
+    {
+      "id": "prose-is-not-json",
+      "mutation": "prose",
+      "expected_valid": false
+    }
+  ],
+  "receipt_cases": [
+    {
+      "mutation": "success",
+      "expected_valid": true
+    },
+    {
+      "mutation": "missing_path",
+      "expected_valid": false
+    },
+    {
+      "mutation": "failed_result",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_execution",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_turn",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_snapshot",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_step",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_call",
+      "expected_valid": false
+    },
+    {
+      "mutation": "wrong_grant",
+      "expected_valid": false
+    },
+    {
+      "mutation": "missing_started",
+      "expected_valid": false
+    },
+    {
+      "mutation": "missing_authorization",
+      "expected_valid": false
+    },
+    {
+      "mutation": "missing_completed",
+      "expected_valid": false
+    },
+    {
+      "mutation": "digest_mismatch",
+      "expected_valid": false
+    },
+    {
+      "mutation": "call_in_prose",
+      "expected_valid": false
+    },
+    {
+      "mutation": "missing_prepared",
+      "expected_valid": false
+    },
+    {
+      "mutation": "foreign_authorization_effect",
+      "expected_valid": false
+    },
+    {
+      "mutation": "started_wrong_input_digest",
+      "expected_valid": false
+    },
+    {
+      "mutation": "out_of_order",
+      "expected_valid": false
+    },
+    {
+      "mutation": "borrowed_stage_receipt",
+      "expected_valid": false
+    }
+  ],
+  "read_fixture_content": "Data-owned native read fixture; not the candidate worktree.",
+  "read_script": [
+    {
+      "id": "review-read-0",
+      "name": "file.read",
+      "arguments": {
+        "path": "crates/kolyan-server/src/tasks/types.rs"
+      }
+    },
+    {
+      "id": "review-read-1",
+      "name": "file.read",
+      "arguments": {
+        "path": "crates/kolyan-server/src/tasks/tests.rs"
+      }
+    },
+    {
+      "id": "review-read-2",
+      "name": "file.read",
+      "arguments": {
+        "path": "crates/kolyan-server/src/tasks/tests/invocation_state.rs"
+      }
+    },
+    {
+      "id": "review-read-3",
+      "name": "file.read",
+      "arguments": {
+        "path": "crates/kolyan-server/src/tasks/tests/invocation_state.json"
+      }
+    }
+  ],
+  "baseline_data_digest": "10961ada02d54790e55edd85c36d6fb62aaabb61ccc88d1a6d38e6aa99e6a864"
+}

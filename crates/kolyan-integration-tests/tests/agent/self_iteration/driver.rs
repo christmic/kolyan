@@ -1,6 +1,6 @@
 //! Trusted explicit Root/Continuation graph. The model, not this host, edits code.
 
-mod outcome;
+pub(super) mod outcome;
 
 use std::{fs, os::unix::fs::DirBuilderExt, path::Path, sync::Arc};
 
@@ -461,7 +461,7 @@ async fn experiment(plan: &Plan, control: &Path, evidence: Arc<Evidence>) -> Res
     Ok(())
 }
 
-fn permissions(writable: bool) -> AgentPermissions {
+pub(super) fn permissions(writable: bool) -> AgentPermissions {
     AgentPermissions {
         tools: if writable {
             [
@@ -476,7 +476,7 @@ fn permissions(writable: bool) -> AgentPermissions {
         delegation: Default::default(),
     }
 }
-fn request(plan: &Plan, id: &str, input: String) -> ModelRequest {
+pub(super) fn request(plan: &Plan, id: &str, input: String) -> ModelRequest {
     ModelRequest {
         request_id: format!("self-iteration-input-{id}"),
         model: model(plan),
@@ -497,7 +497,7 @@ fn request(plan: &Plan, id: &str, input: String) -> ModelRequest {
         extensions: Value::Null,
     }
 }
-fn context_policy(plan: &Plan) -> ContextPolicy {
+pub(super) fn context_policy(plan: &Plan) -> ContextPolicy {
     ContextPolicy {
         id: "self-iteration-full-history".into(),
         revision: "1".into(),
@@ -509,7 +509,11 @@ fn context_policy(plan: &Plan) -> ContextPolicy {
         output_reserve_tokens: plan.output_reserve_tokens,
     }
 }
-fn frozen(host: &Host, plan: &Plan, binding: &AttemptBinding) -> Result<Vec<Message>, String> {
+pub(super) fn frozen(
+    host: &Host,
+    plan: &Plan,
+    binding: &AttemptBinding,
+) -> Result<Vec<Message>, String> {
     let terminal = host
         .service
         .load_verified_historical_result(&plan.task_id, binding, 1048576)
@@ -543,7 +547,7 @@ fn frozen(host: &Host, plan: &Plan, binding: &AttemptBinding) -> Result<Vec<Mess
         .map(|context| context.messages)
         .map_err(|e| e.to_string())
 }
-fn candidate_files(plan: &Plan) -> Result<Value, String> {
+pub(super) fn candidate_files(plan: &Plan) -> Result<Value, String> {
     let mut files = serde_json::Map::new();
     for path in &plan.allowlist {
         match fs::read(plan.run.worktree.join(path)) {
@@ -561,7 +565,11 @@ fn candidate_files(plan: &Plan) -> Result<Value, String> {
     }
     Ok(Value::Object(files))
 }
-fn verify_candidate_receipts(plan: &Plan, host: &Host, evidence: &Evidence) -> Result<(), String> {
+pub(super) fn verify_candidate_receipts(
+    plan: &Plan,
+    host: &Host,
+    evidence: &Evidence,
+) -> Result<(), String> {
     let events = host.ledger.events_after(0).map_err(|e| e.to_string())?;
     let task = host
         .service

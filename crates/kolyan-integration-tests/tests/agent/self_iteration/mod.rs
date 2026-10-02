@@ -4,6 +4,7 @@ mod baseline;
 mod driver;
 mod host;
 mod input;
+mod minimax_live;
 mod tests;
 mod tools;
 mod validation;

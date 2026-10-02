@@ -9,12 +9,12 @@ use kolyan_model::ProviderError;
 use kolyan_runtime::DurableTurnResult;
 use serde_json::{Value, json};
 
-pub(super) struct Observation {
+pub(in crate::self_iteration) struct Observation {
     pub record: Value,
     pub failure: Option<String>,
 }
 
-pub(super) fn observe(
+pub(in crate::self_iteration) fn observe(
     stage: &str,
     result: Result<&DurableTurnResult, &(dyn Error + 'static)>,
 ) -> Observation {

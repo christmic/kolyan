@@ -4324,3 +4324,36 @@ read/write/edit，不授予 Shell、不代写或自动格式化。主控另建�
 收尾用例；轨迹先导出关闭读回，七状态独立 oracle 重新编译运行，不使用旧
 二进制或只比较模型自述。框架和真实 OS 收据回归后启动唯一新 MiniMax
 实验。候选仍须 Codex 独立审查和回归后才能合入，本批只释放框架实现。
+
+### MiniMax 驱动 Kolyan 自我优化的运行记录
+
+MiniMax 仅替代额度不足的 Qwen，驱动 Kolyan 在隔离 worktree 中产生自身
+的小能力修改，不是新增模型专用生产框架。独立测试入口复用原有 Root、
+Continuation、工具及七项固定验证；原入口、原数据和历史失败不覆盖。
+主控集成新增入口后，离线自我迭代回归终态退出 0：24 passed、0 failed、
+3 ignored；日志 `/tmp/kolyan-self-iteration-minimax-v1-main-offline.log`。
+
+真实实验的候选基线为 `41ac3f4`，844 个非 ignored 文件摘要已固定，候选
+Server 基线实际回归 122 passed、0 failed。独立七状态 oracle 位于模型
+不可写的 host 目录，摘要保持 `9297c3a5630dc44de313d77526a10e0027e28850526d05a635c44a67e772c4df`。
+真实 MiniMax-M3 实验已启动，日志
+`/tmp/kolyan-self-iteration-minimax-independent-main-live-v1.log`，实际轨迹
+`/tmp/kolyan-self-iteration-minimax-v1.uGjdtb/host/self-iteration-run-fS5eMJ/actual.jsonl`。
+当前只证明实验进入实际模型执行，尚未证明候选通过或可以合入。候选代码
+只由 Kolyan 的真实工具调用产生；Codex 负责独立差异审查与回归，不能代写
+候选后计作自我迭代成功。
+
+该次真实实验终态退出 101，237.00 秒。Kolyan 实际产生四文件候选，七项
+固定验证全部退出 0，Server 123 tests passed，独立七状态 oracle 通过；
+但 initial-review 的唯一 Text 同时含说明文字和 JSON，LocalStrict 拒绝，
+Task 持久收尾为 Failed，没有启动 repair 或 final-review，也没有合入。
+不能从模型审核失败推断状态查询实现错误，不能提取末尾 JSON 冒称契约通过。
+
+Codex 独立源码审查确认候选测试的 `assert_malformed` 在各行 `println!`
+之前执行，违反全部观察先输出再断言的要求；生产 public helper 也缺契约
+说明。允许在保留该失败 Task 与轨迹的前提下，创建独立、明确授权的修正
+Task，以实际候选摘要、固定验证日志和上述审查发现作为输入，仅使用已有
+Root 执行、文件工具和同一四文件 allowlist。该任务是新准入，不伪装成恢复
+已 Failed 的 Task，不重写旧失败，不代写候选。候选仍由实际 MiniMax 驱动
+Kolyan 修改，最多一个 Turn、16 Step、40 calls；最终以主控独立源码审查、
+七项固定验证及必要主干回归决定是否合入，不以模型自述或审核 JSON 授权。
