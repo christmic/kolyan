@@ -1,0 +1,8 @@
+[
+ {"id":"persisted_satisfied_rebuild_complete","verdict":"Satisfied","child":false,"effect":false,"before_state":"Ready","expected":"Completed","completion_rows":1,"tool_calls":0},
+ {"id":"persisted_satisfied_child_rebuild_complete","verdict":"Satisfied","child":true,"effect":false,"before_state":"Ready","expected":"Completed","completion_rows":1,"tool_calls":0},
+ {"id":"persisted_effect_receipt_rebuild_complete","verdict":"Satisfied","child":false,"effect":true,"before_state":"Ready","expected":"Completed","completion_rows":1,"tool_calls":1},
+ {"id":"persisted_unsatisfied_rebuild_wait","verdict":"Unsatisfied","child":false,"effect":false,"before_state":"Waiting","expected":"Waiting","completion_rows":0,"tool_calls":0},
+ {"id":"persisted_indeterminate_rebuild_wait","verdict":"Indeterminate","child":false,"effect":false,"before_state":"Waiting","expected":"Waiting","completion_rows":0,"tool_calls":0},
+ {"id":"persisted_checker_failed_rebuild_wait","verdict":"CheckerFailed","child":false,"effect":false,"before_state":"Waiting","expected":"Waiting","completion_rows":0,"tool_calls":0}
+]

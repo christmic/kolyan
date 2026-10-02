@@ -1,0 +1,15 @@
+[
+ {"id":"complete_real_runtime","mutation":"none","page_cap":1024,"growing":false,"budget":"default","expected":"Complete"},
+ {"id":"adapter_short_pages_require_empty","mutation":"none","page_cap":1,"growing":false,"budget":"default","expected":"Complete"},
+ {"id":"continuous_append_exhausts","mutation":"none","page_cap":1,"growing":true,"budget":"small","expected":"Exhausted"},
+ {"id":"prepared_without_authorized","mutation":"prepared_only","page_cap":1024,"growing":false,"budget":"default","expected":"Uncertain"},
+ {"id":"authorized_without_started","mutation":"authorized_only","page_cap":1024,"growing":false,"budget":"default","expected":"Uncertain"},
+ {"id":"started_missing_receipt","mutation":"missing_receipt","page_cap":1024,"growing":false,"budget":"default","expected":"Uncertain"},
+ {"id":"foreign_snapshot","mutation":"foreign_snapshot","page_cap":1024,"growing":false,"budget":"default","expected":"Refused"},
+ {"id":"effect_reads_share_scan_budget","mutation":"none","page_cap":1024,"growing":false,"budget":"scan_plus_two","expected":"Exhausted"},
+ {"id":"storage_fault_not_miss","mutation":"storage_fault","page_cap":1024,"growing":false,"budget":"default","expected":"Storage"},
+ {"id":"post_terminal_step_refused","mutation":"late_step","page_cap":1024,"growing":false,"budget":"default","expected":"Refused"},
+ {"id":"final_step_stop_reason_mismatch","mutation":"non_final_response","page_cap":1024,"growing":false,"budget":"default","expected":"Refused"},
+ {"id":"prepared_call_actual_model_mismatch","mutation":"tool_call_mismatch","page_cap":1024,"growing":false,"budget":"default","expected":"Refused"},
+ {"id":"response_inspection_bound","mutation":"none","page_cap":1024,"growing":false,"budget":"tiny_response","expected":"Exhausted"}
+]
