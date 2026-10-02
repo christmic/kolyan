@@ -1,0 +1,572 @@
+[
+  {
+    "id": "default-denial-fatal",
+    "continue_batch": false,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ]
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "snapshot-denial-then-new-call",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    }
+  },
+  {
+    "id": "denied-delegation-no-child",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied",
+          "name": "agent.invoke",
+          "arguments": {
+            "parallel": false,
+            "children": []
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    }
+  },
+  {
+    "id": "resource-policy-denial-then-new-call",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied",
+          "name": "file.read",
+          "arguments": {
+            "path": "outside.txt"
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    }
+  },
+  {
+    "id": "feedback-does-not-expand-authority",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied-1",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied-2",
+          "name": "file.write",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 4,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 2,
+      "error": false,
+      "outcome": "FinalAnswer"
+    }
+  },
+  {
+    "id": "repeated-denials-step-bound",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 3,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "denied-1",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied-2",
+          "name": "file.write",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied-3",
+          "name": "agent.invoke",
+          "arguments": {
+            "parallel": false,
+            "children": []
+          }
+        }
+      ]
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 3,
+      "error": false,
+      "outcome": "MaxSteps"
+    }
+  },
+  {
+    "id": "repeated-denials-call-bound",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 2,
+    "responses": [
+      [
+        {
+          "id": "denied-1",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied-2",
+          "name": "file.write",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied-3",
+          "name": "agent.invoke",
+          "arguments": {
+            "parallel": false,
+            "children": []
+          }
+        }
+      ]
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 2,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-prepare-uncertain",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "prepare",
+      "error": "Uncertain"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-prepare-timedout",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "prepare",
+      "error": "TimedOut"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-prepare-cancelled",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "prepare",
+      "error": "Cancelled"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-prepare-invalidbatch",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "prepare",
+      "error": "InvalidBatch"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 0,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-execute-uncertain",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "execute",
+      "error": "Uncertain"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 1,
+      "receipts": 0,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-execute-timedout",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "execute",
+      "error": "TimedOut"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-execute-cancelled",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "execute",
+      "error": "Cancelled"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "fatal-execute-invalidbatch",
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "fault",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ]
+    ],
+    "fault": {
+      "phase": "execute",
+      "error": "InvalidBatch"
+    },
+    "expected": {
+      "requests": 1,
+      "effects": 0,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 0,
+      "error": true,
+      "outcome": null
+    }
+  },
+  {
+    "id": "saved-continue-checkpoint-default-restored-host",
+    "continue_batch": true,
+    "approval": true,
+    "max_steps": 6,
+    "max_tool_calls": 10,
+    "responses": [
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      [
+        {
+          "id": "denied",
+          "name": "shell",
+          "arguments": {
+            "command": "not executed"
+          }
+        }
+      ],
+      []
+    ],
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    }
+  }
+]

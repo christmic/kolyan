@@ -1,0 +1,7 @@
+[
+  {"id":"named-approval-restored-runner","named":true,"current_read":true,"expected_success":true,"expected_requests":2,"expected_effects":1},
+  {"id":"inline-approval-restored-runner","named":false,"current_read":true,"expected_success":true,"expected_requests":2,"expected_effects":1},
+  {"id":"host-revokes-read-before-resume","named":true,"current_read":false,"expected_success":false,"expected_requests":1,"expected_effects":0},
+  {"id":"foreign-logical-owner","named":true,"current_read":true,"session_override":"foreign","expected_success":false,"expected_requests":1,"expected_effects":0},
+  {"id":"foreign-pending-approval","named":false,"current_read":true,"approval_override":"foreign-approval","expected_success":false,"expected_requests":1,"expected_effects":0}
+]

@@ -1,0 +1,9 @@
+[
+  {"id":"one_exact","limit":1,"children":1,"accepted":true},
+  {"id":"one_over","limit":1,"children":2,"accepted":false},
+  {"id":"two_exact","limit":2,"children":2,"accepted":true},
+  {"id":"two_over","limit":2,"children":3,"accepted":false},
+  {"id":"eight_exact","limit":8,"children":8,"accepted":true},
+  {"id":"eight_over","limit":8,"children":9,"accepted":false},
+  {"id":"empty","limit":2,"children":0,"accepted":false}
+]

@@ -1,0 +1,114 @@
+[
+  {
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 4,
+    "max_tool_calls": 4,
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    },
+    "id": "strict-routed-named-targets-string",
+    "responses": [
+      [
+        {
+          "id": "malformed",
+          "name": "agent.invoke",
+          "arguments": {
+            "parallel": false,
+            "children": [
+              {
+                "target": {
+                  "kind": "self_call"
+                },
+                "input": "must not be admitted",
+                "permissions": {
+                  "tools": [
+                    "file.read"
+                  ],
+                  "delegation": {
+                    "named_targets": "",
+                    "allow_inline": false,
+                    "allow_self": false
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ]
+  },
+  {
+    "continue_batch": true,
+    "approval": false,
+    "max_steps": 4,
+    "max_tool_calls": 4,
+    "fault": null,
+    "expected": {
+      "requests": 3,
+      "effects": 1,
+      "grants": 1,
+      "receipts": 1,
+      "feedback": 1,
+      "error": false,
+      "outcome": "FinalAnswer"
+    },
+    "id": "strict-routed-tools-object",
+    "responses": [
+      [
+        {
+          "id": "malformed",
+          "name": "agent.invoke",
+          "arguments": {
+            "parallel": false,
+            "children": [
+              {
+                "target": {
+                  "kind": "self_call"
+                },
+                "input": "must not be admitted",
+                "permissions": {
+                  "tools": {
+                    "file.read": true
+                  },
+                  "delegation": {
+                    "named_targets": [],
+                    "allow_inline": false,
+                    "allow_self": false
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ],
+      [
+        {
+          "id": "valid",
+          "name": "file.read",
+          "arguments": {
+            "path": "input.txt"
+          }
+        }
+      ],
+      []
+    ]
+  }
+]

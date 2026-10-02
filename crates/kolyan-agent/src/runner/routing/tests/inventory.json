@@ -1,0 +1,5 @@
+[
+  {"id":"routing_disabled","configured":false,"admitted":true,"advertised":false},
+  {"id":"routing_without_permission","configured":true,"admitted":false,"advertised":false},
+  {"id":"routing_self_admitted","configured":true,"admitted":true,"advertised":true}
+]
