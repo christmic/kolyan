@@ -22,6 +22,14 @@ name = "provider_anthropic_compat"
 path = "tests/provider/anthropic_compat.rs"
 
 [[test]]
+name = "provider_openai_opening"
+path = "tests/provider/openai_opening.rs"
+
+[[test]]
+name = "provider_anthropic_opening"
+path = "tests/provider/anthropic_opening.rs"
+
+[[test]]
 name = "core_step"
 path = "tests/core/step.rs"
 
@@ -40,6 +48,14 @@ path = "tests/core/policy_authorization.rs"
 [[test]]
 name = "durable_approval"
 path = "tests/core/durable_approval.rs"
+
+[[test]]
+name = "agent_root"
+path = "tests/agent/root.rs"
+
+[[test]]
+name = "agent_long_task"
+path = "tests/agent/long_task.rs"
 
 [[test]]
 name = "turn_resume"
@@ -123,6 +139,7 @@ path = "tests/provider/sdk_transport.rs"
 
 [dev-dependencies]
 tempfile = "3"
+nix = { version = "0.30", features = ["fs", "signal", "process"] }
 
 [[test]]
 name = "request_planning"
@@ -137,17 +154,19 @@ path = "tests/ledger/scoped_recovery.rs"
 # multi-thread runtime require "macros", "rt", and "rt-multi-thread". Declare a
 # local dep with the full feature set instead of widening the workspace dep,
 # because no other crate needs it.
-tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time", "process"] }
 
 # Workspace helpers.
 futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"
 
 # Sibling Kolyan crates. The provider adapter crates are the unit under test;
 # the model crate is the neutral contract; the protocol crates carry the
 # OpenAiConfig / AnthropicConfig structs that wire base_url + auth header.
 kolyan-core = { path = "../kolyan-core" }
+kolyan-agent = { path = "../kolyan-agent" }
 kolyan-types = { path = "../kolyan-types" }
 kolyan-storage = { path = "../kolyan-storage" }
 kolyan-model = { path = "../kolyan-model" }
@@ -162,6 +181,7 @@ kolyan-runtime = { path = "../kolyan-runtime" }
 kolyan-server = { path = "../kolyan-server" }
 kolyan-trace = { path = "../kolyan-trace" }
 kolyan-protocol-openai = { path = "../kolyan-protocol-openai" }
+kolyan-protocol-http = { path = "../kolyan-protocol-http" }
 kolyan-protocol-anthropic = { path = "../kolyan-protocol-anthropic" }
 
 # Workspace does not declare a TOML parser. The live-tests.toml file is read
