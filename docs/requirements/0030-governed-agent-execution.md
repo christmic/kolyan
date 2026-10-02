@@ -2193,3 +2193,383 @@ This matrix used the compiled implementation from before mandatory immutable
 input-source admission. It cannot validate the newer source binding. Complete
 the new contract migration and its offline gates before launching the affected
 fresh real-model matrices. Keep historical failures distinct from later results.
+
+### Independent native effect, cancellation and recovery acceptance proposal
+
+Status: approved-partial for implementation of receipt-after-cancel,
+lost-receipt uncertainty and RootOnly late-child native effects. The host approved
+the existing public receipt/admission seams; native-active PID observation and
+any new production seam remain unapproved. None of the four native gaps has been
+executed or accepted by this proposal. This is a separate test scope from the
+matrix-entrypoint audit. The fresh strict-child Root regression has owner-confirmed
+exit zero: 22 tests passed, one historical startup diagnostic ignored, and seven
+actual-model entrypoints filtered out (`/tmp/kolyan-agent-strict-child-root-offline-v1.log`,
+handle 85985). Root strict Clippy also exited zero
+(`/tmp/kolyan-agent-strict-child-root-strict-v1.log`, handle 41702).
+Neither result establishes the new native cases or authorizes network acceptance
+while the complete migrated long-task suite remains pending.
+
+#### Contract and existing observation seams
+
+Keep durable command intent, active execution control, physical effects, effect
+receipts and Task verdict separate. `DurableTurnDriver::cancel` persists execution
+cancellation; Runtime checks that fact at its existing admissions/boundaries.
+It does not discover a running worker PID or deliver an immediate cancellation
+token to that worker. Active-Step interruption requires the host to deliver the
+existing `TurnControl`. A command acknowledgement is not a stopped-process fact,
+and neither path guarantees rollback of an already committed atomic rename.
+
+The test may decorate existing public ports, without replacing their effects:
+
+- A test-only `ToolExecutor` delegates preparation and forwards the original
+  `ToolInvocation`, including independent scope, grant, revision and control.
+  It may acknowledge entry before forwarding or hold the actual returned
+  `ToolOutcome::Completed` before returning it to Runtime. It must not construct
+  a substitute result, change arguments, issue grants or retry the call.
+- A test-only `LedgerStore` delegates the required queries, claims and atomic
+  admissions to the same real SQLite store. An explicitly selected exact receipt
+  append may fail before publication with `LedgerError::Storage`, or acknowledge
+  successful durable publication and then synchronously publish cancellation
+  through the ordinary Runtime API before returning. Never block an async thread
+  waiting for another task from inside this synchronous store port. Fault matching
+  uses the independently saved execution/Step/call/scope and event identity, not
+  a loose tool-name or message-string predicate.
+- Host scheduling may await bounded one-shot acknowledgements and release gates
+  around existing admission/receipt boundaries. Gates are deterministic ordering
+  controls, not OS sleeps or guessed elapsed-time triggers. A failed acknowledgement
+  is a fixture failure and must release/drop owned work and record cleanup.
+
+Every native effect still uses the production isolated tool factory, verified
+run-scoped installation and persisted case pin, exact preparation/grant, real
+Seatbelt worker and unchanged thirty-second tool limit. Rebuilt hosts verify the
+same input source, installation evidence, snapshot and execution coordinates.
+Bootstrap remains the separate single-launch preparation operation; it cannot
+be called to recover a failed effect. Counters remain Unsupported in Inspect;
+these tests do not establish trusted token-budget admission.
+
+#### Four independently reported scenarios
+
+| Dataset case | Deterministic injection and required evidence | Acceptance oracle |
+| --- | --- | --- |
+| `agent_running_native_worker_cancel` | Keep distinct probes for durable cancellation at admission and host-token delivery to an active executor. Full native-inflight coverage additionally requires attestation of the actual file-worker PID/start before cancellation, and stop/reap evidence afterward. | Intent-only may not be reported as physical stop. A pre-entry cancellation prevents forwarding to the worker. An entered effect must be inspected for actual file state and receipt/uncertainty; no rollback or clean-stop claim without proof. |
+| `cancel_after_committed_native_receipt` | Let the real worker complete a Write. Delegate its exact successful receipt append, retain the committed cursor/payload, then publish cancellation before returning that append to Runtime. | Physical bytes/hash and the one original receipt remain. No automatic cleanup rollback, second write, extra model request or new authorization occurs on reconstruction/recovery of the cancelled execution. Inspect the durable terminal/stop evidence independently of intent. |
+| `native_commit_without_receipt_uncertain` | Observe the actual successful native Write result and physical bytes. Refuse its exact receipt publication before delegating that append; all prepared/authorized/started facts remain real. Preserve the actual result as test observation, not a durable receipt. | Missing receipt after Started is uncertain/recovery-required or an explicit recovery refusal, never a fabricated success or rollback. Rebuild against the unchanged store without fault injection; recovery cannot replay the worker or ask the model to recreate the effect. No synthetic receipt or trusted reconciliation is supplied. |
+| `cancelled_parent_late_native_child` | Admit a real child and persist the parent's exact external-wait suspension. Hold the child's original invocation at the host forwarding boundary. Publish RootOnly Task cancellation and drive the parent's existing cancellation boundary to an actual stopped terminal, then release the child to its real native Write. | The child retains its own scope, receipt and physical effect. RootOnly does not imply child cancellation. The cancelled parent never resumes, consumes the late child result, polls a model or changes TaskCancelled to success. Repeated read-only finalization verifies the existing verdict without treating it as proof all children were physically stopped. |
+
+The receipt-loss case injects persistence failure after an actual completed
+worker operation; it is not a process crash or evidence that the OS rolled back.
+The late-child case intentionally selects RootOnly and an already admitted
+child. AllInvocations, child-only cancellation and arbitrary shell crash windows
+are separate scopes, not implicit coverage of this row. If an existing API
+refuses the intended boundary operation, preserve its exact typed failure and
+report the unmet scenario instead of substituting a fabricated terminal/result.
+
+#### Unresolved native-inflight observation boundary
+
+Current `IsolatedFileTools::execute_bounded` constructs its sandbox internally;
+the public ToolExecutor and SandboxExecutor results expose no file-worker PID
+or post-spawn acknowledgement. `EffectStarted` precedes private re-preparation,
+worker-plan construction and process spawn. A polled executor future or a host
+entry gate therefore cannot attest that the native file worker is running.
+The outer observer's Drop timing cannot prove that its internal reaper finished.
+
+Within the instruction to add no production support capability, the first row
+must remain a required gap at that precise level. Implement its admission/control
+probes as separately labelled partial coverage, not as a passing native-inflight
+case. Existing Sandbox process-group cancellation tests remain process-only
+evidence. Do not add a worker pause flag, substitute a slow fake worker, use an
+OS sleep to guess spawn, or infer a PID from unrelated system-log activity.
+Main must review any future observation-only seam before production changes;
+this proposal does not authorize one. The other three rows can proceed using
+the existing public host receipt/admission seams after review.
+
+##### Observation-only lifecycle port (approved-partial implementation)
+
+This is a production process-diagnostics/cleanup observation boundary, not a
+test-only executor or an authorization port. Approved implementation is a concrete
+bounded nonblocking channel (`try_send` plus an explicit dropped counter), optional
+host injection in Sandbox/Tools, and genuine shell-native cancellation evidence.
+Ordinary file-worker protocol changes and file-native-inflight claims remain out
+of scope. The callback-shaped sketch below is superseded by the channel contract:
+no arbitrary synchronous observer code runs inside the process owner. Sandbox owns
+process lifecycle observations; Tools owns
+their exact invocation correlation; the host owns collection and existing active
+control delivery. Neither Agent/Core nor a new model executor launches processes.
+
+Suggested narrow contracts, with final Rust names subject to owner review:
+
+```rust
+// kolyan-sandbox; concrete sender/receiver, bounded at construction.
+fn sandbox_process_observation_channel(capacity: usize)
+    -> Result<(SandboxProcessObservationSender, SandboxProcessObservationReceiver), SandboxError>;
+// Sender uses try_send only. Receiver/sender expose the shared dropped counter.
+// A distinct launch identity survives PID reuse; timestamps are diagnostics.
+// Each event carries the same launch identity and actual PID/process-group ID.
+enum SandboxProcessEvent {
+    Spawned { /* launch, pid, pgid */ },
+    OutputObserved { /* launch, stream, bounded original bytes */ },
+    CancellationObserved { /* launch, explicit-control or dropped-future */ },
+    TerminationAttempted { /* launch, actual signal result */ },
+    Reaped { /* launch, successful wait status incl raw exit/signal */ },
+    CleanupFailed { /* launch, bounded actual wait/group/capture failure */ },
+}
+// Sandbox construction may accept an optional observer; the ordinary admission,
+// process owner and execution algorithm remain the only execution path.
+// Tools host injection selects a scoped sink using existing exact identity:
+// Tools accept the sender at host assembly and bind a bounded strict context
+// containing tool name, independent ToolExecutionScope and prepared digest.
+// No callback factory, authorization result or worker pause is introduced.
+```
+
+The Tools factory receives independently verified host scope/prepared digest,
+not model fields or scope copied from a grant. The sink is attached to the exact
+internally constructed sandbox immediately before normal launch; it cannot
+replace the executable, arguments, limits, policy, grant or result. No readiness
+decision, pause acknowledgement, retry or permit is returned. Prefer optional
+host injection to new fields in every SandboxRequest. Observer availability does
+not affect preparation digest or grant semantics because it carries no authority.
+
+`Spawned` is emitted only after successful `Command::spawn` and installation of
+the process-owning cleanup guard, with the actual direct-child PID and process
+group. Even observer failure must not leave an unowned spawned child. In the
+current backend the spawned program
+is `/usr/bin/sandbox-exec`; this fact alone proves neither successful exec of the
+pinned file worker nor native operation entry. `OutputObserved` retains bytes
+read from the actual stdout/stderr pipes without removing, rewriting or replacing
+the ordinary result. Each pipe preserves byte order; cross-pipe arrival order is
+not a causal oracle. Observation chunks must share the existing output bound;
+there is no independent unbounded buffering or new stdout allowance. The sink
+uses nonblocking bounded delivery; missing/dropped observation makes the test
+inconclusive/failed, not the native effect retriable. Sink panics must not unwind
+through the process owner or skip cleanup; surface diagnostics separately without
+fabricating an execution outcome. Production deadlines and authorization stay
+unchanged; a recorder must never suspend the worker to create a timing window.
+
+`CancellationObserved` records the reaper's actual observation of existing control,
+separately from the host's earlier cancellation publication/delivery. A successful
+kill call is only `TerminationAttempted`. `Reaped` requires successful actual
+`Child::wait`/equivalent successful reap, including on the independent dropped-
+future cleanup path; callback completion or a destructor starting is not reap.
+An unsuccessful wait yields `CleanupFailed`, never `Reaped`. Leader reaping does
+not independently prove every descendant is stopped: preserve the separate actual
+group-cleanup result and capture completion. No task/receipt/Ready fact may be
+manufactured from an observer event.
+
+###### What can be witnessed without changing the worker protocol
+
+Ordinary `kolyan-tool-worker::execute_request` consumes and validates bounded
+stdin, calls `execute_exact`, and outputs only the final result. The separate
+`--bootstrap-check` response proves entry of that separate launch, not readiness
+or operation entry of this invocation. `execute_exact` uses prepared regular-file
+identities and nofollow access; substituting a FIFO/device or fake pausing worker
+would violate the actual file contract. There is therefore no existing ordinary
+file-worker message that can serve as a deterministic native-operation-start
+acknowledgement. Larger input, elapsed time or post-spawn PID inspection do not
+fix that causal gap. Do not claim complete file-native inflight acceptance from
+this observation port alone.
+
+A separate genuine shell-native case can use the existing tool and unchanged
+schema/production path. The data-owned real command first performs a genuine
+bounded builtin arithmetic operation, prints one exact bounded phase marker with
+`/bin/sh`'s builtin `printf`, then continuously executes builtin arithmetic work
+(for example `while :; do n=$((n+1)); done`). The marker follows actual command
+work, not a synthetic acknowledgement before forwarding to the tool. No sleep,
+fake worker, injected pause,
+subprocess fallback or changed tool deadline is used. An actual matching output
+observation proves the shell reached that command phase, not file-worker readiness
+and not absence of later natural failure. Since the command has no intentional
+normal exit after the phase marker, host control can be delivered causally after
+the observed phase. If it nevertheless exits before cancellation, export that
+outcome and refuse the inflight claim; never select a successful retry. This row
+is labelled shell-native evidence and cannot silently satisfy the file-worker row.
+
+Full file-native coverage needs a separately reviewed ordinary-worker progress
+protocol at a truthful boundary: `RequestValidated` is not operation entry; opening
+a descriptor is not successful content I/O; a positive read/write progress marker
+is not commit. Even progress delivery cannot guarantee the fast operation has not
+already finished when host cancellation arrives. Without an actual naturally
+waiting supported operation or stronger truthful evidence, deterministic file-
+inflight cancellation remains unresolved. No acknowledgement gate delaying normal
+file execution is proposed here.
+
+###### Proposed causal data-driven acceptance
+
+Add independent dataset rows for pre-spawn cancellation, spawn-only/no operation
+witness, shell phase followed by durable cancel plus existing TurnControl delivery,
+natural exit before cancellation, observer loss, and dropped-future cleanup.
+The host awaits bounded notifications rather than estimated sleeps. Capture
+exact scope/prepared/grant, installed worker identity where applicable, actual
+launch/program provenance, original output, phase observation, durable cancel
+fact, control delivery, reaper cancellation observation, signal result, successful
+reap/raw status, group-cleanup/capture result, physical effects and full durable
+terminal/receipt evidence. A recorder loss or timeout must still request cleanup
+and export its actual result before comparison. Keep physical stopped evidence
+separate from effect rollback; preserve missing-receipt uncertainty and forbid
+model/tool replay on reconstruction. A forged phase string from a Provider or
+unrelated process cannot satisfy the exact scoped pipe observation. Export all
+rows, including the explicit file-worker gap, before asserting expectations.
+
+Ownership after approval: Sandbox owner implements lifecycle/capture observation;
+Tools owner implements scoped host injection across file/shell/combined assembly;
+native integration owner implements the data and causal framework. Agent merely
+uses the same production tool factory. This document update is design evidence,
+not implementation or acceptance of native-inflight cancellation.
+
+###### Agent shell-native integration flow (approved implementation scope)
+
+The independent `tests/agent/native_running.rs` module and its owned subtree/data/
+expected files compose the actual AgentRunner, SQLite journal/Ledger, Session store,
+verified run-scoped worker installation and production IsolatedToolSet with the
+new bounded observer. Root registers only this module; the existing native-effects
+scenarios and their assertions are unchanged. Offline Provider frames are data;
+a future live run supplies a real Provider without rewriting generated calls.
+No live acceptance is implied by the offline gate.
+
+A forwarding ToolExecutor decorator captures the original invocation's control
+and exact prepared/grant/scope for host observation, then forwards that very
+invocation unchanged. It cannot create a permit or replace control/scope/arguments.
+The phase witness must be bytes from the exact scoped sandbox stdout observation,
+with one actual launch/PID identity and matching independently captured digest;
+Provider reasoning/text containing the same marker cannot satisfy it.
+
+Four separately classified causal rows are required: (1) actual shell phase,
+ordinary Runtime durable cancellation, original control delivery, await original
+execution, reconcile and proof-only finalization; (2) drop the actual root future
+after the phase, await independent process cleanup observations, then inspect/
+reconcile without claiming TaskStopped from reap; (3) deliberately unavailable
+observer delivery records explicit loss and refuses an inflight claim while still
+preserving the real execution outcome; (4) allow the real root to finish before
+consuming the phase observation and record natural-exit-before-control, never
+retroactively label it cancelled. The latter two are negative observation oracles,
+not successful inflight cancellation. Neither retries a model/tool or selects a
+passing sample.
+
+Capture raw requests/model deltas, original invocation/control handoff, process
+observations/loss, host intent/control causal order, physical bytes/hash, complete
+durable facts and source artifacts. Rebuild the host against the same installation
+and stores and repeat read-only reconciliation/finalization, checking zero new
+model/effect calls. For the dropped-future row, missing durable terminal/receipt
+must remain a typed recovery/finalization refusal or uncertainty even though the
+direct child was successfully reaped. Export every row before any scenario/expected
+trace comparison. File-native operation-entry/interruption remains an explicit gap.
+
+Phase and cleanup observation deadlines are independent fixture bounds. Dropping
+the root after a missing/invalid phase still drains verified lifecycle events to
+reap, group cleanup and both capture completions, or exports explicit unproven
+cleanup. Invalid-context events are exported but never admitted as proof; they do
+not bypass delivery of the original cancellation control or future-drop cleanup.
+The actual Core cancellation path may drop its tool future after host control
+delivery. In that case the sandbox truthfully records `dropped_future`, not a
+fabricated `explicit_control` event; durable intent and Turn terminal evidence
+remain separate mandatory assertions for the cancellation row.
+
+The first offline trait-entry failure wrote the actual physical effect but
+exported no process observations, then hit the phase deadline without publishing
+durable cancellation. The root factory already supplied its sender. Source
+inspection identified a production wiring omission: inherent Shell `execute`
+attached the observer after grant validation, but the independent `ToolExecutor`
+implementation constructed a new sandbox without attaching it. Neither marker
+matching nor Provider decoding can explain the missing Spawned event. The fix
+binds the same independently supplied scope/prepared digest after exact trait
+grant validation, without changing invocation, authority, deadlines or output
+limits. A separate real-macOS dyn-ToolExecutor regression must observe native pipe
+phase before original-control cancellation, then verify actual reap/group/capture
+and physical bytes. It is independent of the existing inherent-execute tests;
+the Agent four-row gate verifies the complete durable cancellation path above it.
+
+###### Actual-Provider native-running matrix (approved test-only scope)
+
+The owned `native_running` subtree adds an explicitly ignored actual-Provider
+entry using the existing deployment registry and production Provider builders:
+all 19 configured provider/protocol/model combinations times the four existing
+causal cases, 76 planned rows. The independent inventory exports `planned`, zero
+attempts and `network_executed:false`; registration and offline gates are not
+network acceptance. The live path clears scripted frames and supplies the real
+Provider to the same Runner/production IsolatedToolSet assembly. Model-generated
+calls, IDs, arguments and events are forwarded unchanged. Do not rewrite a
+candidate, select successful samples, add implicit retries or silently omit a
+configuration. Missing credentials, absent/wrong/repeated calls, natural early
+exit, observation loss, clock expiry and Provider errors remain recorded failures
+for the appropriate positive case. Loss and natural-exit rows remain explicitly
+negative inflight oracles, with real effects and execution results still checked.
+
+Three independent fixture clocks are mandatory. Initial model/invocation waiting
+starts at root execution; every actual Provider open+stream also receives its own
+model-wait bound, including final-answer requests after tool return. Fixture
+timeout errors retain a separate fixture classification, not a fabricated SDK
+diagnosis. The phase deadline starts at the original invocation capture, not
+before model inference, and cannot be restarted by repeated calls. Capture
+notification is test-local, nonblocking and carries no authority or permit. The
+cleanup deadline starts at host cleanup independently of both prior clocks.
+Phase failure must still cancel the original control or drop the original future
+and export actual cleanup or explicit unproven cleanup. No clock changes the
+production 30-second tool deadline, output bound, grant, scope or admission.
+
+The live semantic oracle does not demand the offline fixed model request count.
+It still requires one original environment invocation, exact scoped native pipe
+phase and launch, physical content, unchanged call forwarding, cancellation
+causality where applicable, actual lifecycle cleanup and zero new model/effect
+work during reconstruction. All raw requests/events/errors, source artifacts,
+Ledger/journal, physical bytes and per-row outcome are exported before assertions;
+the matrix retains every failed row and continues the remaining plan. New focused
+offline/clock tests and strict checks require a fresh whole-workspace gate; the
+earlier frozen workspace snapshot is not evidence for these new files. Actual
+network execution remains separately authorized, and file-worker native-entry/
+interruption evidence remains open; shell results cannot substitute for it.
+
+#### Data, trajectories and staged verification
+
+Proposed independent files are `tests/agent/native_effects.rs` and its test-only
+submodules, with `tests/fixtures/agent/native_effects.json` and
+`tests/expected/agent/native_effects.jsonl`. Keep case IDs aligned with the
+existing coverage inventory; update that inventory only with real declaration
+paths and separately verified execution evidence. The dataset owns native
+requests, seeded workspace state, selected fault boundary, cancellation policy,
+gate/cleanup bounds and semantic expectations. It must not silently alter old
+case data or add a retry loop. Native-running capability absence is an explicit
+coverage limitation, not a skipped case represented as Passed.
+
+For every planned row retain source/prepared requests, input-source/archive
+references, provider text/reasoning and usage, original calls/results, independent
+scope/grant, gate acknowledgements, exact fault identity, cancellation intent and
+host-control delivery, immutable pin/readiness evidence, full Ledger and journal,
+and independent physical file bytes/hash. PID/start/stop/reap fields are required
+for the native-inflight claim and otherwise explicitly unavailable, not zero or
+inferred. Record reconstruction/recovery results and effect/model invocation
+counts. Write and read back every row's actual JSONL, including failures, before
+comparing the complete dataset. Assertions check causal facts and exact authority,
+not nondeterministic prose or elapsed-time guesses.
+
+Implementation sequence after review: receipt-preservation; lost-receipt
+uncertainty; RootOnly late-child recovery; then the separately labelled admission
+and host-control probes with the native-inflight gap retained. Run the complete
+fresh offline Root regression and strict target gate after new fixture assembly.
+Only after main accepts the complete migrated suite may applicable network rows
+be added to the current configuration-driven matrix. Models must generate the
+calls there; deterministic host fault injection is still allowed, but offline
+scripted Provider frames never count as actual-model evidence. This document and
+an inventory audit alone complete none of those execution gates.
+
+#### Approved native public-seam offline evidence
+
+The owner collected exit zero for native gate 12583 after the new fixture's
+TaskState spelling was corrected to the existing typed wire values. The initial
+63528 failure remains in `/tmp/kolyan-agent-native-effects-offline-v1.log`;
+all three rows exported before its first comparison. The corrected local gate
+is `/tmp/kolyan-agent-native-effects-offline-v2.log`. Main independently confirmed
+81650 exit zero and read all three exports ZDovep, 7QqFLN and qsREjC.
+
+The subsequently strengthened complete fresh Root offline gate 76811 exited zero
+with 23 tests passing, one historical startup diagnostic ignored and seven network
+entrypoints filtered out (`/tmp/kolyan-agent-native-effects-full-root-offline-v3.log`).
+Its native rows compare the receipt-before-cancellation cursor, exact physical
+content/hash, one actual native execution, uncertainty, zero result consumption
+and unchanged effect/authorization/model counts after rebuilding the host.
+The owner-confirmed strict Root Clippy gate 27173 also exited zero
+(`/tmp/kolyan-agent-native-effects-root-strict-v3.log`). Its matching complete
+offline native exports are `kolyan-native-effect-yGZfL5/actual.jsonl`,
+`kolyan-native-effect-a8WnY6/actual.jsonl` and
+`kolyan-native-effect-NjAMp0/actual.jsonl` in the retained OS temporary directory.
+The receipt-loss row remains RecoveryRequired, and finalization refuses a success
+verdict. The RootOnly row has a real suspended-parent TurnCancelled before the
+child is released; its native receipt stays child-owned and parent consumption
