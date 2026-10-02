@@ -2157,3 +2157,39 @@ run the complete offline Agent gate and strict Clippy. Start no new actual-model
 matrix until that complete offline gate passes. Normal native preparation remains
 one launch with its approved 600-second setup ceiling; normal tool execution
 remains thirty seconds, with no new retry or fallback.
+
+### Recursive invocation and multiple approval real model results
+
+The complete topology matrix covered nineteen configured Provider/protocol/model
+deployments with two scenarios each: two nested self-calls, and two delegated
+children whose independent approvals survive host reconstruction. Every row ran
+once. The report contains 32 Passed and 6 Failed rows, with no pending or skipped
+rows. This is partial acceptance, not a successful complete L5 gate.
+
+Evidence is retained in
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-pTS8aS/report.json`
+and `/tmp/kolyan-agent-topology-readiness-live-v1.log`. The execution ended with
+exit 101. Each trace below is the `actual.jsonl` under the retained
+`kolyan-agent-topology-<trace>` directory in that same temporary evidence root.
+
+| Deployment and scenario | Trace | Observed failure |
+| --- | --- | --- |
+| MiniMax OpenAI compatible, nested self-calls | IhVXrQ | Generated `named_targets` as a string despite an array schema |
+| MiniMax OpenAI compatible, two approvals | 7JEtBR | Parent called `file.read` instead of delegating, producing a parent approval rather than the required child waits |
+| Qwen3.7-max OpenAI compatible, nested self-calls | NeAopa | Generated `agent.invoke` in the environment tool permissions, which permit only read, write, edit and shell |
+| MiniMax Anthropic compatible, nested self-calls | Ih1ySx | Generated string `named_targets`, refused by strict decoding |
+| MiniMax Anthropic compatible, two approvals | Eo5LhA | Generated string `named_targets`, refused by strict decoding |
+| Qwen3.8-flash Anthropic compatible, nested self-calls | 0Go6lL | A later generated delegation request exceeded its effective permission ceiling |
+
+These six traces do not show Worker startup failures. Preserve the failed rows,
+raw requests, responses and neutral calls; do not coerce wrong argument types,
+expand permissions or classify a parent approval as a child approval to pass them.
+Independent recorded-output tests must distinguish schema rejection, permission
+rejection and incorrect scenario routing. The existing schema examples were
+extended from nineteen to twenty-one rows with separate string and null
+`named_targets` cases; both correctly fail schema, decoding and preparation.
+
+This matrix used the compiled implementation from before mandatory immutable
+input-source admission. It cannot validate the newer source binding. Complete
+the new contract migration and its offline gates before launching the affected
+fresh real-model matrices. Keep historical failures distinct from later results.
