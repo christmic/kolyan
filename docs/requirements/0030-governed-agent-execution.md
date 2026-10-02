@@ -1342,3 +1342,151 @@ digest; exact byte ceilings and overflow refusal are checked. Strict all-target
 Policy Clippy passed in `/tmp/kolyan-l5-policy-iterative-canonical-clippy.log`.
 These checks establish the serializer's local contract, not full Agent recovery
 or network acceptance.
+
+### Finalization evidence by verdict
+
+Successful parent completion requires every policy-required child or dependency
+result to have its exact durable consumption proof. That is distinct from a
+failed or cancelled parent: such a parent must not be resumed merely to consume
+a late result. Verify physical child terminals and preserve any existing
+consumption proofs, but do not manufacture missing consumption or require a new
+one to establish failure. Under the current all-invocations-success policy, a
+new failure finalization requires all admitted executions to have verified
+terminal evidence; unfinished work explicitly refuses that operation.
+
+A whole-Task cancellation already recorded in the journal remains its verdict.
+An idempotent finalization request may return that verified verdict after exact
+owner/scope validation without pretending every running child is physically
+stopped. Task verdict, physical execution quiescence and child-result consumption
+are separate facts. Late results cannot replace cancellation or revive a parent.
+Current authority checks still apply, and no finalization entry point executes
+or consumes new work. Tests must cover an unsuccessful parent with an unconsumed
+late child, not only a successful parent that already consumed a failed child.
+
+Finalization policy selection uses an exhaustive typed dispatch. New policy
+variants must not be silently treated as all-invocations-success. Continuation
+private-context initialization/dependency provenance is not an agent.invoke
+ToolResult consumption. Verify the proof appropriate to the topology role;
+explicitly unsupported roles are a pending implementation boundary, not evidence
+that long-task acceptance is complete.
+
+### Canonical serialization with preserved insertion order
+
+The separate command `cargo test -p kolyan-policy --features serde_json/preserve_order`
+passed all 32 tests and doc tests with zero failures in
+`/tmp/kolyan-l5-policy-preserve-order-tests.log`. In particular, the fixed
+schema-two digest and nested key-order golden bytes remain unchanged when JSON
+objects preserve insertion order. This verifies Policy's explicit ordering, not
+every digest in the workspace or every future serialization feature.
+
+### Actual two-child scheduling matrix result
+
+The first actual-model scheduling matrix finished all 38 rows in
+`kolyan-r1-matrix-rid4vp/report.json`: 36 Passed and two Failed, one attempt per
+row. Cases exercise two read-only children with measured overlapping Provider
+intervals and two writable children with serial intervals, using actual models
+and isolated OS workers. The failed MiniMax OpenAI read-only case has an invalid
+sequence argument; the failed Qwen 3.7 Plus Anthropic writable case has a missing
+expected receipt. Neither category by itself identifies a decoding or scheduling
+defect. Keep both failed traces and their assertions while determining causes.
+
+Subsequent exact trace inspection confirms the MiniMax generated
+`named_targets: ""`, not the required array, and was refused at admission. The
+Qwen second child receives the explicit write input but returns a text refusal,
+calling it prompt injection, without generating a file.write call. Keep the
+zero-versus-one receipt failure; model completion is not effect completion.
+The scheduling matrix's owner confirmed exit 101 after 1115.10 seconds. Neither
+failure is established as a scheduler defect by these traces.
+
+### RootOnly child lifecycle after parent cancellation
+
+RootOnly cancellation does not authorize a new child, parent resumption or new
+parent consumption. It does allow an already entered, uncancelled non-root
+invocation to finish or explicitly resume its own durable wait under its saved
+identity and current host authority. AllInvocations cancellation refuses such
+resumption. A blanket terminal-Task/parent check must not erase this distinction.
+
+Separate immutable admission/ownership inspection for an existing child's
+lifecycle from active parent admission, pump and consumption authorization.
+The child entry point verifies the complete original admission, exact binding,
+current attempt, committed checkpoint/approval and current child permission
+ceiling. RootOnly is checked against the actual persisted Task cancellation
+policy, not model arguments. An admitted but never entered child is not eligible
+for detached resumption, and partial/missing admission proof fails closed.
+Historical proof reads alone are never execution authority.
+
+Detached child execution still uses the shared host and original invocation
+scheduling budgets and records physical stopped evidence and usage. It cannot
+change the cancelled Task verdict, resume the parent or publish consumption on
+its behalf. Tests reconstruct both hosts after root cancellation, resume a
+waiting child under RootOnly, and compare the same scenario's refusal under
+AllInvocations. Include current host revocation, foreign child/checkpoint,
+never-entered child and late terminal publication, with complete failure traces.
+
+### Directory read refusal in actual continuation
+
+The Qwen 3.8 Flash Anthropic named continuation trace
+`kolyan-long-continuation-8YE1JL/actual.jsonl` records successful file write/read
+in invocation one and successful file edit/read in invocation two. The actual
+neutral request `turn-long-02-step-2` contains the complete successful read
+ToolResult: `safe/long-proof.txt`, 13 bytes and content `TURN01|TURN02`.
+The following model response nevertheless requests another file.read, call
+`toolu_a7d728a15b924f0495b125db`, with path `safe`, which is the fixture directory.
+Preparation correctly refuses a non-regular-file leaf. This is not evidence of
+lost file contents or a missing ToolResult in the recorded neutral request.
+
+Keep this row failed and preserve its request, generated arguments and refusal.
+Do not broaden file.read into directory listing or silently rewrite model paths
+to make the case pass. This diagnosis concerns the second invocation's third
+Step, not a successor invocation; outgoing HTTP bytes are not independently
+captured by these neutral request observations.
+
+### Cancellation intent and terminal proof in finalization tests
+
+The initial late-child finalization export
+`kolyan-agent-finalization-late-CXavKf/actual.jsonl` distinguishes two paths.
+The execution-only cancellation case records ExecutionCancelled but no
+TurnCancelled terminal; its root remains RecoveryRequired even after the child
+completes. Historical terminal verification correctly refuses that root. The
+whole-Task cancellation case records both events and preserves the Cancelled
+Task verdict while the previously entered child publishes completion.
+
+Keep cancellation intent separate from physically stopped execution. A fixture
+for a terminal cancelled parent must exercise the existing cancellation
+coordination and stopped publication, rather than using cancellation intent
+plus reconcile as a substitute. Preserve a separate incomplete-terminal refusal
+case, and assert that late child completion never consumes or resumes the parent.
+
+The original actual-model long-task job finished both 38-row matrices: ten
+independent Session Turns passed 32 rows and failed six; single-Task continuation
+passed 36 rows and failed two. Both test functions ended failed. These are
+complete historical execution reports, not full acceptance of corrected worker
+pinning, per-invocation verification or positive context projection. Those
+changes require separately recorded fresh executions.
+
+### Full Server regression after historical proof reads
+
+The independent full `cargo test -p kolyan-server` run passed 105 tests and doc
+tests with zero failures and exit zero. Its log is
+`/tmp/kolyan-l5-server-full-historical-main.log`. This includes the separated
+historical result/consumption reconstruction tests, which write JSONL proof
+observations before assertions. The result verifies the Server regression scope;
+it does not establish Agent finalization, RootOnly recovery or actual-model
+projection acceptance.
+
+### Positive projection offline proof
+
+The new positive projection offline scene passed one test in 23.39 seconds,
+using the actual OS workers with scripted model frames. Its exported trace
+`kolyan-long-continuation-DhQs13/actual.jsonl` contains ten completed invocations,
+nine durable pre-Turn projection readbacks and nine exact Core/Provider request
+comparisons. Eight Turns omit complete historical message ranges, meeting the
+data-owned minimum of eight. Eleven waits reconstruct the host from saved state.
+
+Full source requests and projection proofs remain artifact-backed before Turn
+admission; selected history does not overwrite that source. Per-invocation
+physical file checks run before the next invocation. This is positive selection
+and durability evidence, not actual-model or trusted-token-budget acceptance:
+the counter remains Unsupported and budget mode Inspect. Keep the independent
+Strict Unknown and serialized-size refusal checks, and run the separate complete
+actual-model projection matrix before claiming network acceptance.
