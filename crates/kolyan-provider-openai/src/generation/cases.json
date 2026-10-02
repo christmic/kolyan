@@ -1,0 +1,175 @@
+{
+  "request": {
+    "request_id": "local-accounting",
+    "model": {
+      "provider": "fixture",
+      "model": "fixture-model"
+    },
+    "system": [
+      {
+        "text": "系统🦀\u0000",
+        "cache": false
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "读取中文🦀\n"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "read",
+        "description": "reads",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 128,
+    "reasoning": null,
+    "prompt_cache": null,
+    "output_format": null,
+    "extensions": null
+  },
+  "stream_response": "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"{}\"}]}]}}\n\n",
+  "rows": [
+    {
+      "mode": "unsupported",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "registered",
+      "registered": true,
+      "expected_count": "success",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "unchanged_clone",
+      "registered": true,
+      "expected_count": "success",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "foreign_owner",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "foreign_endpoint",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "profile_changed",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "planner_changed",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "caller_changed",
+      "registered": true,
+      "expected_count": "success",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "wire_replaced",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "planned_request_changed",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "neutral_changed",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    },
+    {
+      "mode": "unknown_extension",
+      "registered": true,
+      "expected_count": "unsupported",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "complex",
+      "registered": true,
+      "expected_count": "success",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "structured_invalid",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 1,
+      "expected_error": true
+    },
+    {
+      "mode": "planner_omit",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "ordinary_stream",
+      "registered": true,
+      "expected_count": "success",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "cache",
+      "registered": true,
+      "expected_count": "unsupported",
+      "expected_gen": 1,
+      "expected_error": false
+    },
+    {
+      "mode": "config_changed",
+      "registered": false,
+      "expected_count": "unsupported",
+      "expected_gen": 0,
+      "expected_error": true
+    }
+  ]
+}

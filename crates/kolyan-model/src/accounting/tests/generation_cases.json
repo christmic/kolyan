@@ -1,0 +1,47 @@
+[
+  {
+    "mode": "unsupported",
+    "expected_generation": true,
+    "expected_count": false
+  },
+  {
+    "mode": "incomplete_coverage",
+    "expected_generation": true,
+    "expected_count": false
+  },
+  {
+    "mode": "registered",
+    "expected_generation": true,
+    "expected_count": true
+  },
+  {
+    "mode": "foreign_owner",
+    "expected_generation": false,
+    "expected_count": false
+  },
+  {
+    "mode": "profile_changed",
+    "expected_generation": false,
+    "expected_count": false
+  },
+  {
+    "mode": "identity_changed",
+    "expected_generation": false,
+    "expected_count": false
+  },
+  {
+    "mode": "wire_digest",
+    "expected_generation": false,
+    "expected_count": false
+  },
+  {
+    "mode": "count_digest",
+    "expected_generation": false,
+    "expected_count": false
+  },
+  {
+    "mode": "wire_bytes",
+    "expected_generation": false,
+    "expected_count": false
+  }
+]
