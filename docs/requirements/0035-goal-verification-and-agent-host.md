@@ -361,6 +361,17 @@ revision 为 domain-separated SHA-256，绑定 checker schema/实现版本及有
 信任集合。重建必须加载同一受信任配置；改变信任集合改变 key，不能在同 key
 下悄悄接受不同适配器。predicate 的 tool_revision 必须在该集合内。
 
+宿主从已经完成规范化和 protected-roots 合并的实际工具实例获取信任版本：
+`IsolatedFileTools::adapter_revision(&self) -> Result<String, IsolatedFileError>`
+公开既有精确 revision 计算，并由 prepare 使用同一方法；
+`IsolatedToolSet::file_adapter_revision(&self) -> Result<String, IsolatedToolSetError>`
+只转发内部文件实例。两个入口均为同步只读文件 I/O，宿主应在阻塞装配阶段
+调用；读取 worker 二进制但不执行它，不准备假调用、不读取目标文件、不授予
+权限。worker/配置改变后重新计算可能改变结果，不能将此方法当作历史证明。
+历史 checker 仅消费保存的信任集合，绝不在 assessment 时重新访问当前 worker。
+新增独立数据矩阵验证克隆稳定性、prepare 使用同一值、配置和 worker 字节
+改变、ToolSet 合并后的实际值、读取失败与无目标文件副作用；旧测试保持不变。
+
 直接实现已冻结的 Server GoalChecker 接口，仅消费 VerifiedGoalSource。完整
 source 上寻找匹配的 Completed、非 is_error receipt；严格解析真实 FileOperation
 及直接保存的 ExactFileBinding，核对 scope execution/snapshot、工具名、精确
