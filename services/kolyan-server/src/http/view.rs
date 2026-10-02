@@ -53,21 +53,10 @@ fn project(
                 | LedgerEventKind::TurnTimedOut
         )
     });
-    let suspension = events
-        .iter()
-        .rev()
-        .find(|event| event.kind == LedgerEventKind::ExecutionSuspended);
-    let checkpoint = events.iter().rev().find(|event| {
-        event.kind == LedgerEventKind::ApprovalRequested
-            && event.payload.get("continuation").is_some()
-            && suspension.is_some_and(|suspended| {
-                suspended.payload["approval_id"] == event.payload["approval_id"]
-            })
-    });
-    // The boundary fact precedes checkpoint persistence. During that gap there
-    // is not yet an approval a caller can decide or recover.
+    let suspension = kolyan_server::execution_suspension(key, events)?;
+    // Admission alone is not a durable wait. No approval-only fallback exists.
     let suspended = terminal.is_none()
-        && checkpoint.is_some()
+        && suspension.is_some()
         && matches!(state, kolyan_server::ExecutionState::Suspended);
     let state = match terminal.map(|event| &event.kind) {
         Some(LedgerEventKind::TurnCompleted) => "completed",
@@ -113,19 +102,10 @@ fn project(
             steps.push(json!({"step_id":step.step_id,"outcome":step.outcome,"content":content,"usage":step.response.usage,"structured_output":step.response.structured_output}));
         }
     }
-    let approval = if suspended {
-        let checkpoint = checkpoint.expect("suspended requires a persisted checkpoint");
-        let approval: kolyan_core::ApprovalRequest =
-            serde_json::from_value(checkpoint.payload.clone()).map_err(StorageError::from)?;
-        let call = approval
-            .continuation
-            .pending_calls
-            .iter()
-            .find(|call| call.id == approval.call_id)
-            .ok_or_else(|| StorageError::Conflict("missing pending call".into()))?;
-        json!({"approval_id":approval.approval_id,"call_id":approval.call_id,"tool_name":approval.tool_name,"arguments":call.arguments})
+    let waiting = if suspended {
+        kolyan_server::suspension_view(suspension.as_ref().expect("validated compound suspension"))?
     } else {
-        Value::Null
+        json!({"checkpoint_id":null,"pending_approvals":[],"external_waits":[]})
     };
     let mut tool_results = Vec::new();
     for event in events {
@@ -139,7 +119,8 @@ fn project(
     }
     Ok(
         json!({"session_id":key.session_id,"turn_id":key.turn_id,"state":state,"end_reason":end_reason,
-        "steps":steps,"tool_results":tool_results,"pending_approval":approval,
+        "steps":steps,"tool_results":tool_results,"checkpoint_id":waiting["checkpoint_id"],
+        "pending_approvals":waiting["pending_approvals"],"external_waits":waiting["external_waits"],
         "cancellation_requested":events.iter().any(|event| event.kind == LedgerEventKind::ExecutionCancelled),
         "execution_stopped":terminal.is_some() || suspended,
         "recovery_required":terminal.is_none() && !suspended && !active}),

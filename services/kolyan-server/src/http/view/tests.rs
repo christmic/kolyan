@@ -75,15 +75,17 @@ fn cancellation_intent_is_not_stopping_and_lost_worker_requires_recovery() {
 fn approval_boundary_without_matching_checkpoint_is_not_public_suspension() {
     let old = fact(
         LedgerEventKind::ApprovalRequested,
-        json!({"approval_id":"old","continuation":{}}),
+        json!({"schema_version":1,"approval":{"approval_id":"old","turn_id":"t",
+            "call_id":"c","tool_name":"file.write","reason":"requires approval","expires_at_ms":null}}),
     );
     let boundary = fact(
-        LedgerEventKind::ExecutionSuspended,
-        json!({"approval_id":"new"}),
+        LedgerEventKind::ExecutionBoundaryAdmitted,
+        json!({"checkpoint_id":"new"}),
     );
     let view = project(&key(), &[old, boundary], ExecutionState::Suspended, true).unwrap();
     assert_eq!(view["state"], "running");
-    assert!(view["pending_approval"].is_null());
+    assert_eq!(view["pending_approvals"], json!([]));
+    assert_eq!(view["external_waits"], json!([]));
     assert_eq!(view["execution_stopped"], false);
 }
 #[test]
@@ -93,4 +95,16 @@ fn malformed_step_fact_does_not_become_empty_success() {
         json!({"step":{"invalid":true}}),
     );
     assert!(project(&key(), &[corrupt], ExecutionState::Completed, false).is_err());
+}
+
+#[test]
+fn unsupported_or_approval_only_suspension_is_an_error_not_an_empty_wait() {
+    for payload in [
+        json!({"approval_id":"legacy"}),
+        json!({"schema_version":77,"suspension":{}}),
+        json!({"schema_version":1,"suspension":{},"unknown":true}),
+    ] {
+        let corrupt = fact(LedgerEventKind::ExecutionSuspended, payload);
+        assert!(project(&key(), &[corrupt], ExecutionState::Suspended, false).is_err());
+    }
 }

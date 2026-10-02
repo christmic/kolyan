@@ -2,6 +2,7 @@
 
 use kolyan_model::{ModelProvider, ModelRequest, ParameterTable, ProviderFuture};
 use kolyan_protocol_anthropic::{AnthropicClient, AnthropicConfig};
+use kolyan_protocol_http::HttpRetryPolicy;
 use kolyan_protocol_openai::{OpenAiClient, OpenAiConfig};
 use kolyan_provider_anthropic::AnthropicProvider;
 use kolyan_provider_openai::OpenAiProvider;
@@ -27,6 +28,9 @@ pub struct Config {
     pub base_url: String,
     pub api_key_env: String,
     pub timeout_secs: u64,
+    /// Trusted request-opening budget, never a Turn/tool replay policy.
+    #[serde(default)]
+    pub http_retry: HttpRetryPolicy,
     pub parameter_table: ParameterTable,
     pub request: ModelRequest,
     pub max_steps: usize,
@@ -61,6 +65,7 @@ impl Config {
                 let mut config = OpenAiConfig::new(key);
                 config.base_url = self.base_url.clone();
                 config.timeout = timeout;
+                config.http_retry = self.http_retry.clone();
                 Ok(Provider::OpenAi(
                     OpenAiProvider::new(OpenAiClient::new(config)?)
                         .with_parameter_table(self.parameter_table.clone())?,
@@ -70,6 +75,7 @@ impl Config {
                 let mut config = AnthropicConfig::new(key);
                 config.base_url = self.base_url.clone();
                 config.timeout = timeout;
+                config.http_retry = self.http_retry.clone();
                 Ok(Provider::Anthropic(
                     AnthropicProvider::new(AnthropicClient::new(config)?)
                         .with_parameter_table(self.parameter_table.clone())?,
@@ -88,3 +94,6 @@ impl ModelProvider for Provider {
         }
     }
 }
+
+#[cfg(test)]
+mod retry_tests;

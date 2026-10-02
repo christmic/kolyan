@@ -26,6 +26,7 @@ kolyan-tool-worker = { path = "../../crates/kolyan-tool-worker" }
 kolyan-storage = { path = "../../crates/kolyan-storage" }
 kolyan-trace = { path = "../../crates/kolyan-trace" }
 kolyan-protocol-openai = { path = "../../crates/kolyan-protocol-openai" }
+kolyan-protocol-http = { path = "../../crates/kolyan-protocol-http" }
 kolyan-protocol-anthropic = { path = "../../crates/kolyan-protocol-anthropic" }
 kolyan-provider-openai = { path = "../../crates/kolyan-provider-openai" }
 kolyan-provider-anthropic = { path = "../../crates/kolyan-provider-anthropic" }
@@ -35,6 +36,7 @@ axum = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync", "net", "signal"] }
 
 [dev-dependencies]
+sha2 = "0.10"
 reqwest.workspace = true
 kolyan-runtime = { path = "../../crates/kolyan-runtime" }
 tempfile = "3"

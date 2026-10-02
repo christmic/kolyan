@@ -336,7 +336,11 @@ async fn decide(
     let request = body(request)?;
     let key = key(&host, &session, &turn)?;
     let pending = snapshot(&host, &key)?;
-    if pending["state"] != "suspended" || pending["pending_approval"]["approval_id"] != approval {
+    if pending["state"] != "suspended"
+        || !pending["pending_approvals"]
+            .as_array()
+            .is_some_and(|items| items.iter().any(|item| item["approval_id"] == approval))
+    {
         return Err(Problem(StatusCode::CONFLICT, "conflict"));
     }
     let attempt = admit(&host, &session)?;
@@ -346,7 +350,7 @@ async fn decide(
             Choice::Approve => host
                 .app
                 .service
-                .resume(
+                .resume_approval(
                     host.app.executor(),
                     &key.session_id,
                     &key.execution_id,

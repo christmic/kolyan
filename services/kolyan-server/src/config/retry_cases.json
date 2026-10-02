@@ -1,0 +1,10 @@
+[
+  {"id":"omitted_disables_http","policy":null,"valid":true,"retries":0},
+  {"id":"explicit_openai","policy":{"max_retries":2,"max_elapsed_ms":10000,"max_server_delay_ms":5000,"profile":"OpenAi"},"valid":true,"retries":2},
+  {"id":"explicit_anthropic","policy":{"max_retries":1,"max_elapsed_ms":10000,"max_server_delay_ms":5000,"profile":"Anthropic"},"valid":true,"retries":1},
+  {"id":"missing_required_limit","policy":{"max_retries":2,"max_elapsed_ms":10000,"profile":"OpenAi"},"valid":false,"retries":null},
+  {"id":"unbounded_window","policy":{"max_retries":2,"max_elapsed_ms":0,"max_server_delay_ms":0,"profile":"OpenAi"},"valid":false,"retries":null},
+  {"id":"delay_exceeds_window","policy":{"max_retries":2,"max_elapsed_ms":100,"max_server_delay_ms":101,"profile":"OpenAi"},"valid":false,"retries":null},
+  {"id":"too_many_retries","policy":{"max_retries":17,"max_elapsed_ms":10000,"max_server_delay_ms":5000,"profile":"OpenAi"},"valid":false,"retries":null},
+  {"id":"unknown_option","policy":{"max_retries":2,"max_elapsed_ms":10000,"max_server_delay_ms":5000,"profile":"OpenAi","retry_tools":true},"valid":false,"retries":null}
+]

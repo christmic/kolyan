@@ -72,6 +72,27 @@ envelope 至多 1,048,576 bytes（不只是 pipe 内容），Shell command 至�
 实际执行还取 policy/grant 与 adapter requirements 的更窄约束。Provider 的
 timeout_secs 是另一条模型请求 timeout，不放宽工具 timeout。
 
+### 模型请求开启重试
+
+宿主可显式提供 `http_retry`；省略时不重试 HTTP 错误状态。
+例如 OpenAI 协议配置可包含：
+
+```json
+"http_retry": {
+  "max_retries": 2,
+  "max_elapsed_ms": 10000,
+  "max_server_delay_ms": 5000,
+  "profile": "OpenAi"
+}
+```
+
+Anthropic 使用 `"profile": "Anthropic"`，启用的 profile 必须与客户端一致。
+这些限额只约束同一个模型请求的开启；传输错误和 HTTP 错误共用重试计数，
+不能叠加独立预算。永久额度错误不重试，未知 429 不猜测为暂时限流。
+服务端要求的等待超过预算时停止，不能缩短等待提前重发。
+HTTP 已成功后出现的流解析错误不会重新请求，更不会重放 Turn 或已完成工具。
+真实 Provider 验收与本地 HTTP 故障验证分开记录，配置不自动启用测试矩阵重试。
+
 新增装配校验仅执行准备与 policy 判断，不以伪 worker 响应冒充真实 effects。
 实际 worker/HTTP/stdio effects 继续由进程 fixture 验证。本装配不等于 AgentRunner 完成。
 
@@ -79,8 +100,27 @@ timeout_secs 是另一条模型请求 timeout，不放宽工具 timeout。
 cargo test -p kolyan-server-service --bin kolyan-server assembly::tests
 ```
 
-`execution.start` 返回本次执行完成或审批挂起的结果；可同时发送其他 RPC。
-挂起检查点已持久化，可以关闭进程，重启后用原执行身份和 approval_id 确认。
+`execution.start` 返回本次执行完成或通用挂起的结果；可同时发送其他 RPC。
+一个 checkpoint 可以同时等待多个审批和外部结果；挂起会释放执行任务，不保留
+等待用户或子任务的模型循环 future。RPC 的 `waiting`、HTTP 的
+`checkpoint_id` / `pending_approvals` / `external_waits` 只提供显示坐标，
+不暴露 checkpoint、准备参数、grant 或外部 proof binding，也不是恢复权限。
+审批显示字段 `expires_at_ms` 必须存在，null 表示无到期时间。
+重启后按原执行身份和 approval_id 确认。宿主先保存精确批准决定，绑定
+checkpoint、准备摘要、policy revision、scope 和 evidence ID；Runtime 重新
+验证真实 affirmative 决定后才合并。批准不扩大原宿主 ceiling。拒绝使用同一
+绑定的 durable deny，取消任何混合等待都不能被迟到结果复活。
+不接受旧 approval-only continuation；partial merge 保留原 attempt 和累计预算，
+不重新提交已完成效果。外部等待 verifier 默认拒绝；本次接口迁移不代表已实现
+child scheduler、AgentRunner 或跨 journal/ledger 结果消费恢复。
+`TurnCheckpointPrepared` 和纯 merge 是恢复屏障，不是公开暂停；只有保存的
+`ExecutionSuspended` 才发布 waiting。宿主 `resume_committed` 可从已验证的
+Prepared/Merged checkpoint 恢复，取消或终态一律拒绝，不重新授权已进入的 effect。
+Server 的 `load_verified_result(task_id, binding, max_bytes)` 只读重验精确 Task
+terminal fact、execution binding 与实际结果；返回 tagged Completed/Failed/Cancelled，
+失败子任务不伪装成功。host ceiling 限制完整 JSON envelope，超限报错、不截断。
+`TurnPreparationHook` 在 Task ceiling 和 Session history 合并后、immutable input
+保存前观察最终请求；它不能修改请求、发 grant 或执行子任务。
 `execution.events` 使用账本游标增量拉取；日志保留实际内容，不是只有事件名称。
 文本、思考、工具参数和 usage 的中立模型增量以 `model_stream_event` 返回，与执行事实
 共享 cursor，因此客户端重连后可续读。它们是观察数据，不参与恢复或重复执行判定；
@@ -125,6 +165,20 @@ cargo test -p kolyan-server-service --test server_http_process http_process_live
 取消请求和已停止分开报告：`Cancelling` / `execution_stopped: false` 表示仍等待当前边界。
 
 ## 测试
+
+Server 的宿主结果入口区分成功证明与终态反馈。`consume_terminal_result`
+提交 `task.terminal_result_consumed` schema 1：绑定完整 parent/child attempt、
+真实 terminal FactRef、物理执行 source 和显式 `completed` / `failed` / `cancelled`
+disposition。宿主必须先通过 `load_verified_result` 核验实际 Ledger；领域 journal
+不代替物理证据。失败和取消没有 completion fact，消费它们也不能使整个 Task 成功。
+现有成功消费命令和通用终态消费互斥，同一边不能消费两次。
+
+`load_verified_consumed_result` 只读重建精确消费证明，不重新执行 child、消费结果或
+发 grant；取消、终态、foreign attempt、未知关键 schema 和缺失证据拒绝恢复。
+Agent 将失败/取消转换为 `is_error: true` 的有界 ToolResult，保留真实 disposition；
+receipt/checkpoint 提交缺口应复用原消费事实，不能伪造成功或再次消费。
+完整 JSON 证明受宿主字节上限约束，超限明确失败，不截断。该接口不是已完成的
+Agent 调度器；实际委派装配与模型矩阵须独立验收。
 
 子进程测试代码、场景和预期放在 `crates/kolyan-integration-tests/tests/`；测试 target
 登记在本服务包，从而使用 Cargo 提供的本次构建二进制，而非可能过时的 target 文件。
