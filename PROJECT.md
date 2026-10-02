@@ -43,6 +43,7 @@ Session
 - [可治理 Skills 的选择性加载（分批实施）](docs/requirements/0036-governed-skills.md)
 - [可治理 MCP 接入（分批实施）](docs/requirements/0037-governed-mcp.md)
 - [可治理原生 Hooks（分批实施）](docs/requirements/0039-governed-hooks.md)
+- [Shell 大输出引用与受控分段读取（设计及分批实施）](docs/requirements/0040-governed-shell-output-artifacts.md)
 - [有界目标纠正与持久执行预算（分批实施）](docs/requirements/0038-bounded-goal-correction.md)
 - [Agent 调用、四种工具与 macOS 沙箱规格（L5，实施中）](docs/requirements/0030-governed-agent-execution.md)
 - [账本、轨迹与长任务能力规格（L1–L4 已验收）](docs/requirements/0029-durable-task-foundation.md)

@@ -98,6 +98,7 @@ Current mainline specifications:
 - [Governed MCP integration](0037-governed-mcp.md).
 - [Governed native hooks](0039-governed-hooks.md).
 - [Bounded goal correction and durable execution budgets](0038-bounded-goal-correction.md).
+- [Governed Shell output artifacts and targeted reads](0040-governed-shell-output-artifacts.md).
 
 Supporting specifications:
 
