@@ -41,6 +41,7 @@ Session
 - [上下文计量与受控缩减（适配器实施中）](docs/requirements/0034-context-engineering.md)
 - [目标验证与可用 Agent 宿主（分批实施）](docs/requirements/0035-goal-verification-and-agent-host.md)
 - [可治理 Skills 的选择性加载（分批实施）](docs/requirements/0036-governed-skills.md)
+- [有界目标纠正与持久执行预算（分批实施）](docs/requirements/0038-bounded-goal-correction.md)
 - [Agent 调用、四种工具与 macOS 沙箱规格（L5，实施中）](docs/requirements/0030-governed-agent-execution.md)
 - [账本、轨迹与长任务能力规格（L1–L4 已验收）](docs/requirements/0029-durable-task-foundation.md)
 - [最小 HTTP Server 需求与验收（已实现，真实矩阵 76/76 通过）](docs/requirements/0028-http-server-boundary.md)
