@@ -1,0 +1,8 @@
+[
+  {"id":"exact_consumer_completes","mutation":"none","accepted":true,"additional_models":1,"additional_effects":1,"error_contains":null},
+  {"id":"missing_cutoff_consumer_refuses","mutation":"missing_cutoff","accepted":false,"additional_models":0,"additional_effects":0,"error_contains":"checkpoint changes admitted context, snapshot or ceilings"},
+  {"id":"widened_cutoff_consumer_refuses","mutation":"widened_cutoff","accepted":false,"additional_models":0,"additional_effects":0,"error_contains":"checkpoint changes admitted context, snapshot or ceilings"},
+  {"id":"oversized_steps_consumer_refuses","mutation":"max_steps","accepted":false,"additional_models":0,"additional_effects":0,"error_contains":"checkpoint changes admitted context, snapshot or ceilings"},
+  {"id":"foreign_selector_refuses","mutation":"foreign_selector","accepted":false,"additional_models":0,"additional_effects":0,"error_contains":"read selector differs from exact suspension"},
+  {"id":"multiple_selectors_refuse","mutation":"multiple_selectors","accepted":false,"additional_models":0,"additional_effects":0,"error_contains":"multiple suspension read coordinates"}
+]

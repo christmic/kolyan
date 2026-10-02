@@ -1,5 +1,6 @@
 //! Actual durable approval production followed by private, read-only budget checks.
 //! Synthetic Provider/Tools are counted ports, not SDK or native-effect evidence.
+mod consumer;
 
 use std::{
     io::Write,

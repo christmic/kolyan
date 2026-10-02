@@ -233,8 +233,8 @@ a checkpoint. Rebuilt TaskExecutionService must reject oversized Steps and absen
 or widened cutoffs through its actual resume_approval entry point before any new
 grant, model/tool activity or Task/Session writes. Include an unchanged positive
 consumer control, reject ambiguous read coordinates, and export source events,
-observed payloads and results before assertions. This consumer gate is released
-for independent implementation, not yet integrated or accepted. No production
+observed payloads and results before assertions. This consumer gate is now
+integrated and locally verified below. No production
 visibility expansion or new public consumer API is needed.
 
 ### Main validator verification
@@ -252,3 +252,45 @@ Runtime execution, not fabricated in the reconstructed checkpoint.
 Workspace/all-target strict Clippy exited 0 in
 `/tmp/kolyan-task-budget-resume-main-strict-v1.log`. These are offline validator
 receipts, not approval-resume consumer or MiniMax acceptance.
+
+### Main approval resume consumer verification
+
+Main verified the three frozen consumer source/data digests before import. The
+existing validator file adds only `mod consumer`; production code and old
+assertions are unchanged. The actual Service.resume_approval path reconstructs
+from Runtime-produced suspension with Memory or reopened SQLite and a real
+filesystem SessionStore. Counted synthetic Provider/Tool ports are explicit;
+this is neither native-tool nor actual-vendor acceptance.
+
+The read-only observer changes only one exact returned suspension budget field.
+It never patches source events or the database. Missing/widened cutoff and excess
+Steps are rejected by Runtime's admitted-ceiling/content checks before the Task
+budget helper. Foreign or multiple observer coordinates are observer refusals,
+not claims that a production budget predicate rejected fabricated history.
+
+On 2026-10-03 `/tmp/kolyan-budget-consumer-main-module-v1.log` exited 0 with
+129 passed, zero failed or ignored. Main physically reread all twelve new rows
+at the path printed as TASK_BUDGET_CONSUMER_EVIDENCE in that log. Two unchanged
+positive controls really execute the approved tool, request a final answer and
+load verified physical completion. Ten negatives cause no additional model,
+preparation/effect, ledger append/claim, Task fact or Session update. The original
+reservation and policy remain unchanged; positive history only appends new
+completion facts. JSONL is synchronized and closed before comparison.
+
+The joint frozen Skills/approval-consumer source passed workspace all-target
+strict Clippy with exit 0 in `/tmp/kolyan-skills-budget-main-strict-v1.log`.
+Full workspace regression exited 0 in
+`/tmp/kolyan-skills-budget-main-workspace-v1.log`: 90 result groups, 900 passed,
+zero failed and 69 ignored, including helper-subprocess result groups. The
+ignored vendor entries were not run by this gate. Formatting, source-layout and
+diff checks exited 0. C1/C2 correction ownership and orchestration remain open.
+
+### Actual feedback motivating correction ownership
+
+The separate Skills C MiniMax run recorded one completed FinalAnswer whose file
+write included literal surrounding quotes: 22 bytes rather than the immutable
+20-byte goal. The actual receipt, readback and Unsatisfied assessment agree, and
+the Task remains Waiting. This is correct refusal of false completion, not C1/C2
+acceptance. Preserve the complete failed row under requirement 0036. C1 must
+admit new work from exact trustworthy assessment/opening evidence, rather than
+rewriting the original tool arguments, relaxing the goal or replaying the attempt.
