@@ -4268,3 +4268,21 @@ parallel/topology wrapper；父模块只新增声明。wrapper 在原 case 副�
 再跑真实 OS worker 场景。实际 MiniMax 两协议单次逐行运行，完整实际请求、
 模型事件、审批、恢复、收据及消费轨迹先落盘再比较。结果单独登记为新输入
 验收；新矩阵通过不能把旧矩阵的失败改成通过。
+
+新增矩阵已集成到 Main `0146648` 后的源码，尚未取得网络验收。主控独立运行
+`cargo test --offline --locked -p kolyan-integration-tests --test agent_root
+explicit_contract -- --nocapture`，终态退出 0：2 个测试函数通过，1 个网络函数
+ignored；八个数据场景均通过真实本机 Runner、原生工具进程及审批重建比较，
+但离线模型帧仍是测试数据，不是实际模型生成的调用。日志
+`/tmp/kolyan-explicit-contract-main-v1.log` 保留八份实际 JSONL 路径。
+
+完整 Agent 集成回归退出 0：59 passed、0 failed、19 ignored，日志
+`/tmp/kolyan-explicit-contract-main-root-v1.log`；Integration crate 全目标
+Clippy、格式及差异检查通过。网络 ignored 项不计为通过。原 fixture 文件
+及旧测试函数未修改，三个父模块仅新增模块声明。新增的数据摘要、允许字段
+守卫和完整场景库存先落盘并实际读回，再执行断言。
+
+此外，此前已冻结的 Tools/Server preparation 集成源码全仓离线回归终态
+退出 0：821 passed、0 failed、62 ignored，日志
+`/tmp/kolyan-evolution-workspace-main-v1.log`。该运行不包含上述新增矩阵源码，
+不能用其数量宣称新矩阵已经全仓或网络验收。

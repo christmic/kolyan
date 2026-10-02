@@ -4,6 +4,7 @@
 mod advertisement_wire;
 mod definition;
 mod error_feedback;
+mod explicit_contract;
 mod host;
 mod minimax_live;
 mod observed_replay;

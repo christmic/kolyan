@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "revision": "explicit-contract-v1",
+  "cases": [
+    {
+      "case_id": "explicit-contract-v1-single-named",
+      "baseline_scope": "delegation",
+      "baseline_case_id": "single-named",
+      "allowed_fields": [
+        "id",
+        "parent_input"
+      ],
+      "baseline_data_digest": "c156a308cc004955e44388b88382c2dca2a2f243aed8688ded7fac316a8d7799",
+      "new_input_digest": "bd09af117ee5aab1393c302b55cf8dcb4d9137955571ec8fd0348218be14be9f",
+      "input": "PARENT-PRIVATE-MARKER. Delegate exactly once with agent.invoke, parallel false, to the registered named child-definition revision r1. Request child permissions exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. The child private task is: Read safe/child-proof.txt exactly once with file.read, return its actual observed content, and do not delegate. You must wait for the durable child result, report it honestly, and never read the file yourself. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-single-inline",
+      "baseline_scope": "delegation",
+      "baseline_case_id": "single-inline",
+      "allowed_fields": [
+        "id",
+        "parent_input"
+      ],
+      "baseline_data_digest": "c156a308cc004955e44388b88382c2dca2a2f243aed8688ded7fac316a8d7799",
+      "new_input_digest": "c68d325c11978b20e8d04699160540550f96a8ee4a44b963c73fd6ee60f2d070",
+      "input": "PARENT-PRIVATE-MARKER. Delegate exactly once with agent.invoke, parallel false, to the complete inline definition supplied by the host below, copied exactly without changing any immutable field. Request child permissions exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. The child private task is: Read safe/child-proof.txt exactly once with file.read, return its actual observed content, and do not delegate. You must wait for the durable child result, report it honestly, and never read the file yourself. The supplied definition id/revision/model/instructions/static permissions remain immutable even after a rejected call. Only the separate requested invocation permissions may select a subset; no changed definition may reuse its revision. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-single-self",
+      "baseline_scope": "delegation",
+      "baseline_case_id": "single-self",
+      "allowed_fields": [
+        "id",
+        "parent_input"
+      ],
+      "baseline_data_digest": "c156a308cc004955e44388b88382c2dca2a2f243aed8688ded7fac316a8d7799",
+      "new_input_digest": "95baa7c6f5e457a4ace3cf9374e4d154501d49fbf6aaa2b3f919c8ed7f0e44ac",
+      "input": "PARENT-PRIVATE-MARKER. Delegate exactly once with agent.invoke, parallel false, to your self_call target. Request child permissions exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. The child private task is: Read safe/child-proof.txt exactly once with file.read, return its actual observed content, and do not delegate. You must wait for the durable child result, report it honestly, and never read the file yourself. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-parent-result-restart",
+      "baseline_scope": "delegation",
+      "baseline_case_id": "parent-result-restart",
+      "allowed_fields": [
+        "id",
+        "parent_input"
+      ],
+      "baseline_data_digest": "c156a308cc004955e44388b88382c2dca2a2f243aed8688ded7fac316a8d7799",
+      "new_input_digest": "bd09af117ee5aab1393c302b55cf8dcb4d9137955571ec8fd0348218be14be9f",
+      "input": "PARENT-PRIVATE-MARKER. Delegate exactly once with agent.invoke, parallel false, to the registered named child-definition revision r1. Request child permissions exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. The child private task is: Read safe/child-proof.txt exactly once with file.read, return its actual observed content, and do not delegate. You must wait for the durable child result, report it honestly, and never read the file yourself. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-readonly_two_children_overlap",
+      "baseline_scope": "parallel",
+      "baseline_case_id": "readonly_two_children_overlap",
+      "allowed_fields": [
+        "id",
+        "input"
+      ],
+      "baseline_data_digest": "a788bbc24857df195c3daaef3ab30b2912d5db05e011ded7a315172422b1e9fa",
+      "new_input_digest": "88b46ab14d09cb316ebd2dc3e3bf0546630a0a691ce0436b3745d094a1450483",
+      "input": "PARENT-PRIVATE-MARKER. Use exactly one agent.invoke with parallel true and two independent registered named child-definition revision r1 children. Each child permissions must be exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. Each child private task is: Read safe/child-proof.txt exactly once with file.read and return the actual content; do not delegate. Wait for both actual results. Both children must perform their own effect exactly once even if content matches. Do not perform the child task yourself. parallel is only a scheduling request; the trusted host alone decides safe concurrent or serial execution. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-writable_two_children_serial",
+      "baseline_scope": "parallel",
+      "baseline_case_id": "writable_two_children_serial",
+      "allowed_fields": [
+        "id",
+        "input"
+      ],
+      "baseline_data_digest": "a788bbc24857df195c3daaef3ab30b2912d5db05e011ded7a315172422b1e9fa",
+      "new_input_digest": "f192c7e8174384c49b8899fe0c78d9bd9e1408691d4344cc841c6d5c08f79451",
+      "input": "PARENT-PRIVATE-MARKER. Use exactly one agent.invoke with parallel true and two independent registered named child-definition revision r1 children. Each child permissions must be exactly {\"tools\":[\"file.write\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. Each child private task is: Write safe/child-proof.txt exactly once with file.write, content exactly TWO-CHILD-WRITE-PROOF, then report the real effect; do not delegate. Wait for both actual results. Both children must perform their own effect exactly once even if content matches. Do not perform the child task yourself. parallel is only a scheduling request; the trusted host alone decides safe concurrent or serial execution. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-deep_two_self_calls",
+      "baseline_scope": "topology",
+      "baseline_case_id": "deep_two_self_calls",
+      "allowed_fields": [
+        "id",
+        "input"
+      ],
+      "baseline_data_digest": "46772e1bea522d94418dc04785e63b78c655aaff1dc5c70f759dcbb557998ff1",
+      "new_input_digest": "c1d44884a93b41df9becc126d606fe6262c5b7beffcd5c79d41857063796817e",
+      "input": "Use exactly one agent.invoke, parallel false, with self_call and intermediate permissions {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":true}}. Give the intermediate this private task: Invoke exactly one self_call grandchild with parallel false and leaf permissions {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}; its private task is to read safe/child-proof.txt exactly once with file.read and return actual content without delegation. The intermediate must not read directly: it retains file.read only as its descendant ceiling. Wait for the grandchild actual result then report it. Root must not read directly or create extra children; wait for the intermediate actual result. There must be exactly root, intermediate and leaf, not additional attempts to substitute effects. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    },
+    {
+      "case_id": "explicit-contract-v1-two_child_approvals_restart",
+      "baseline_scope": "topology",
+      "baseline_case_id": "two_child_approvals_restart",
+      "allowed_fields": [
+        "id",
+        "input"
+      ],
+      "baseline_data_digest": "46772e1bea522d94418dc04785e63b78c655aaff1dc5c70f759dcbb557998ff1",
+      "new_input_digest": "d7efadcafde8cf4b5a2ed7057b51932b12f4e1803c09d75330c59ed646c5d159",
+      "input": "Use exactly one agent.invoke, parallel true, with two independent named child-definition revision r1 children. Each permissions must be exactly {\"tools\":[\"file.read\"],\"delegation\":{\"named_targets\":[],\"allow_inline\":false,\"allow_self\":false}}. Each private task must explicitly say: Call file.read for safe/child-proof.txt exactly once and return the actual content; do not delegate. Calling file.read itself triggers host approval. Do not ask for a separate approval tool, and do not wait before calling file.read; the host suspends the call, obtains independent approval, reconstructs and resumes before the actual read. Root waits for both verified child results and must not read directly or substitute one child result for the other. Each child must have its own successful read receipt. This is an actual workspace task. The listed file tools are host-provided capabilities. Calling the file tool itself triggers host permission checks and, when required, an approval suspension. There is no separate request-approval tool. Do not wait for approval before issuing the file tool call; the host performs approval, reconstruction and continuation before any physical effect. Do not infer that an admitted tool is unavailable from its unfamiliar name. Permissions examples are JSON arrays, not strings: [] is empty, not \"\" or [\"\"]. The callee target is separate from its future named_targets authority. Correct rejected arguments only through a newly model-generated call; never change static definitions, widen requested authority, substitute parent effects or invent results. Do not repeat an admitted invocation or successful file effect."
+    }
+  ],
+  "guard_cases": [
+    {
+      "id": "changed-effect-count",
+      "pointer": "/expected_reads",
+      "value": 0,
+      "accepted": false
+    },
+    {
+      "id": "changed-restart",
+      "pointer": "/restart",
+      "value": true,
+      "accepted": false
+    },
+    {
+      "id": "added-global-instructions",
+      "pointer": "/instructions",
+      "value": "New policy",
+      "accepted": false
+    },
+    {
+      "id": "unchanged-derived-case",
+      "pointer": "",
+      "value": null,
+      "accepted": true
+    }
+  ]
+}

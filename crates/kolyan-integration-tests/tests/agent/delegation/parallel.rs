@@ -1,5 +1,6 @@
 //! The same two-child cases run offline and with actual matrix Providers.
 
+pub(super) mod explicit_contract;
 mod minimax_live;
 
 use std::{collections::BTreeSet, fs, os::unix::fs::DirBuilderExt, sync::Arc};

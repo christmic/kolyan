@@ -2,6 +2,7 @@
 //! Network runs never consume scripted frames or manufacture model calls.
 
 mod comparison;
+pub(super) mod explicit_contract;
 mod minimax_live;
 
 use std::{collections::BTreeSet, fs, os::unix::fs::DirBuilderExt, sync::Arc};
