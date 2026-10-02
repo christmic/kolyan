@@ -21,6 +21,14 @@ Server 从本地配置装配 Provider 和工具，客户端不传凭据或任意
 进程关闭或崩溃后释放内存所有权；未落收据的副作用禁止自动重复执行。
 本版本不提供网络认证；stdio 仅用于本机受信任的客户端。
 
+通用挂起响应为 `state: "Suspended"`，显示坐标放在 `waiting` 对象内：
+`checkpoint_id`、`pending_approvals`、`external_waits`；两个数组可同时非空。
+审批显示包括 approval_id、turn_id、call_id、tool_name、reason、arguments
+及必填可空的 expires_at_ms；外部等待仅显示 call_id、wait_id、kind、schema_version。
+旧顶层 `approval` 不再返回。RPC 的嵌套 waiting 与 HTTP 的顶层显示字段不可混用。
+显示对象不包含 checkpoint、prepared、grant、continuation 或外部 binding，也不能
+作为恢复授权。客户端提交确切 approval_id，宿主保存并重验真实批准证明后恢复。
+
 ### 状态、幂等与事件边界
 
 请求字段见 [请求 schema](../schemas/server-rpc.schema.json)。响应为

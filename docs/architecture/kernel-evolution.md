@@ -1,307 +1,256 @@
-# Kernel Assessment and Extension Boundaries
+# Agent Framework Phase Review and Evolution Boundaries
 
-## Scope and conclusion
+## Phase conclusion and scope
 
-Kolyan has room to grow without replacing its Step, Turn, Runtime and Server
-boundaries. Its current strengths are explicit recovery contracts, durable
-effect accounting and model-neutral request planning. These are architectural
-advantages for a reusable personal Agent kernel, not evidence of better task
-success, latency or cost than other agents.
+As of 2026-10-02, Kolyan has a governed, recoverable execution kernel.
+It is not yet an accepted, reliably delivered personal Agent product.
+The existing layers should remain; the next gains depend on real task
+completion, context engineering and operational integration, not additional
+empty abstractions.
 
-This assessment records the local source snapshots reviewed on 2026-09-30:
-Kolyan `16a8e86`, Codex `5c5308fc9a`, Garive `3d67ac6a` and Grok Build
-`4247f661`. Comparisons concern these implementations, not every version or
-deployment. No comparative benchmark or new live acceptance run was performed.
-Existing requirements remain the authority for implementation and test status.
+This is a phase summary, not final acceptance or authorization to implement
+every recommendation. The implementation assessment includes the current
+workspace, including uncommitted changes. Main HEAD at review was
+`94adef0d`; that commit alone does not contain all capabilities described here.
 
-## Responsibility boundaries
+This document owns architectural conclusions and the frozen phase snapshot.
+[Requirement 0030](../requirements/0030-governed-agent-execution.md) owns current
+implementation and acceptance evidence.
+[Requirement 0029](../requirements/0029-durable-task-foundation.md) owns the
+durable foundation contracts. Do not maintain a second rolling test log here.
 
-The Session, Turn and Step hierarchy describes conversation execution units;
-Server and Runtime describe orchestration responsibilities, not extra
-conversation units.
+## Assessment sources and limits
+
+| Source | Local revision / scope |
+| --- | --- |
+| Kolyan | Current workspace; main HEAD `94adef0d`, with implementation changes not yet fully committed |
+| Codex | `5c5308fc9a`; inspected execution, context, extensions, memory and subagent consumers |
+| Garive | `3d67ac6ad6`; inspected governed execution, planning, evidence and capability preparation |
+| Grok Build | `4247f66168`; inspected goals, memory, MCP, skills, hooks and background execution |
+| DSH / Codewhale | Local `deepseek-tui`, `4f6da02c2`; inspected context reduction, fleet, tools and memory |
+| Claude Code | Official checkout `7974a70773` exposes plugins and hooks, not the complete engine; the separate third-party checkout is documentation, not executable core |
+
+These are local source comparisons, not comparative performance benchmarks.
+No new live-model run was performed for this review. A mechanism in a library
+does not prove production integration or operational reliability.
+
+The local [AI Agent handbook](../AI-Agents-in-Depth-zh-CN.pdf), version 2.0,
+informs the review: printed pages 18 (Harness), 43 (prompt cache), 57–59
+(progressive Skill loading), 70 (context reduction), 73 (memory), 104–108
+(tool/MCP boundaries), 163 (asynchronous coordination), 186–187 (repeatable
+evaluation), and 265–270 (evolution and isolation).
+These are design references, not evidence that Kolyan implements the
+capabilities. Input coercion and silent fallback recipes are not adopted:
+Kolyan retains strict protocol and authorization contracts.
+
+## Current framework and responsibilities
+
+Conversation units remain `Session -> Turn -> Step`. Agent, Server and Runtime
+describe different orchestration responsibilities, not extra conversation units.
 
 ```text
-Interactive client -> Server process -> Server coordination
-                                         | Session input and commit
-                                         v
-One-shot CLI -------------------------> Runtime driver
-                                         v
-                                        Turn
-                                         | Step -> ModelProvider -> adapter -> protocol
-                                         | tool invocation -> ToolExecutor
-                                         | policy, admission and event ports
-                                         v
-                                  result or suspension
+Agent definition / catalog / scoped permissions
+                       |
+AgentRunner: root admission, delegation, recursion and bounded joins
+                       |
+Server: Task / Session / approval / execution ownership
+                       |
+Runtime: bounded durable execution, effects, receipts and recovery
+                       |
+Turn: multi-Step loop, tool batches, results and continuation
+                       |
+Step -> neutral model request/events -> provider mapping -> protocol
+                       |
+Prepared tool call -> policy decision -> enforcing isolated executor
+
+Ledger: authoritative admitted facts and evidence
+Trajectory: actual model/tool interaction records linked to those facts
+Trace: diagnostic timing and observations, not recovery authority
 ```
 
-Server owns Session coordination and execution ownership. Runtime owns durable
-execution facts, cancellation admission and effect receipts. Turn owns the
-bounded loop, tool-result feedback and continuation. Step owns one model
-interaction and its event/result contract. Storage implementations own durable
-data access; Trace observes execution and is not the authority for recovery.
+AgentRunner exists as a library and in test hosts. It is not yet assembled into
+a delivered production Agent host:
+[the Agent application entry](../../apps/kolyan-agent/src/main.rs) is a
+placeholder, and [the Server service](../../services/kolyan-server/Cargo.toml)
+does not depend on `kolyan-agent`. Existing CLI/HTTP execution is not equivalent
+to a production root/delegated Agent service.
 
-Single-process execution does not require distributed leases. Any future
-cross-worker ownership coordination belongs above Runtime in Server's
-coordinator. It must not become a Step or Turn responsibility.
+Server owns long-lived coordination and execution ownership; Runtime executes
+bounded attempts. Single-process operation needs no distributed lease.
+Future cross-worker coordination belongs above Runtime in Server.
+Approval waiting persists continuation, not the original process stack.
+Storage supplies durable access; Trace cannot recreate an authorization.
 
-## Comparative findings
+## Implemented capabilities and remaining limits
 
-| Area | Kolyan evidence and practical consequence | Comparison and limitation |
+“Implemented” below describes the inspected workspace, not full acceptance.
+
+| Area | Implemented in this phase | Remaining limit |
 | --- | --- | --- |
-| Reusable execution boundary | [Module map](module-map.md) separates execution, protocols, storage and applications. Applications can share the same loop. | Well suited to embedding; fewer product responsibilities in the kernel is not proof of greater capability. Garive also separates execution ports. |
-| Durable approval | [Continuation](../../crates/kolyan-core/src/turn.rs) and [restore validation](../../crates/kolyan-core/src/turn/engine.rs) retain pending calls and model context. Approval need not retain the original process stack. | More explicit durable continuation than the inspected Codex command-approval path, which stores an active-turn oneshot callback in `codex-rs/core/src/session/mod.rs`. This does not imply Codex lacks persisted history or other recovery paths. |
-| Effect safety | [DurableTools](../../crates/kolyan-runtime/src/driver/tools.rs) reuses receipts and refuses blind replay of Started without a receipt. | A sound safety property, not a lead over Garive. Garive has committed governed results and explicit operator-reconciliation suspension. |
-| Provider variation | [RequestPlanner](../../crates/kolyan-model/src/planning.rs) separates protocol validity from endpoint/model parameter support. | A strength for multi-provider use. Neutral types must still preserve protocol-specific semantics through explicit extensions. |
-| Long context | Session selects conversation or full trajectory; no equivalent integrated token-budget/compaction port was found in the production execution path. | Codex has pre-sampling and intra-turn compaction; Grok has threshold triggering and reduction checks. More steps alone cannot solve context growth. |
-| Tool preparation | [InvocationClaim](../../crates/kolyan-policy/src/lib.rs) currently infers semantics from built-in tool names and a `path` field. | Garive's `ToolPreparationPort` derives a validated Prepared Call independently of authorization. Kolyan still needs this boundary for heterogeneous tools. |
-| Authorization binding | Grants and durable effects bind call identity, input and policy/constraints, but do not provide Garive's equivalent exact tool-revision binding. | An approval issued before a tool implementation changes needs an explicit validity rule. Garive binds Prepared Call digest, tool revision and execution requirements. |
-| Isolation | [Workspace](../../crates/kolyan-tools/src/workspace.rs) uses a directory capability for file tools. | This is not a general process/network sandbox. Codex and Grok have executor-level isolation mechanisms. |
-| Recovery scaling | Effect lookup and Session reconciliation read `events_after(0)`. | Correctness and scalability are separate. Long histories need bounded queries or materialized projections. |
-| Progress detection | [ProgressPolicy](../../crates/kolyan-policy/src/progress.rs) detects consecutive identical completed invocation signatures. | Does not generally detect alternating cycles, changing arguments without progress, or semantic task completion. It is a heuristic guard. |
+| Model / provider | OpenAI and Anthropic mapping, neutral requests/events, reasoning, structured output, cache and parameter support tables | Protocol support and request acceptance do not establish reliable task success; cross-model takeover is not delivered |
+| Step / Turn | Streaming and aggregation, bounded multi-Step loop, tool batches/results, cancellation, budgets and continuation | Standalone Step deadline handling deserves a focused check; Turn already wraps model opening with a deadline |
+| Session / Runtime | Durable context, approval reconstruction, receipts and reconciliation | No universal exactly-once guarantee for external effects |
+| Ledger / Trajectory / Trace | Validated authoritative facts, linked interaction evidence and separate diagnostics | Long-history performance, operational querying, privacy and retention need further work |
+| Tools / isolation | Read, Write, Edit, Shell; prepared grants and native macOS workers | General output artifacts, pagination, search, background jobs and cross-platform isolation are not delivered |
+| Delegation | Named and inline definitions, self-call identities, private context, durable child waits/results and bounded joins | Complex live reliability remains incomplete; mailbox steering and parallel token reservations are absent |
+| Long tasks | Cross-Turn continuation, context projection, approval reconstruction and idempotent finalization | Two live finalization cases failed; host-constructed progression is not autonomous planning |
+| Context engineering | Source provenance, user anchors, tool-call/result pairing and Strict/Inspect budget modes | No production tokenizer, automatic summarization, semantic compaction or general relevance retrieval |
+| Goals / planning | Task objectives, dependencies and criteria | Root admission currently uses execution completion, not a business-goal verifier or general planner/replanner |
+| Memory | Durable Session facts and history | No complete extraction, retrieval, revision, conflict-resolution and forgetting pipeline |
+| MCP / Skills / hooks | Concrete inventory and Turn preparation integration | Full MCP transport/discovery/auth lifecycle, Skill body loading and general hook lifecycle are not delivered |
+| Evaluation / product | Data-driven tests, actual JSONL evidence and independent candidate review | Live matrices are not fully passing; no self-iteration candidate has been accepted and merged; production Agent host is missing |
 
-Reference implementations are located in sibling repositories, not vendored
-dependencies: Garive `engine/core/src/governed_execution.rs`,
-`engine/tools/src/governed_types.rs` and `governed_reducer.rs`; Codex
-`codex-rs/core/src/session/turn.rs` and `tools/orchestrator.rs`; Grok Build
-`crates/common/xai-grok-compaction/src/intra_compaction/trigger.rs` and
-`crates/codegen/xai-grok-sandbox/src/lib.rs`. Recheck them before a future design
-decision; these snapshot findings are not permanent feature inventories.
+Important source-level distinctions:
 
-## Existing interfaces and remaining gaps
+- [Root admission](../../crates/kolyan-agent/src/runner/admission.rs) uses
+  `ExecutionCompleted`; a final refusal can end execution without achieving the
+  user's business goal. [The Agent README](../../crates/kolyan-agent/README.md)
+  records this distinction and the missing production context components.
+- [Context preparation](../../crates/kolyan-agent/src/context.rs) and
+  [projection](../../crates/kolyan-agent/src/context/projection.rs) preserve
+  provenance and pairing. A diagnostic byte estimate is not a trusted tokenizer.
+- [Delegation scheduling](../../crates/kolyan-agent/src/runner/delegation/scheduling.rs)
+  disables parallel execution under a finite token ceiling rather than
+  pretending concurrent reservations exist.
+- [Step](../../crates/kolyan-core/src/step.rs) awaits stream opening before its
+  controlled stream is established and checks deadlines during polling.
+  This is a static standalone-Step concern, not a reproduced Turn hang:
+  [Turn](../../crates/kolyan-core/src/turn/engine.rs) wraps opening in a timeout.
+- [Invocation routing](../../crates/kolyan-agent/src/runner/routing.rs) maps
+  preparation errors into denial; malformed input and authorization denial
+  should eventually be distinguishable. This is a finding, not an applied fix.
+- [Progress policy](../../crates/kolyan-policy/src/progress.rs) detects repeated
+  completed signatures. It is not semantic progress assessment or goal proof.
+- [Suspension recovery](../../crates/kolyan-runtime/src/driver/suspension.rs)
+  includes scoped history reads from position zero. Measure long histories
+  before asserting a performance defect or selecting a projection strategy.
 
-An existing trait is an extension point only when the execution path actually
-uses it and its contract carries the information required by the extension.
-A reserved directory or enum variant is not a finished extension mechanism.
+## What the other implementations contribute
 
-| Concern | Existing integration | Status and required evolution |
+| Reference | Concrete mechanism worth learning from | Implication for Kolyan |
 | --- | --- | --- |
-| Model invocation | `ModelProvider::stream`, protocol/provider separation, `ParameterTable` | Available. New adapters must preserve stream terminal/error semantics; the parameter registry can evolve without vendor branches in Turn. |
-| Tool execution | `ToolExecutor::execute_invocation`, `map_tool_executor` | Available for wrappers and executor replacement. Default `execute_with_grant` delegates without enforcing a grant; governed hosts must supply an enforcing executor rather than assuming every implementation is safe. |
-| Execution admission | `TurnBoundaryControl::admit` | Available for cancellation and fail-closed boundary checks. It does not itself guarantee exactly-once external effects. |
-| Authorization | `PolicyResolver` exists, but `TurnExecutor` stores `Arc<PolicyEngine>` | Partial. The resolver trait alone is not a pluggable Turn policy boundary; batch planning, context and progress also need an explicit contract. |
-| Session context | `SessionStore`, immutable Turn input and `SessionContextPolicy` | Available for persistence and coarse projection. The enum is not a token-budget or compaction strategy interface. |
-| Durable execution | `LedgerStore`, `LedgerQuery`, `DurableTurnDriver`, effect receipts | Scoped execution and exact-fact reads are integrated and indexed in SQLite. Validated fact relationships and external-effect reconciliation still need additional contracts; see requirement 0029. |
-| Observation | `StepEventRecorder`, `TurnEventRecorder`, `TraceSink` | Available. Optional observations must remain distinct from required recovery facts and must follow redaction/retention rules. |
-| Cross-process clients | Server service and execution protocol | Available boundary. Future transport adapters should reuse services rather than copy Turn or approval logic. |
+| Codex | [Compaction](../../../codex/codex-rs/core/src/compact.rs), extension/Skill selection, tool search, process management and subagent delivery | Turn existing boundaries into usable context and extension consumers; do not claim superiority from interface shape |
+| Garive | [Goal evidence](../../../Garive/runtime/replica/src/goal_evidence.rs), [plan proposal runtime](../../../Garive/runtime/replica/src/plan_proposal_runtime.rs), governed capability preparation | Separate admitted plans, goal evidence and execution receipts; add bounded correction without letting a plan grant authority |
+| Grok Build | [Goal classification](../../../grok-build/crates/codegen/xai-grok-shell/src/session/goal_classifier.rs), memory search, Skill loading, MCP lifecycle and background tasks | Evaluate completion separately and make extension lifecycles operational; model verification is not deterministic proof |
+| DSH / Codewhale | [Turn-loop compaction](../../../deepseek-tui/crates/tui/src/core/engine/turn_loop.rs), tool setup, fleet recovery and native memory | Preserve cancellation and atomic context replacement; distinguish recovery records from automatically resumed execution |
+| Claude Code | [Official plugin surface](../../../claude-code/plugins/README.md) and public hook configuration | Learn from public integration contracts only; do not infer unavailable engine internals |
 
-## Planned enhancement contracts
+Kolyan's strengths are explicit recovery, authority/effect separation,
+model-neutral mapping and topology identities. Its weaknesses are completion
+semantics, context maturity, extension integration, operational tooling and
+demonstrated reliability. None of these source observations establishes a
+comparative lead in success rate, latency or cost.
 
-The names below describe proposed responsibilities, not APIs already present.
-Do not add empty traits or a generic plugin framework just to claim extensibility.
-Introduce a focused interface with its first real implementation and tests.
+## Frozen phase acceptance snapshot
 
-### Context preparation
+The latest recorded terminal MiniMax runs at this review show:
 
-Server prepares Session context for the first Step. A Turn-level preparation
-port is needed before subsequent Steps to handle intra-turn growth. Runtime
-supplies the implementation; Turn invokes it without depending on a database,
-model vendor or summarization service.
+| Matrix | Data cases | Result |
+| --- | --- | --- |
+| Host feedback / complex delegated execution | 16 | 7 passed, 9 failed |
+| Long-task scenarios | 20 | 18 passed, 2 failed |
+| Self-iteration candidate acceptance | Reviewed candidates r1–r8 | None accepted or merged |
 
-Inputs should include the current message snapshot, model limits, output reserve
-and a versioned context policy. Outputs should include the effective request,
-budget accounting and provenance for any reduction. Preserve system constraints
-and tool-call/result pairing. A summarizer failure must return an explicit
-decision, not silently discard history. Store the admitted effective context
-and its policy/provenance so approval recovery does not reconstruct a different
-request from current Session history. Keep the source trajectory and Ledger
-facts intact; compressed context is a derived view, not a replacement ledger.
+The long-task failures were in finalization: 6/8 passed. Continuation,
+projection and ordinary ten-Turn groups each passed 4/4.
+These are data-case counts, not Rust test-function counts.
 
-### Prepared tool calls and policy resolution
+Retained failures cannot be attributed wholesale to the model or framework.
+The long-task run used a frozen binary preceding later diagnostics; those
+later diagnostics are not evidence about that earlier run.
+Offline checks and passing simpler cases do not replace failed live acceptance.
+See requirement 0030 for logs, trajectories, exact cases and current gates.
 
-Tool definitions and adapters validate arguments and derive exact resources,
-effects, execution requirements and tool revision. Policy evaluates that
-prepared description with dynamic context. It must not learn each tool's
-parameter format. The executor enforces the granted constraints.
+## Remaining work and proposed evolution
 
-Bind preparation, authorization, suspension and receipt to the same invocation
-and immutable input. Reject changed arguments or tool revisions on recovery,
-or require a new preparation/authorization decision. Replace the concrete Turn
-policy dependency with a port that covers batch decisions and progress, not
-only the current single-call `PolicyResolver::decide` method.
+### First: close the three already-recorded acceptance items
 
-### Effect reconciliation and bounded queries
+The [remaining three-item checklist](../requirements/0030-governed-agent-execution.md#剩余目标三项验收清单)
+remains the implementation authority:
 
-Provide execution/effect-scoped lookup and incremental projections while
-keeping the append-only facts authoritative. Backend transactions must preserve
-atomic cancellation admission and duplicate handling.
+1. Stabilize complex delegation, recursive calls and multiple-child approval
+   scenarios using actual model trajectories and causal evidence.
+2. Diagnose and close the two long-task finalization failures without weakening
+   existing cases or treating a rerun as proof of a fix.
+3. Obtain a genuinely model-authored worktree change; independently review it,
+   run relevant regression and live validation, then decide whether to merge.
 
-External-effect reconciliation requires evidence that the operation completed,
-failed before effect, or remains uncertain. Resuming must consume that evidence
-without automatically rerunning a non-idempotent operation. Existing
-`SessionExecutionService::reconcile` repairs Session commit projection; it is
-not an external-effect reconciliation protocol. Idempotency identities are
-effective only if the actual tool/service honors them.
+The following stages are architectural recommendations, not additional
+implementation authorization under the current acceptance work.
 
-### Isolated execution and progress assessment
+### Next: verify goals and assemble the usable host
 
-Process/filesystem/network isolation belongs to tool executors or environment
-adapters. Unsupported mandatory isolation must fail closed. Runtime records
-the relevant enforcement result; Step and Turn do not implement OS sandboxes.
+Introduce explicit postconditions and evidence consumption, distinguish
+execution completion from goal satisfaction, and support bounded correction.
+Then specify a production Agent host using the existing runner and services.
+Do not silently expand current CLI/HTTP scope or replace Server/Runtime.
 
-Progress assessment should support bounded cycle detection and explicit polling
-policy. Keep heuristic no-progress detection separate from task-success
-verification and hard execution budgets. Do not make another model mandatory
-for every policy decision.
+Expected result: a task can state what succeeded, what remains and why it
+stopped; the same governed mechanism becomes usable outside test hosts.
 
-## Implementation order and acceptance
+### Next: context and long-running resources
 
-Implementation contracts and per-increment evidence are maintained in
-[Durable Task Foundation](../requirements/0029-durable-task-foundation.md).
-This assessment remains the rationale, not a second implementation status log.
+Add trusted token accounting, selection and compaction with provenance.
+Keep source facts intact, retain safety constraints and tool pairing, and
+record admitted derived context for recovery. Evaluate stable prompt prefixes
+and dynamic append behavior rather than assuming cache savings.
 
-The following priority supersedes the initial context-first recommendation,
-following the user's long-task and governance direction on 2026-09-30:
+Add immutable large-output references and targeted reads; define background
+execution, observation and cancellation with their first concrete tools.
 
-1. Validated Ledger facts, recovery contracts and scoped queries.
-2. Linked Trajectory records and distinct diagnostic Trace contracts.
-3. Minimal durable task coordination across bounded Turns.
-4. Prepared calls, replaceable policy and executor isolation as those tasks
-   require them. Context preparation remains supporting work, not the lead item.
+Expected result: longer useful tasks without unbounded context, lost evidence
+or synchronous waiting on every external operation.
 
-Each increment needs a requirement/design document before implementation,
-module-local tests, new data-driven integration cases and live-model scenarios.
-Do not overwrite existing cases to conceal a regression. Offline tests own
-deterministic invariants; live tests verify the model-facing integration.
+### Next: governed extensions and memory
 
-Required scenario coverage includes context overflow and compaction failure;
-tool-result pairing after reduction; approval/restart with unchanged and changed
-tool revisions; a side effect completed before receipt persistence; confirmed
-reconciliation without duplicate execution; cancellation/admission races;
-sandbox escape denial; alternating tool cycles and legitimate polling. Add
-long-history query bounds and latency checks without claiming performance from
-interface shape alone. Tests write artifacts and compare semantic trajectories;
-normal Step/Turn execution does not write test files.
+Skills need versioned metadata, selective body/reference loading and explicit
+scopes. MCP needs actual transport, discovery, authentication refresh,
+cancellation and ownership checks. Hooks need concrete consumers, ordering and
+failure contracts. Neither Skill text nor MCP descriptions grant permission.
 
-Provider support facts, request acceptance and empirical task reliability are
-different dimensions. A few schema violations cannot by themselves establish
-that an endpoint does not support native structured output. Record explicit
-unsupported responses separately from probabilistic failures and transport
-errors. Report skipped combinations and retained failures in acceptance results.
+Memory should be selective, scoped and revisioned, with provenance, conflict
+handling and forgetting. Recalled material is derived context, not a rewrite
+of Ledger facts.
 
-## Theoretical support
+Expected result: reusable knowledge and external capabilities extend the Agent
+without bypassing preparation, authorization or executor enforcement.
 
-- [ReAct](https://arxiv.org/abs/2210.03629) supports interleaving reasoning,
-  action and observation. It does not establish that naming units Step/Turn
-  improves reasoning or that tool use guarantees correctness.
-- [Durable execution and idempotency](https://docs.aws.amazon.com/durable-execution/patterns/best-practices/idempotency/)
-  explain why interruption can leave an external effect uncertain. Receipts,
-  idempotency and reconciliation are distinct safeguards, not a universal
-  exactly-once guarantee.
-- [Saltzer and Schroeder's protection principles](https://web.mit.edu/Saltzer/www/publications/protection/)
-  motivate least privilege, fail-safe defaults and complete mediation. Their
-  application here is a design inference: declarations, dynamic authorization
-  and technical enforcement must remain separate and cooperate.
-- [Lost in the Middle](https://arxiv.org/abs/2307.03172) identifies limitations
-  in use of long contexts. It motivates evaluating context selection, but does
-  not prove that any particular summarization strategy improves task success.
-- [Codex sandbox documentation](https://learn.chatgpt.com/docs/sandboxing)
-  explicitly separates approval policy from technical sandbox boundaries.
+### Sustained work: coordination and evaluation
 
-## Architectural decision
+External wakeups, mailboxes, steering and concurrent budget reservations belong
+to Server/Agent coordination; Runtime remains a bounded executor.
+Evaluate resettable tasks with goal postconditions, retained failures, repeated
+success, security checks, cost and holdouts. Execution logs alone are not proof
+of improvement.
 
-Retain the existing execution layers. Extend missing ports where concrete
-capabilities require them; do not push Session storage, worker leases, OS
-isolation or provider names into the loop. Module boundaries leave space, but
-the context, preparation and policy gaps require local interface changes.
-This is an evolution plan, not a claim that all future enhancements are already
-plug-and-play or that live acceptance is complete.
+Voice, GUI, A2A interoperability and model training may follow real demand;
+they are not mandatory completion criteria for this phase.
 
-## Recursive calls and extensible execution topology
+## Expected outcome and stable design rules
 
-This is a proposed design constraint, not an implemented multi-agent API.
-Keep the Session/Turn/Step execution units. Do not force every future task,
-agent invocation or coordination relationship into that containment hierarchy.
-The Ledger stores admitted facts; Server coordination interprets topology and
-decides scheduling. A topology edge never grants permission to execute.
+The target is a personal Agent that completes real tasks, distinguishes done
+from unfinished, corrects within bounds, survives long approval waits without
+the original process, and does not repeat confirmed effects. Extensions must
+preserve authority, and independent regression must demonstrate improvement.
+This does not mean infinite execution, universal exactly-once effects,
+automatic approval or support for every workflow topology.
 
-### Source update and limits
+Keep these foundations stable:
 
-DSH means the local `deepseek-tui` checkout, now publicly named Codewhale.
-On 2026-09-30 its clean main checkout was fast-forwarded from `9b34ab54b` to
-the fetched origin/main `4f6da02c2`. This is a source-update receipt, not build
-or live-test evidence. Relevant inspected files at the updated revision are:
-
-- `crates/tui/src/fleet/ledger.rs`: append-only fleet records, replay epochs,
-  cursor-based observation and bounded artifact metadata. Append notifications
-  prompt another read; they are not durable delivery or execution authority.
-- `crates/tui/src/tools/subagent/coord/ledger.rs`: versioned decisions, scope
-  claims, contention and context-projection receipts. Coordination claims are
-  not a substitute for approval or technical enforcement.
-- `crates/tui/src/tools/subagent/governor.rs`: launch admission responds to
-  rate-limit observations independently of retries inside model calls.
-- `crates/protocol/src/journal.rs`: tree journal shapes remain explicitly
-  described as a placeholder; do not claim mature topology support from them.
-
-The older TUI goal-loop path has moved to `crates/runtime/src/goal_loop.rs`.
-Future implementation must inspect actual consumers at the pinned revision.
-These mechanisms inform the proposal; they do not prove cross-process crash
-safety or complete feature coverage without running the relevant tests.
-
-### Identities and relationships
-
-Separate a versioned Agent definition from an Agent instance, a logical
-invocation from its execution attempts, and a long-lived task from its Turns.
-Calling the same Agent definition recursively creates a new invocation; it
-must not reuse the caller's execution identity, receipt keys or approval.
-Record the admitted definition/configuration revision for later recovery.
-
-Use explicit, versioned relationship facts with validated source and target
-references. Proposed relationship families include invocation, delegation,
-dependency, result consumption, continuation and supersession. An invocation
-may have one initiating caller while a join consumes several result references;
-one `parent_id` cannot express both relationships. Cancellation propagation,
-budget allocation and failure propagation require explicit admitted policy,
-not an inference from any parent or dependency edge.
-
-Allow linear chains, fan-out/fan-in, nested delegation and future graph-shaped
-workflows without a closed `TopologyKind` enum in the execution kernel. Keep
-their distinct rules: ancestry and causation must not cycle; a dependency DAG
-must not cycle; an iterative workflow creates new iteration/attempt identities
-instead of rewriting prior facts or creating a causal loop. Multiple executions
-of the same Agent definition do not themselves constitute a graph cycle.
-Conversation branching and execution dependency are separate relations.
-
-### Facts and extension types
-
-Keep a small validated fact envelope: identity, owning stream and position,
-subject reference, causal references, namespaced kind, schema version and
-payload or immutable content reference. Task, Agent, invocation, execution,
-model call and effect identities remain distinct. Timestamps describe
-observation; durable stream position orders commits. Do not infer global
-causality from wall clocks or independent stream cursors.
-
-Extension kinds require registered schema/reference/transition validation
-before they can mutate authoritative state. An unknown observational kind may
-be retained without driving execution; an unknown recovery-critical kind must
-block recovery rather than be silently skipped. Define version compatibility
-explicitly. Avoid both an ever-growing universal enum and unrestricted JSON
-whose meaning every consumer guesses. Introduce an extension contract only
-with its first concrete fact family and tests, not an empty plugin framework.
-
-Trajectory records retain actual admitted model inputs, outputs and tool
-observations, linked to the same invocation, attempt and durable facts. Trace
-adds diagnostic spans and timing but cannot recreate an authorization. Large
-or sensitive content needs bounded immutable references, integrity checks,
-access control and retention rules; hashes do not replace storage or authority.
-Compressed context and UI projections must not overwrite the source facts.
-
-### Long tasks and recovery acceptance
-
-Server task coordination owns objectives, success evidence, continuation,
-waiting reasons and admitted topology revisions. Runtime executes bounded
-attempts; Turn and Step do not acquire scheduling or multi-agent duties.
-Long approval waits persist a continuation rather than retaining a call stack.
-Resuming an approval, reconciling an uncertain effect, retrying an attempt and
-starting a subsequent Turn are different operations with different guards.
-
-The first implementation needs data-driven cases for self-call identity
-isolation; fan-out and multi-input joins; nested suspension and restart;
-duplicate result delivery; child completion before parent observation;
-changed definition/topology revisions; cancellation under explicit propagation
-rules; shared budget limits and recursion bounds; unknown critical fact kinds;
-and receipt-backed recovery without repeating an uncertain external effect.
-Offline tests prove these deterministic invariants. Live-model cases prove
-model-facing integration and preserve actual trajectories. General scheduling,
-distributed leases and all topology variants are not requirements for the
-first increment; their boundaries must remain possible without replacing the
-fact model.
+- Separate definition/version, instance, invocation, attempt, task and effect
+  identities. Named and inline Agents obey the same authority requirements.
+- Delegation and dependency edges do not grant permission. Joins consume
+  explicit results; one parent identifier cannot express every relationship.
+- Causal ancestry must not cycle. Iteration creates new identities and facts,
+  rather than rewriting history or creating a causal loop.
+- Bind preparation, grant, implementation revision and receipt to the same
+  immutable invocation. Recovery must not silently reauthorize changed input.
+- Ledger is authoritative; Trajectory preserves interactions; Trace diagnoses.
+  Summaries, memory and UI projections remain derived views.
+- Validate registered authoritative extensions. Unknown recovery-critical
+  facts fail closed; observational data must not acquire execution authority.
+- Preserve strict contracts: no secret leakage, input coercion, compatibility
+  baggage or silent fallback that conceals unsupported behavior.
+- Specify each increment before implementing it. Keep module tests separate
+  from source, add data-driven integration/live cases, and export actual
+  trajectory rows before assertions. Normal execution does not write test files.

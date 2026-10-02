@@ -12,6 +12,7 @@
 | `kolyan-protocol-openai` | OpenAI Responses wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-anthropic` | Anthropic Messages wire protocol | Provider-neutral 抽象 |
 | `kolyan-protocol-sse` | 两套协议共用的有界字节分帧、UTF-8 和 EOF 校验 | HTTP、模型事件、完成状态推断 |
+| `kolyan-protocol-http` | 两套协议共用的请求开启重试策略与有界尝试报告 | 发送请求、SSE、工具或 Turn 重放、鉴权 |
 | `kolyan-provider-openai` | OpenAI 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-provider-anthropic` | Anthropic 协议到 Kolyan 类型的映射 | Agent Loop |
 | `kolyan-tools` | Tool trait、注册、执行 | 长期记忆 |

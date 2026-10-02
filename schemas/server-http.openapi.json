@@ -585,20 +585,44 @@
           "approval_id": {
             "type": "string"
           },
+          "turn_id": {
+            "type": "string"
+          },
           "call_id": {
             "type": "string"
           },
           "tool_name": {
             "type": "string"
           },
+          "reason": {
+            "type": "string"
+          },
+          "expires_at_ms": {
+            "type": ["integer", "null"],
+            "minimum": 0
+          },
           "arguments": {}
         },
         "required": [
           "approval_id",
+          "turn_id",
           "call_id",
           "tool_name",
+          "reason",
+          "expires_at_ms",
           "arguments"
         ]
+      },
+      "ExternalWait": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "call_id": {"type": "string"},
+          "wait_id": {"type": "string"},
+          "kind": {"type": "string"},
+          "schema_version": {"type": "integer", "minimum": 1}
+        },
+        "required": ["call_id", "wait_id", "kind", "schema_version"]
       },
       "TurnView": {
         "type": "object",
@@ -638,15 +662,16 @@
               "$ref": "#/components/schemas/StepView"
             }
           },
-          "pending_approval": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Approval"
-              },
-              {
-                "type": "null"
-              }
-            ]
+          "checkpoint_id": {
+            "type": ["string", "null"]
+          },
+          "pending_approvals": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/Approval"}
+          },
+          "external_waits": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/ExternalWait"}
           },
           "cancellation_requested": {
             "type": "boolean"
@@ -670,7 +695,9 @@
           "state",
           "end_reason",
           "steps",
-          "pending_approval",
+          "checkpoint_id",
+          "pending_approvals",
+          "external_waits",
           "cancellation_requested",
           "execution_stopped",
           "recovery_required",

@@ -23,7 +23,14 @@ Turn paths enforce Session ownership; another Session's Turn returns 404.
 ## Result lifecycle
 
 Start/approve await one execution attempt, not user confirmation. Suspension
-returns pending approval_id and call identity/name/arguments, no continuation.
+returns a nullable checkpoint_id and required pending_approvals / external_waits
+arrays; both arrays may be populated in a mixed wait. Approvals display approval_id,
+turn_id, call_id, tool_name, reason, arguments and required nullable expires_at_ms.
+External waits display call_id, wait_id, kind and schema_version only. These are
+display coordinates, not restore authority: no checkpoint, grant, preparation,
+continuation or external proof binding is exposed. Running and terminal views
+have null checkpoint_id and empty waiting arrays. The old pending_approval field
+is not accepted.
 Later approval resumes the durable checkpoint after any length of wait or restart.
 Deny terminates with ApprovalRejected without executing the pending call.
 
