@@ -1,0 +1,6 @@
+[
+  {"id":"small_source","bytes":256,"accepted":true},
+  {"id":"source_over_64k","bytes":131072,"accepted":true},
+  {"id":"source_over_1m","bytes":1048576,"accepted":true},
+  {"id":"source_over_host_limit","bytes":16777216,"accepted":false}
+]

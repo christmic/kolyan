@@ -1,0 +1,13 @@
+[
+  {"id":"exact_rebuilt_source","fault":"none","expected_error":false},
+  {"id":"missing_source","fault":"missing","expected_error":true},
+  {"id":"substituted_source","fault":"substituted","expected_error":true},
+  {"id":"foreign_source_scope","fault":"foreign","expected_error":true},
+  {"id":"unknown_body_field","fault":"unknown_body","expected_error":true},
+  {"id":"unknown_document_field","fault":"unknown_document","expected_error":true},
+  {"id":"changed_original_input","fault":"original_input","expected_error":true},
+  {"id":"unknown_source_schema","fault":"schema","expected_error":true},
+  {"id":"noncritical_source","fault":"noncritical","expected_error":true},
+  {"id":"optional_artifact","fault":"optional_artifact","expected_error":true},
+  {"id":"missing_artifact","fault":"missing_artifact","expected_error":true}
+]

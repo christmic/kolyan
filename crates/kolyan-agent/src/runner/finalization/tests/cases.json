@@ -1,0 +1,197 @@
+[
+  {
+    "id": "completed_gap",
+    "mode": "gap",
+    "mutation": "none",
+    "expected_state": "Completed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 1,
+    "max_tokens": 50
+  },
+  {
+    "id": "failed_gap",
+    "mode": "gap",
+    "mutation": "none",
+    "expected_state": "Failed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": "failed",
+      "answer": "Must not be emitted"
+    },
+    "expected_root": "failed",
+    "expected_terminal_facts": 1,
+    "max_tokens": null
+  },
+  {
+    "id": "cancelled_execution_gap",
+    "mode": "gap",
+    "mutation": "none",
+    "expected_state": "Failed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": "cancelled",
+      "answer": "Cancellation racing model completion"
+    },
+    "expected_root": "cancelled",
+    "expected_terminal_facts": 1,
+    "max_tokens": 50
+  },
+  {
+    "id": "automatic_failed_root",
+    "mode": "automatic",
+    "mutation": "none",
+    "expected_state": "Failed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": "failed",
+      "answer": "Must not be emitted"
+    },
+    "expected_root": "failed",
+    "expected_terminal_facts": 1,
+    "max_tokens": null
+  },
+  {
+    "id": "automatic_cancelled_root",
+    "mode": "automatic",
+    "mutation": "none",
+    "expected_state": "Failed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": "cancelled",
+      "answer": "Cancellation racing model completion"
+    },
+    "expected_root": "cancelled",
+    "expected_terminal_facts": 1,
+    "max_tokens": 50
+  },
+  {
+    "id": "revoked_host_gap",
+    "mode": "gap",
+    "mutation": "host_revoked",
+    "expected_state": "Ready",
+    "expected_error": true,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  },
+  {
+    "id": "foreign_session_gap",
+    "mode": "gap",
+    "mutation": "wrong_session",
+    "expected_state": "Ready",
+    "expected_error": true,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  },
+  {
+    "id": "foreign_attempt_gap",
+    "mode": "gap",
+    "mutation": "wrong_attempt",
+    "expected_state": "Ready",
+    "expected_error": true,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  },
+  {
+    "id": "missing_terminal_gap",
+    "mode": "missing_terminal",
+    "mutation": "none",
+    "expected_state": "Ready",
+    "expected_error": true,
+    "expected_requests": 0,
+    "script": {
+      "fault": null,
+      "answer": "Must not be polled"
+    },
+    "expected_root": null,
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  },
+  {
+    "id": "whole_task_cancel_no_resurrection",
+    "mode": "gap",
+    "mutation": "whole_task_cancel",
+    "expected_state": "Cancelled",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 1,
+    "max_tokens": 50
+  },
+  {
+    "id": "contradictory_task_verdict",
+    "mode": "gap",
+    "mutation": "contradictory_verdict",
+    "expected_state": "Failed",
+    "expected_error": true,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted successful root"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 1,
+    "max_tokens": 50
+  },
+  {
+    "id": "host_continuation_explicit_boundary",
+    "mode": "gap",
+    "mutation": "host_continuation",
+    "expected_state": "Waiting",
+    "expected_error": true,
+    "expected_requests": 1,
+    "script": {
+      "fault": null,
+      "answer": "Persisted host predecessor"
+    },
+    "expected_root": "completed",
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  },
+  {
+    "id": "finite_failed_root_existing_verdict",
+    "mode": "gap",
+    "mutation": "none",
+    "expected_state": "Failed",
+    "expected_error": false,
+    "expected_requests": 1,
+    "script": {
+      "fault": "failed",
+      "answer": "Must not be emitted"
+    },
+    "expected_root": "failed",
+    "expected_terminal_facts": 0,
+    "max_tokens": 50
+  }
+]
