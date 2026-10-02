@@ -23,6 +23,7 @@ use kolyan_model::{
     SystemInstruction, TokenUsage, ToolChoice, ToolDefinition, aggregate_stream,
 };
 use kolyan_protocol_anthropic::{AnthropicClient, AnthropicConfig};
+use kolyan_protocol_http::HttpRetryPolicy;
 use kolyan_protocol_openai::{OpenAiClient, OpenAiConfig};
 use kolyan_provider_anthropic::AnthropicProvider;
 use kolyan_provider_openai::OpenAiProvider;
@@ -70,6 +71,8 @@ struct RawOpenAiProvider {
     base_url: String,
     model: String,
     timeout_secs: u64,
+    #[serde(default)]
+    http_retry: HttpRetryPolicy,
     api_key_env: String,
     capabilities: Capabilities,
     #[serde(default)]
@@ -82,6 +85,8 @@ struct RawAnthropicProvider {
     model: String,
     anthropic_version: String,
     timeout_secs: u64,
+    #[serde(default)]
+    http_retry: HttpRetryPolicy,
     api_key_env: String,
     capabilities: Capabilities,
     #[serde(default)]
@@ -148,6 +153,7 @@ pub struct ProviderConfig {
     pub base_url: String,
     pub model: String,
     pub timeout_secs: u64,
+    pub http_retry: HttpRetryPolicy,
     pub api_key_env: String,
     pub capabilities: Capabilities,
     pub model_matrix: Vec<ModelMatrixEntry>,
@@ -159,6 +165,7 @@ pub struct AnthropicProviderConfig {
     pub model: String,
     pub anthropic_version: String,
     pub timeout_secs: u64,
+    pub http_retry: HttpRetryPolicy,
     pub api_key_env: String,
     pub capabilities: Capabilities,
     pub model_matrix: Vec<ModelMatrixEntry>,
@@ -200,6 +207,7 @@ fn from_openai(raw: RawOpenAiProvider) -> ProviderConfig {
         base_url: raw.base_url,
         model: raw.model,
         timeout_secs: raw.timeout_secs,
+        http_retry: raw.http_retry,
         api_key_env: raw.api_key_env,
         capabilities: raw.capabilities,
         model_matrix: raw
@@ -220,6 +228,7 @@ fn from_anthropic(raw: RawAnthropicProvider) -> AnthropicProviderConfig {
         model: raw.model,
         anthropic_version: raw.anthropic_version,
         timeout_secs: raw.timeout_secs,
+        http_retry: raw.http_retry,
         api_key_env: raw.api_key_env,
         capabilities: raw.capabilities,
         model_matrix: raw
@@ -288,6 +297,7 @@ pub fn build_openai_provider(cfg: &ProviderConfig, api_key: &str) -> OpenAiProvi
         api_key: api_key.to_string(),
         timeout: Duration::from_secs(cfg.timeout_secs),
         transport_retries: 1,
+        http_retry: cfg.http_retry.clone(),
         diagnostics: std::env::var("KOLYAN_PROTOCOL_DIAGNOSTICS")
             .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
             .unwrap_or(false),
@@ -307,6 +317,7 @@ pub fn build_anthropic_provider(cfg: &AnthropicProviderConfig, api_key: &str) ->
             .map(|value| value == "1" || value.eq_ignore_ascii_case("true"))
             .unwrap_or(false),
         transport_retries: 1,
+        http_retry: cfg.http_retry.clone(),
     };
     let client = AnthropicClient::new(protocol_cfg)
         .expect("AnthropicClient::new should succeed with a valid base_url and timeout");

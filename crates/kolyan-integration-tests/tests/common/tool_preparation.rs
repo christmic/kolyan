@@ -18,6 +18,40 @@ pub fn key(turn_id: &str) -> ExecutionKey {
     }
 }
 
+/// Trusted fixture confirmation binds saved preparation and independently
+/// admitted coordinates. It is not a production authority issuer.
+pub fn approval_confirmation(
+    suspension: &kolyan_core::TurnSuspension,
+) -> (kolyan_core::ResumeInput, kolyan_policy::ToolExecutionScope) {
+    assert!(suspension.waiting.external_waits.is_empty());
+    let requested = suspension
+        .waiting
+        .approvals
+        .first()
+        .expect("approval suspension");
+    let saved = suspension
+        .checkpoint
+        .approvals
+        .iter()
+        .find(|saved| saved.approval_id == requested.approval_id)
+        .expect("approval must bind checkpoint authority");
+    let scope = kolyan_policy::ToolExecutionScope {
+        execution: key(&requested.turn_id),
+        step_id: suspension.checkpoint.steps.last().unwrap().step_id.clone(),
+        agent_snapshot_digest: None,
+    };
+    (
+        kolyan_core::ResumeInput::ApprovalConfirmed(kolyan_core::ApprovalConfirmation {
+            approval_id: requested.approval_id.clone(),
+            prepared_digest: saved.prepared.digest().into(),
+            policy_revision: saved.policy_revision.clone(),
+            scope: scope.clone(),
+            evidence_id: format!("fixture-confirmed-{}", requested.approval_id),
+        }),
+        scope,
+    )
+}
+
 pub fn declaration(name: &str) -> Result<ToolManifest, ToolError> {
     let (capability, effect, idempotency) = match name {
         "file.read" => (

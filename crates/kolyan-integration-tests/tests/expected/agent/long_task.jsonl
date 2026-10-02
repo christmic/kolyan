@@ -1,0 +1,11 @@
+{"event":"turn_completed","turn":"long-01","file":"TURN01","receipts":{"file.write":1,"file.edit":0,"file.read":1}}
+{"event":"turn_completed","turn":"long-02","file":"TURN01|TURN02","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-03","file":"TURN01|TURN02|TURN03","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-04","file":"TURN01|TURN02|TURN03|TURN04","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-05","file":"TURN01|TURN02|TURN03|TURN04|TURN05","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-06","file":"TURN01|TURN02|TURN03|TURN04|TURN05|TURN06","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-07","file":"TURN01|TURN02|TURN03|TURN04|TURN05|TURN06|TURN07","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-08","file":"TURN01|TURN02|TURN03|TURN04|TURN05|TURN06|TURN07|TURN08","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-09","file":"TURN01|TURN02|TURN03|TURN04|TURN05|TURN06|TURN07|TURN08|TURN09","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"turn_completed","turn":"long-10","file":"TURN01|TURN02|TURN03|TURN04|TURN05|TURN06|TURN07|TURN08|TURN09|TURN10","receipts":{"file.write":0,"file.edit":1,"file.read":1}}
+{"event":"summary","admitted_turns":10,"minimum_steps":20,"offline_steps":30,"recovery_nodes":["waiting_before_effect","waiting_with_prior_receipt","completed_turn_to_next_admitted_turn"],"completion":"verified_physical_file_artifact_plus_ten_task_completion_facts","strict_token_acceptance":false,"context_reduction_acceptance":false}

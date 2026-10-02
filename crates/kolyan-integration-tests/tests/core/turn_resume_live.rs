@@ -137,11 +137,16 @@ async fn run<P: ModelProvider + 'static>(
     let mut approvals = 0;
     let mut multiple = std::collections::BTreeSet::new();
     let mut previous_batch: Option<(String, usize)> = None;
-    while let Ok(ResumableTurn::AwaitingApproval(approval)) = result {
+    while let Ok(ResumableTurn::Suspended(suspension)) = result {
         approvals += 1;
         assert!(approvals < 30, "[{label}] unbounded approval sequence");
-        let step_id = approval.continuation.steps.last().unwrap().step_id.clone();
-        if !approval.continuation.approved_call_ids.is_empty() {
+        let step_id = suspension.checkpoint.steps.last().unwrap().step_id.clone();
+        if suspension
+            .checkpoint
+            .approvals
+            .iter()
+            .any(|approval| approval.evidence_id.is_some())
+        {
             multiple.insert(step_id.clone());
         }
         if let Some((previous, effects)) = &previous_batch
@@ -154,17 +159,31 @@ async fn run<P: ModelProvider + 'static>(
             );
         }
         previous_batch = Some((step_id, records.count("tool_start")));
-        records.push(json!({"event":"suspended","approval":approval}));
+        records.push(json!({"event":"suspended","approval":suspension.waiting.approvals.first().unwrap(),"suspension":suspension}));
         // Only the caller carries serialized data into the reconstructed executor.
-        let encoded = serde_json::to_vec(&approval).unwrap();
-        drop(approval);
-        let restored: ApprovalRequest = serde_json::from_slice(&encoded).unwrap();
+        let encoded = serde_json::to_vec(&suspension).unwrap();
+        drop(suspension);
+        let restored: TurnSuspension = serde_json::from_slice(&encoded).unwrap();
         records.push(json!({"event":"executor_reconstructed"}));
         if case.cancel_when_suspended {
             assert!(gate.cancel());
         }
-        let id = restored.approval_id.clone();
-        result = build().resume_approval(restored, &id).await;
+        let (input, scope) = approval_confirmation(&restored);
+        let executor = build();
+        let control = TurnControl::default();
+        result = match executor.merge_resume_with_control(
+            restored,
+            input,
+            scope.clone(),
+            control.clone(),
+        ) {
+            Ok(checkpoint) => {
+                executor
+                    .resume_checkpoint_with_control(checkpoint, scope, control)
+                    .await
+            }
+            Err(error) => Err(error),
+        };
     }
     let (outcome, steps) = match result {
         Ok(ResumableTurn::Completed(execution)) => (

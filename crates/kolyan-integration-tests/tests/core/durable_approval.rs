@@ -11,7 +11,9 @@ use common::{
     ModelMatrixEntry, build_anthropic_provider, build_openai_provider, build_request, has_api_key,
     has_api_key_anthropic, load_config, load_fixture, require_api_key, require_api_key_anthropic,
 };
-use kolyan_core::{ResumableTurn, TurnConfig, TurnExecutor, TurnOutcome, TurnRequest};
+use kolyan_core::{
+    ResumableTurn, TurnConfig, TurnControl, TurnExecutor, TurnOutcome, TurnRequest, TurnSuspension,
+};
 use kolyan_model::ModelProvider;
 use kolyan_policy::{ApprovalMode, Capability, Effect, PathScope, PolicyEngine, ToolManifest};
 use kolyan_storage::{ApprovalStore, FileApprovalStore};
@@ -136,22 +138,29 @@ async fn run_case<P>(
                 panic!("[{family}/{}] durable start failed: {error}", entry.model)
             })
     };
-    let approval = match awaiting {
-        ResumableTurn::AwaitingApproval(value) => *value,
+    let suspension = match awaiting {
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => {
             panic!("[{family}/{}] expected approval boundary", entry.model)
         }
     };
+    let approval = suspension
+        .waiting
+        .approvals
+        .first()
+        .expect("approval suspension");
     assert_eq!(approval.turn_id, turn_id);
     store
-        .save(&approval)
+        .save(approval)
         .expect("approval checkpoint should persist");
     let approval_id = approval.approval_id.clone();
+    let checkpoint_path = root.join(format!("{approval_id}.suspension.json"));
+    fs::write(&checkpoint_path, serde_json::to_vec(&suspension).unwrap()).unwrap();
     let trace = vec![
         json!({"state":"awaiting_approval", "approval_id": approval.approval_id}),
         json!({"state":"executor_discarded"}),
     ];
-    drop(approval);
+    drop(suspension);
 
     let restored = store.claim(&approval_id).unwrap_or_else(|error| {
         panic!(
@@ -159,11 +168,20 @@ async fn run_case<P>(
             entry.model
         )
     });
+    let suspension: TurnSuspension =
+        serde_json::from_slice(&fs::read(&checkpoint_path).unwrap()).unwrap();
+    assert_eq!(suspension.waiting.approvals.first().unwrap(), &restored);
     let completed = {
         let executor = authorized_executor(provider.clone(), root)
             .with_execution_key(trusted_tools::key(&turn_id));
+        let (input, scope) = trusted_tools::approval_confirmation(&suspension);
+        let checkpoint = executor
+            .merge_resume_with_control(suspension, input, scope.clone(), TurnControl::default())
+            .unwrap();
+        fs::write(&checkpoint_path, serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+        let checkpoint = serde_json::from_slice(&fs::read(&checkpoint_path).unwrap()).unwrap();
         executor
-            .resume_approval(restored, &approval_id)
+            .resume_checkpoint_with_control(checkpoint, scope, TurnControl::default())
             .await
             .unwrap_or_else(|error| {
                 panic!("[{family}/{}] durable resume failed: {error}", entry.model)
@@ -171,7 +189,7 @@ async fn run_case<P>(
     };
     let execution = match completed {
         ResumableTurn::Completed(value) => *value,
-        ResumableTurn::AwaitingApproval(_) => {
+        ResumableTurn::Suspended(_) => {
             panic!("[{family}/{}] expected completion", entry.model)
         }
     };
@@ -192,6 +210,7 @@ async fn run_case<P>(
     store
         .delete(&approval_id)
         .expect("checkpoint should be deleted after completion");
+    fs::remove_file(checkpoint_path).unwrap();
 }
 
 async fn run_terminal_cases<P>(provider: &P, entry: &ModelMatrixEntry, family: &str, root: &Path)
@@ -220,11 +239,12 @@ where
         .await
         .unwrap_or_else(|error| panic!("[{family}/{}] reject start failed: {error}", entry.model));
     let rejected = match first {
-        ResumableTurn::AwaitingApproval(value) => {
+        ResumableTurn::Suspended(value) => {
             let value = *value;
+            let approval = value.waiting.approvals.first().unwrap();
             authorized_executor(provider.clone(), root)
-                .with_execution_key(trusted_tools::key(&value.turn_id))
-                .reject_approval(value.clone(), &value.approval_id, "user rejected")
+                .with_execution_key(trusted_tools::key(&approval.turn_id))
+                .reject_approval(value.clone(), &approval.approval_id, "user rejected")
                 .expect("reject should be terminal")
         }
         ResumableTurn::Completed(_) => {
@@ -243,17 +263,35 @@ where
         .await
         .unwrap_or_else(|error| panic!("[{family}/{}] expire start failed: {error}", entry.model));
     let mut expired = match second {
-        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => {
             panic!("[{family}/{}] expected expiration approval", entry.model)
         }
     };
-    let approval_id = expired.approval_id.clone();
-    expired.expires_at_ms = Some(0);
+    let approval_id = expired
+        .waiting
+        .approvals
+        .first()
+        .unwrap()
+        .approval_id
+        .clone();
+    expired
+        .checkpoint
+        .approvals
+        .iter_mut()
+        .find(|approval| approval.approval_id == approval_id)
+        .unwrap()
+        .expires_at_ms = Some(0);
+    expired.waiting = expired
+        .checkpoint
+        .suspension_summary(&expired.checkpoint.scope)
+        .unwrap();
+    let (input, scope) = trusted_tools::approval_confirmation(&expired);
     let error = authorized_executor(provider.clone(), root)
-        .with_execution_key(trusted_tools::key(&expired.turn_id))
-        .resume_approval(expired, &approval_id)
-        .await
+        .with_execution_key(trusted_tools::key(
+            &expired.checkpoint.scope.execution.turn_id,
+        ))
+        .merge_resume_with_control(expired, input, scope, TurnControl::default())
         .expect_err("expired approval must fail closed");
     assert!(error.to_string().contains("expired"));
     assert!(!root.join("safe/allowed.txt").exists());

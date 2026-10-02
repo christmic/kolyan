@@ -145,11 +145,11 @@ impl ToolExecutor for FixtureTool {
                     message: "fixture failure".into(),
                 });
             }
-            Ok(ToolResult {
+            Ok(kolyan_core::ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: call.arguments.to_string(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
@@ -223,10 +223,10 @@ async fn data_driven_resume_and_boundary_contracts() {
         drop(executor);
         let mut approvals = 0;
         let mut prior_batch: Option<(String, usize)> = None;
-        while let Ok(ResumableTurn::AwaitingApproval(approval)) = result {
+        while let Ok(ResumableTurn::Suspended(suspension)) = result {
             approvals += 1;
             assert!(approvals < 30, "unbounded approval loop");
-            let step_id = approval.continuation.steps.last().unwrap().step_id.clone();
+            let step_id = suspension.checkpoint.steps.last().unwrap().step_id.clone();
             if let Some((prior_step, calls)) = &prior_batch
                 && *prior_step == step_id
             {
@@ -237,18 +237,31 @@ async fn data_driven_resume_and_boundary_contracts() {
                 );
             }
             prior_batch = Some((step_id, records.count("tool_start")));
-            records.push(json!({"event":"suspended","approval":approval}));
-            let encoded = serde_json::to_vec(&approval).unwrap();
-            let restored: ApprovalRequest = serde_json::from_slice(&encoded).unwrap();
+            records.push(json!({"event":"suspended","approval":suspension.waiting.approvals.first().unwrap(),"suspension":suspension}));
+            let encoded = serde_json::to_vec(&suspension).unwrap();
+            let restored: TurnSuspension = serde_json::from_slice(&encoded).unwrap();
             tokio::time::sleep(Duration::from_millis(case.resume_delay_ms)).await;
-            let id = restored.approval_id.clone();
+            let (input, scope) = approval_confirmation(&restored);
             let control = TurnControl::default();
             if case.cancel_locally_on_resume {
                 control.cancel();
             }
-            result = build()
-                .resume_approval_with_control(restored, &id, control)
-                .await;
+            let executor = build();
+            result = match executor.merge_resume_with_control(
+                restored,
+                input,
+                scope.clone(),
+                control.clone(),
+            ) {
+                Ok(checkpoint) => {
+                    let checkpoint: TurnCheckpoint =
+                        serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
+                    executor
+                        .resume_checkpoint_with_control(checkpoint, scope, control)
+                        .await
+                }
+                Err(error) => Err(error),
+            };
         }
         let outcome = match result {
             Ok(ResumableTurn::Completed(execution)) => {

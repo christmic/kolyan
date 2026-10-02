@@ -99,7 +99,7 @@ impl ToolExecutor for HangingTool {
     fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
             trusted_tools::validate(&invocation)?;
-            std::future::pending::<Result<ToolResult, ToolError>>().await
+            std::future::pending::<Result<kolyan_core::ToolOutcome, ToolError>>().await
         })
     }
 }
@@ -121,11 +121,11 @@ impl ToolExecutor for SelectiveTool {
                     message: format!("synthetic failure for {}", call.id),
                 });
             }
-            Ok(ToolResult {
+            Ok(kolyan_core::ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "ok".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
@@ -225,7 +225,9 @@ async fn continue_batch_returns_success_and_error_results_together() {
 #[tokio::test]
 async fn invalid_empty_batch_is_a_tool_error() {
     let provider = ScriptedProvider::new(vec![tool_response(Vec::new())]);
-    let executor = TurnExecutor::new(provider.clone());
+    let executor = TurnExecutor::new(provider.clone())
+        .with_execution_key(trusted_tools::key("turn-empty-batch"))
+        .with_policy_engine(trusted_tools::policy());
 
     let error = executor
         .execute(TurnRequest {

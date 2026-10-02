@@ -1216,6 +1216,13 @@ fn turn_event_record(event: &TurnEvent) -> Value {
         TurnEvent::ApprovalRequested { name, .. } => {
             json!({"event": "approval_requested", "name": name})
         }
+        TurnEvent::ToolAwaitingExternal {
+            turn_id,
+            call_id,
+            wait,
+        } => {
+            json!({"event":"tool_awaiting_external","turn_id":turn_id,"call_id":call_id,"wait":wait})
+        }
         TurnEvent::ToolResult { result, .. } => {
             json!({"event": "tool_result", "is_error": result.is_error, "content": result.content})
         }

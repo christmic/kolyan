@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+pub use super::trusted_tools::approval_confirmation;
+
 #[derive(Clone, Default)]
 pub struct Records(pub Arc<Mutex<Vec<Value>>>);
 impl Records {
@@ -131,7 +133,19 @@ impl TurnBoundaryControl for MemoryGate {
                     ("approval", json!({"approval_id":approval_id}))
                 }
                 TurnBoundaryKind::ResumeApproval { approval_id } => {
-                    ("resume", json!({"approval_id":approval_id}))
+                    ("approval_admission", json!({"approval_id":approval_id}))
+                }
+                TurnBoundaryKind::AwaitingExternal {
+                    checkpoint_id,
+                    wait_ids,
+                } => (
+                    "external_wait",
+                    json!({"checkpoint_id":checkpoint_id,"wait_ids":wait_ids}),
+                ),
+                TurnBoundaryKind::ResumeCheckpoint { checkpoint_id } => {
+                    // The fixture's resume trigger observes actual drive admission,
+                    // now checkpoint-scoped; approval merging itself is pure.
+                    ("resume", json!({"checkpoint_id":checkpoint_id}))
                 }
                 TurnBoundaryKind::Terminal { reason } => {
                     ("terminal", json!({"reason":format!("{reason:?}")}))
@@ -235,9 +249,12 @@ impl<T: ToolExecutor> ToolExecutor for RecordingTool<T> {
             let id = call.id.clone();
             let result = self.inner.execute_invocation(invocation).await;
             match &result {
-                Ok(result) => self
+                Ok(kolyan_core::ToolOutcome::Completed(result)) => self
                     .records
                     .push(json!({"event":"tool_result","result":result})),
+                Ok(kolyan_core::ToolOutcome::AwaitingExternal(wait)) => {
+                    self.records.push(json!({"event":"tool_wait","wait":wait}))
+                }
                 Err(error) => self
                     .records
                     .push(json!({"event":"tool_error","call_id":id,"error":error.to_string()})),

@@ -325,6 +325,13 @@ fn event_record(event: &TurnEvent) -> Value {
         TurnEvent::ApprovalRequested { name, .. } => {
             serde_json::json!({"event":"approval_requested","name":name})
         }
+        TurnEvent::ToolAwaitingExternal {
+            turn_id,
+            call_id,
+            wait,
+        } => {
+            serde_json::json!({"event":"tool_awaiting_external","turn_id":turn_id,"call_id":call_id,"wait":wait})
+        }
         TurnEvent::ToolExecutionFailed { name, .. } => {
             serde_json::json!({"event":"tool_execution_failed","name":name})
         }

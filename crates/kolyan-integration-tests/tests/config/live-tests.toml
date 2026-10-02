@@ -43,6 +43,12 @@ model        = "MiniMax-M3"
 timeout_secs = 120
 api_key_env  = "KOLYAN_MINIMAX_API_KEY"
 
+[provider.minimax.openai_compat.http_retry]
+max_retries = 2
+max_elapsed_ms = 120000
+max_server_delay_ms = 30000
+profile = "OpenAi"
+
 [provider.minimax.openai_compat.capabilities]
 # MiniMax OpenAI-compat reports `input_tokens` and `output_tokens`.
 input_tokens_reporting   = true
@@ -70,6 +76,12 @@ model              = "MiniMax-M3"
 anthropic_version  = "2023-06-01"
 timeout_secs       = 120
 api_key_env        = "KOLYAN_MINIMAX_API_KEY"
+
+[provider.minimax.anthropic_compat.http_retry]
+max_retries = 2
+max_elapsed_ms = 120000
+max_server_delay_ms = 30000
+profile = "Anthropic"
 
 [provider.minimax.anthropic_compat.capabilities]
 # MiniMax Anthropic-compat on the China region leaves `input_tokens` unset
