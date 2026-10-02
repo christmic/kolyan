@@ -30,6 +30,7 @@ fn fixture(chunks: Vec<Vec<u8>>) -> ResponseStream {
         },
         capture_tail: false,
         tail: Vec::new(),
+        retry_report: Default::default(),
     }
 }
 

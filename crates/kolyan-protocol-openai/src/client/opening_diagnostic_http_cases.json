@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "idle_timeout_ms": 200,
+  "io_timeout_ms": 2000,
+  "max_requests": 3,
+  "http_retries": 1,
+  "opening_window_ms": 2000,
+  "server_delay_ms": 1000,
+  "cases": [
+    {"id":"single_401","status":401,"headers":{},"body":"{\"error\":{\"code\":\"invalid_api_key\"}}","expected_stop":"Ineligible"},
+    {"id":"single_quota_429","status":429,"headers":{"x-should-retry":"true"},"body":"{\"error\":{\"code\":\"insufficient_quota\"}}","expected_stop":"PermanentQuota"}
+  ]
+}

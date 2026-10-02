@@ -1,3 +1,4 @@
+use kolyan_protocol_http::HttpRetryPolicy;
 use std::time::Duration;
 
 #[derive(Clone)]
@@ -7,6 +8,8 @@ pub struct OpenAiConfig {
     pub timeout: Duration,
     /// Number of retries for transport failures before an HTTP response.
     pub transport_retries: u8,
+    /// Explicit bounded opening-status policy; disabled by default.
+    pub http_retry: HttpRetryPolicy,
     pub diagnostics: bool,
 }
 
@@ -17,6 +20,7 @@ impl OpenAiConfig {
             api_key: api_key.into(),
             timeout: Duration::from_secs(120),
             transport_retries: 1,
+            http_retry: HttpRetryPolicy::default(),
             diagnostics: false,
         }
     }

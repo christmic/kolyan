@@ -15,6 +15,7 @@ pub struct ResponseStream {
     diagnostics: ResponseDiagnostics,
     capture_tail: bool,
     tail: Vec<u8>,
+    retry_report: kolyan_protocol_http::RetryReport,
 }
 
 impl ResponseStream {
@@ -42,7 +43,17 @@ impl ResponseStream {
             diagnostics,
             capture_tail,
             tail: Vec::new(),
+            retry_report: Default::default(),
         }
+    }
+
+    pub(crate) fn with_retry_report(mut self, report: kolyan_protocol_http::RetryReport) -> Self {
+        self.retry_report = report;
+        self
+    }
+
+    pub fn retry_report(&self) -> &kolyan_protocol_http::RetryReport {
+        &self.retry_report
     }
 
     fn record_bytes(&mut self, bytes: &[u8]) {
@@ -90,14 +101,18 @@ impl Stream for ResponseStream {
                     self.done = true;
                     self.pending.clear();
                 }
-                return Poll::Ready(Some(result));
+                return Poll::Ready(Some(
+                    result.map_err(|error| error.with_retry_report(&self.retry_report)),
+                ));
             }
             if self.done {
                 return Poll::Ready(None);
             }
             if let Some(error) = self.decoder.take_error() {
                 self.done = true;
-                return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
+                return Poll::Ready(Some(Err(
+                    OpenAiError::Framing(error).with_retry_report(&self.retry_report)
+                )));
             }
             match self.body.as_mut().poll_next(cx) {
                 Poll::Ready(Some(Ok(bytes))) => {
@@ -108,18 +123,24 @@ impl Stream for ResponseStream {
                             .extend(events.into_iter().map(|event| event.data)),
                         Err(error) => {
                             self.done = true;
-                            return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
+                            return Poll::Ready(Some(Err(
+                                OpenAiError::Framing(error).with_retry_report(&self.retry_report)
+                            )));
                         }
                     }
                 }
                 Poll::Ready(Some(Err(error))) => {
                     self.done = true;
-                    return Poll::Ready(Some(Err(self.transport_error(error))));
+                    return Poll::Ready(Some(Err(self
+                        .transport_error(error)
+                        .with_retry_report(&self.retry_report))));
                 }
                 Poll::Ready(None) => {
                     self.done = true;
                     if let Err(error) = self.decoder.finish() {
-                        return Poll::Ready(Some(Err(OpenAiError::Framing(error))));
+                        return Poll::Ready(Some(Err(
+                            OpenAiError::Framing(error).with_retry_report(&self.retry_report)
+                        )));
                     }
                 }
                 Poll::Pending => return Poll::Pending,

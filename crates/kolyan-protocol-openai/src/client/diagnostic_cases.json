@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"empty_unfinished","statuses":[],"decision":null,"stop":null,"root":"budget","status":null,"retained":false},
+    {"id":"pre_send_elapsed","statuses":[],"decision":null,"stop":"ElapsedLimit","root":"budget","status":null,"retained":true},
+    {"id":"single_disabled","statuses":[529],"decision":{"Stop":{"reason":"Disabled"}},"stop":"Disabled","root":"http","status":529,"retained":true},
+    {"id":"single_authentication","statuses":[401],"decision":{"Stop":{"reason":"Ineligible"}},"stop":"Ineligible","root":"http","status":401,"retained":true},
+    {"id":"single_permanent_quota","statuses":[429],"decision":{"Stop":{"reason":"PermanentQuota"}},"stop":"PermanentQuota","root":"http","status":429,"retained":true},
+    {"id":"single_transport_retry_then_elapsed","statuses":[null],"decision":{"Retry":{"delay_ms":0,"basis":"Backoff"}},"stop":"ElapsedLimit","root":"budget","status":null,"retained":true},
+    {"id":"multiple_exhausted","statuses":[529,529],"decision":{"Stop":{"reason":"Exhausted"}},"stop":"Exhausted","root":"http","status":529,"retained":true},
+    {"id":"current_401_body_elapsed","statuses":[529,401],"decision":{"Stop":{"reason":"ElapsedLimit"}},"stop":"ElapsedLimit","root":"http","status":401,"retained":true},
+    {"id":"single_accepted_decode_failure","statuses":[200],"decision":null,"stop":null,"root":"decode","status":null,"retained":true}
+  ],
+  "budget_stops": [
+    {"id":"wrapped_send_timeout","statuses":[],"current_status":null},
+    {"id":"single_401_body_timeout","statuses":[],"current_status":401},
+    {"id":"529_then_429_body_timeout","statuses":[529],"current_status":429}
+  ]
+}
