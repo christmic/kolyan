@@ -3288,3 +3288,357 @@ includes earlier tool results and the new instruction to read and run Shell.
 The model issues the read only, then claims both checks completed without a new
 Shell call or receipt. Keep that row Failed; this trace does not establish lost
 context or a transport decoding defect.
+
+### Shell declared working directory contract
+
+Actual preparatory Drop trace `kolyan-native-preparatory-live-9Jnzmv` contains a
+model-generated Shell call with an empty path. Preparation rejects it before any
+process starts. The current advertised schema accepts any string, so it does not
+expose the runtime's nonempty-path constraint. Correct that declaration without
+accepting empty paths, rewriting calls or weakening sandbox preparation.
+
+Omitting path or supplying null selects the workspace root, matching the current
+optional input contract. An explicit string path is a nonempty,
+NUL-free workspace-relative directory; `.` selects the root and `..` components
+are forbidden. Describe these rules and publish minLength one and maxLength
+4096 for string values, with the nullable type declared explicitly. Keep filesystem existence, symlink containment, trusted-root exclusion and
+byte-bound validation in preparation; schema text is not security authority.
+Declare command as nonempty and NUL-free with whitespace-only input rejected by
+preparation. Do not publish a global command maximum because it is instance
+configuration. Reject unknown properties as before.
+
+Add separate data-driven tests that export schema and observed preparation before
+comparison: omitted path, null and `.` succeed, empty and absolute paths, parent traversal
+and NUL fail without process execution; retain existing cases and assertions.
+Run focused tools and integration gates. Fresh network evidence must use the new
+source snapshot; preserve the current failed row and all currently running frozen
+matrices. Work on this repair must not mutate the model-authored candidate.
+
+The r3 experiment ended rejected after 349.82 seconds. All four initial-review
+reads passed exact provenance checks; the review Text enclosed its otherwise
+typed repair verdict in a Markdown fence, which the strict parser rejected.
+Fixed format validation failed while the other six commands passed. Independent
+source review additionally found Copy/repeat assertions before complete export,
+missing before/after facts in exported observations, unchecked dataset version,
+unknown-field acceptance and missing unique-state coverage checks. The helper's
+seven compiled oracle cases and 116 passing tests do not establish those missing
+quality properties. Preserve this candidate and its Failed Task; do not merge it.
+
+The new preparatory matrix ended 36 Passed and two Failed out of 38 rows in
+519.40 seconds. The empty-path failure above had no process admission. The other
+failure, GLM 5.2 OpenAI Drop trace `kolyan-native-preparatory-live-XmS9rb`, issued
+write, an extra xxd query and then the target loop instead of exactly two calls.
+Its requests contain the actual preceding results; each of three process scopes
+and grants matched its launch and all three were cleaned up. Preserve the failed
+two-call comparison; do not classify extra work as lost context or failed cleanup.
+
+The declaration repair lives in a separate developer worktree so current live
+snapshots and both failed candidates remain unchanged. Its first focused gate
+passed 21 Shell tests, including 14 new exported input-contract dataset rows;
+strict tools lint, format and layout checks passed. Full tools and native-running
+integration gates remain in progress. These local gates are not fresh actual-model
+acceptance of the changed advertisement.
+
+The declaration repair's complete tools gate passed 68 tests, and its affected
+native-running integration gate passed 11 tests with two network entries ignored.
+Final whole-workspace strict lint, format and layout checks passed; the final
+focused gate again passed 21 Shell tests. A fresh 38-row actual-model run started
+once against that frozen repair snapshot, with report
+`kolyan-r1-matrix-r9sM8D/report.json` and log
+`/tmp/kolyan-shell-contract-preparatory38-live-v2.log`. It is still running, so
+these checks do not yet establish that the changed advertisement resolves every
+actual-model case. The prior 36/38 report remains unchanged.
+
+The frozen mainline parallel-and-writable-serial actual matrix finished all 38
+rows Passed in 1111.70 seconds, with report `kolyan-r1-matrix-xG6WTL/report.json`.
+Its specific entry returned zero and the existing batch continued into recursive
+self calls and multiple child approvals. This is scheduling acceptance for the
+selected 19 deployment combinations, not closure of the failed delegation or
+self-iteration cases.
+
+### Native review output and complete candidate observations
+
+The rejected r3 requests set output_format to null while asking for strict review
+JSON in prose. The project parameter binding for
+`qwen/anthropic_messages/deepseek-v4-pro` explicitly selects the structured_output
+profile. The next revision must use the existing neutral OutputFormat for the
+initial and final review, rather than inventing protocol fields, switching models
+or stripping Markdown fences from a rejected response. Ordinary implementation,
+test and repair stages keep their ordinary output contract.
+
+Before Task admission, check the selected canonical protocol/model feature table
+for StructuredOutput. Reject unsupported selections explicitly; do not silently
+send unsupported fields or downgrade this revision to prompt-only review. Native
+schema includes the four exact candidate keys, typed version, verdict and findings,
+required fields and closed objects. Application checks still enforce byte bounds,
+digest equality, unique keys, finding bounds and accept/repair semantics. Verify
+the actual structured_output accompanies the same strict final Text. Four fresh
+successful reads remain mandatory; structured generation supplies no authority.
+
+Use a new explicit case revision, Task and worktree from the pinned original
+baseline. Reuse the bounded workflow through a data-owned revision overlay rather
+than duplicate the complete dataset or alter old inputs and assertions. Keep the
+r3 failure and candidate immutable. No hidden retry, artificial model response,
+host formatting of candidate code or extra repair budget is permitted.
+
+Strengthen the candidate test evidence contract: collect all seven cases with
+state, actual before/after Copy values and three actual helper results, then export
+one JSONL row per case tagged candidate_invocation_state_v1 before comparing any
+of those values. The fixed Host validation must require seven unique complete
+rows matching the expected states, unchanged before/after and all three repeated
+results. Absence of rows or missing observation fields is failure, not an empty
+successful comparison. This augments the compiled public oracle; it does not
+replace the final independent source review of assertion ordering, strict DTOs,
+version validation, coverage and preservation of old tests.
+
+Add independent native-review request/schema/preflight tests and observation
+validator datasets, export before comparison, retain the old review parser cases,
+and run local gates before the new actual experiment. The developer workspace
+implements native-review preflight, request configuration and strict output
+equality, with 44 data rows; the observation validator has 27 rows. Independent
+focused regression passed 23 tests with five explicitly ignored network entries.
+Full regression and actual candidate acceptance remain separate gates; no
+candidate has been merged.
+
+### Native review wire schema and local validation
+
+Independent review of the local official anthropic-sdk-python implementation,
+src/anthropic/lib/_parse/_transform.py, found that transform_schema preserves
+typed objects, required fields, enum and closed objects but moves unsupported
+constraints into description. Pattern, const, string length and maximum array
+length must not be presumed supported solely because the model advertises
+StructuredOutput.
+
+For this experiment, explicitly construct the review wire schema from that
+supported subset. Represent version one with a singleton enum. Describe digest
+and size constraints on the wire while preserving the full local schema,
+strict review parser, digest equality and read receipts. Validate the final
+response against the complete local schema as well as output equality. This is
+not a fallback to prose-only generation and does not change Provider feature
+selection or implement a speculative generic schema transformer.
+
+Add new independent wire-schema tests without replacing the existing 44 data
+rows. They must export both schemas before comparison, prove unsupported
+keywords are absent recursively from the wire and prove the complete local
+constraints still reject invalid output. Require fresh local gates before the
+single new r4 actual experiment; preserve the rejected r3 source and report.
+
+The wire/local split is implemented in the separate developer workspace. New
+20-row tests passed; the original 44-row dataset and tests retain their frozen
+hashes. Independent reviews found no blocking bypass in the overlay, observation
+acceptance or native-review wiring. Final whole-workspace strict lint passed;
+the final whole regression passed. The r4 actual experiment then failed in its
+tests stage: file.read contained an undeclared limit field, and the host selected
+default FailTurn. Its original trace and rejection closure remain unchanged;
+no merge occurred. structured_output is parsed by the adapter from final Text; it is
+not an independently signed source, execution or correctness credential.
+
+The frozen-mainline recursive-self and multiple-child-approval actual matrix
+finished 34 Passed and four Failed out of 38, with report
+kolyan-r1-matrix-m1Reai/report.json. The ten-Turn long-task matrix finished 37
+Passed and one Failed out of 38, report kolyan-r1-matrix-xAcVaW/report.json.
+In its failed long03, the second model request contained the first successful
+read result; two distinct read receipts violated the exact-one-read case while
+the edited file was correct. These failures remain failures, not skipped rows,
+and neither matrix establishes full L5 acceptance.
+
+### Recoverable tool errors in self iteration
+
+Use the existing Turn ToolDispatchPolicy rather than invent another retry loop.
+The self-iteration host must explicitly select Serial and ContinueBatch and
+export this actual selection with the stage specification. A malformed ordinary
+file call remains strictly rejected, performs no file effect and generates an
+is_error ToolResult for the next model request. The model, not the host, must
+produce a corrected call. Every attempt consumes the existing tool/Step budgets;
+do not increase limits, add hidden retries, strip unknown fields or expand grants.
+Uncertain outcomes, cancellation, timeouts and malformed batch identity remain
+fatal. New independent regressions reproduced two gaps in the existing core:
+execution InvalidBatch and preparation TimedOut were incorrectly fed back under
+ContinueBatch, followed by FinalAnswer. Add each missing fatal variant to its
+respective branch; preserve the reproductions and expected stopped outcomes.
+Do not change global Turn defaults or reinterpret
+the frozen r4 failure as successful.
+
+Add an independent data-driven regression for erroneous-call feedback, corrected
+call and termination, plus no-progress/budget and fatal-error boundaries. Export
+the actual requests, events and results before comparison. Preserve old inputs
+and assertions. Run the next actual self iteration in a fresh original-baseline
+worktree with new revision and Task identity; retain four allowed files, native
+review, seven fixed validations, one evidenced repair and final source audit.
+No host edits to the candidate are allowed. Merge only the verified candidate,
+not the experiment baseline's unrelated in-flight changes.
+
+Independent validation of the separate error-feedback workspace passed all 98
+Core tests, the nine new data-driven error-feedback cases, formatting, strict
+workspace/all-target lint and the full workspace regression. The two fatal-error
+reproductions now stop rather than produce FinalAnswer. This verifies the host
+wiring and kernel repair, not acceptance of a model-authored candidate.
+
+The single r5 actual run ended failed after 204.35 seconds. Its tests-step-1
+request contains the original rejected read call's is_error ToolResult; the
+model then generated two valid file.write calls itself. The next request returned
+HTTP 429 with code Throttling.AllocationQuota, explicitly stating that the monthly
+token-plan quota was exhausted and resets at 10-21 16:00 UTC. This is external
+quota exhaustion, not transient throttling or renewed failure to feed back the
+tool error. The Task failure closure retains that original reason.
+
+The partial candidate remains rejected: it has not registered its test module,
+and dataset version/coverage assertions precede observation export. It never
+reached fixed validation or native review. Preserve its files and actual trace;
+do not host-repair, merge or quietly rerun it. Further actual acceptance requires
+available provider quota or an explicitly configured and verified alternative
+supporting the required native output contract. Do not infer that support from
+vendor names or silently switch models to conceal the failed run.
+
+### Process lifecycle evidence under high output
+
+Actual native running cases produced thousands of dropped observations while
+stdout and stderr shared a queue with cancellation, capture and reap events.
+Missing lifecycle evidence does not prove that cleanup failed, but it prevents
+independent verification of the cleanup. Fix this transport boundary without
+changing process ownership, permissions, cancellation or output ceilings.
+
+Use separate bounded lifecycle and output queues. The channel capacity remains
+1 through 1024 per queue; total queued events are at most twice that capacity,
+plus two receiver merge heads. Output cannot occupy lifecycle capacity. Neither
+queue applies execution backpressure. Full or closed queues still record loss.
+Retain dropped() as the aggregate loss counter and expose lifecycle_dropped()
+and output_dropped() separately. Refused oversized host correlation counts as
+lifecycle loss. These counters never constitute proof of execution or cleanup.
+
+Merge accepted events in producer order using an internal sequence, with no new
+public event fields. Preserve per-pipe output ordering and capture completion
+ordering; cross-pipe delivery is not an OS causality guarantee. Sequence assignment,
+nonblocking send and receiver head selection must have a common short critical
+section, with no await, process I/O or user callbacks under it. Both queues may
+still lose events if their own capacity is exhausted or the receiver disappears.
+Do not claim a durable or universally lossless observer.
+
+Add independent data-driven queue tests and actual macOS high-output cancellation
+and future-drop tests. Verify actual PID/group correlation, reap, group cleanup
+and both capture completions. Export observations before comparison. Deliberate
+output pressure must show output loss without lifecycle loss; aggregate loss must
+remain positive. Preserve existing zero-loss positive cases and disconnected-sink
+negative cases unchanged. Do not sample retained bytes, fabricate missing events,
+extend deadlines or relax assertions to make an old failed run pass.
+
+Completion of this repair requires fresh sandbox tests, formatting, strict
+all-target checks and workspace regression. It does not establish model-authored
+self-iteration acceptance or replace the outstanding actual model matrix.
+
+Independent acceptance of this repair passed in the error-feedback workspace:
+Sandbox 41 tests, workspace regression, workspace all-target strict lint and
+formatting all exited successfully. The nine queue fixture rows, receiver wake
+and concurrent-producer tests passed alongside the two real macOS pressure
+scenarios. Relevant source hashes remained unchanged during final verification.
+Existing retained-output fixtures and native-running comparison code were not
+modified. Full regression evidence is
+`/tmp/kolyan-lifecycle-workspace-final-v1.log`; strict-check evidence is
+`/tmp/kolyan-lifecycle-strict-final-v1.log`.
+
+The independently observed cancel and future-drop runs each lost 224 output
+events, zero lifecycle events and 224 aggregate events. Both recorded their
+actual process identity, the distinct cancellation cause, successful termination
+and group cleanup, SIGKILL reap and two successful captures of 524288 bytes each.
+These are real native process observations, not real model acceptance. The
+original model failures remain failed.
+
+The existing serial actual-model batch compiles each entry from the main
+workspace and has no independent source snapshot. Keep main Rust and Cargo
+files frozen until that batch terminates; only then integrate the independently
+verified repair and verify the merged source. No self-iteration candidate has
+passed its complete gate or been merged.
+
+### Main integration after the original actual batch
+
+The original serial process has terminated. Its shell exit code was zero because
+the script finished, while all six test entries exited 101. The command actually
+dispatched 247 rows, not 399: 58 passed and 189 failed, including 182 explicit
+quota failures and seven other failures. The additional 152 rows existed only
+as a plan and were never dispatched. They remain NotRun, not successes or skips.
+No live owner process remains to require main-source freezing.
+
+All seven non-quota failures have now been attributed: six are real MiniMax
+HTTP 529 overload errors, and one violates the exact-one-read case. Overloads
+occur both before effect admission and after successful write receipts. In the
+latter cases the next actual model request contains the successful ToolResult;
+the write must not be replayed to recover from a failed model completion call.
+These failures do not establish lost context, worker startup failure or quota
+exhaustion. Their reports remain failed. Both protocol clients already retry
+selected pre-response transport errors, with transport_retries defaulting to one;
+they do not retry received HTTP overload statuses. Any added status retry must
+be explicit, preserve error provenance and never rerun a Turn or tool effect.
+
+Nineteen independently verified files were integrated into main in three bounded
+patch batches. Before/after SHA256 checks matched the audited source exactly.
+The batches contain two Core fatal guards and the Shell declaration tests;
+Server physical-terminal proof corrections with independent regressions; and
+bounded process observation queues with native pressure tests. Existing tests
+only gain module declarations where required. No experiment candidate, fixture
+weakening, credential configuration or unrelated baseline tree was copied.
+
+Merged-source formatting, workspace all-target strict checks and the fresh main
+workspace regression all exited successfully. All nineteen source fingerprints
+remained unchanged through the final checks, and the pre-existing staged-file
+set was preserved. This is merged offline/native-OS verification, not acceptance
+of the failed real-model matrix. Evidence paths are
+`/tmp/kolyan-main-l5-merged-workspace-v1.log` and
+`/tmp/kolyan-main-l5-merged-strict-v1.log`. Original failed reports remain intact.
+
+### Production Agent host assembly
+
+Entry selection is pending the user's choice between the existing HTTP service
+and a one-shot local CLI. The boundaries below describe the proposed host
+delivery; they do not authorize a transport contract change or prove that the
+reusable Agent library lacks execution. No entry wiring is implemented yet.
+
+The final source audit distinguishes reusable execution from product assembly.
+AgentRunner is production library code, with durable start, resume_approval and
+pump_agent_children operations. However, all current EnvironmentToolFactory
+implementations and AgentRunner construction sites are in tests. The service's
+App still constructs SessionExecutionService and TurnExecutor directly. Its
+default four-tool sandbox assembly is real, but it does not deliver a production
+Agent entry point. Test-host success must not be reported as service integration.
+
+Close this delivery gap in the selected trusted process assembly layer. Agent already depends on
+Server, so Server library must not depend on Agent. Do not introduce another
+model loop, distributed coordinator, UI, additional tools or parallel permission
+rules. Reuse the service's real configured Provider, physical resource admission,
+IsolatedToolSet, Policy, ledger and Session storage. Keep host-selected worker,
+staging and control paths out of model-controlled arguments.
+
+The production host must assemble the catalog, persistent instance registry and
+invocation bindings, TaskExecutionService, real ProviderFactory and exact
+EnvironmentToolFactory. Registered and inline definitions retain immutable
+revision/content binding and stable invocation identity. Provider construction
+must verify the selected model belongs to the admitted configuration, use the
+existing protocol adapters and parameter table, and never select a substitute
+model. Context recording must acknowledge the complete preparation or fail;
+unsupported token counting is explicit, not an invented exact measurement.
+
+Static Agent ceilings and dynamic Policy decisions remain independent. Both
+advertisement and actual preparation/execution enforce effective permissions.
+Read-only parallel admission requires enforcement evidence from the concrete
+adapter; a read-only label or scope hint is insufficient. Shell claims the
+enforced workspace and is never narrowed by guessing what its command does.
+Durable waiting releases running futures. After reconstruction, approvals and
+child-result consumption recover original identities, bindings, budgets and
+checkpoint proofs; neither a new host instance nor user approval grants a replay.
+
+Implement in dependency order: concrete host factories and durable assembly;
+the actual service entry and its bounded input/result mapping; then process-level
+acceptance. The transport contract must explicitly cover Agent selection and
+waiting-child approval coordinates before being wired. Do not expose raw grants,
+checkpoints or proof bindings as public resume authority. Preserve existing
+HTTP/RPC behavior and tests unless an explicit contract migration is specified.
+A public but unused builder alone does not complete the production entry gate.
+
+New data-driven process cases must invoke that production entry, not instantiate
+a second AgentRunner in the test framework. Cover named/inline roots, all four
+tools, self-call, two children, multiple waiting approvals, reconstruction before
+resume and consumption, ten-Turn long tasks and cancellation. A scripted model
+proves deterministic process boundaries only; each applicable real configured
+model remains an independent acceptance row. Export actual requests, effects,
+waits, receipts and trajectory before comparison, including failed attempts.
+Quota exhaustion and the historical rejected self-iteration candidates remain
+unaccepted, not exclusions or success evidence.
