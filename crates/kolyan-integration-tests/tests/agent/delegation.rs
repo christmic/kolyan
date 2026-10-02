@@ -4,7 +4,6 @@
 mod advertisement_wire;
 mod definition;
 mod error_feedback;
-mod explicit_contract;
 mod host;
 mod minimax_live;
 mod observed_replay;
@@ -215,6 +214,7 @@ async fn run_with_policy(
     let started = host
         .runner
         .start(RootRunRequest {
+            goals: vec![],
             task_id: case.id.clone(),
             invocation_id: "root".into(),
             attempt_id: "parent-attempt".into(),

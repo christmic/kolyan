@@ -50,6 +50,8 @@ use crate::{
 /// The logical Session must already exist. `turn.model_request.tools` must be empty:
 /// exact schemas come exclusively from the trusted environment factory.
 pub struct RootRunRequest {
+    /// Trusted immutable postconditions, separate from model input and authority.
+    pub goals: Vec<kolyan_server::GoalCriterion>,
     pub task_id: String,
     pub invocation_id: String,
     pub attempt_id: String,

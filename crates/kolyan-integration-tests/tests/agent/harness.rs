@@ -143,6 +143,7 @@ pub async fn run(
         );
         let result = runner
             .start(RootRunRequest {
+                goals: vec![],
                 task_id: task_id.clone(),
                 invocation_id: "root".into(),
                 attempt_id: "attempt-1".into(),

@@ -2,10 +2,11 @@
 
 ## Status and outcome
 
-Design in progress under [the evolution program](0031-agent-evolution-program.md).
-This is the first mainline capability from the phase review, not a claim of
-implementation. Baseline `3043095` has physical execution completion but no
-business-goal verifier or production AgentRunner assembly.
+Implementation in progress under [the evolution program](0031-agent-evolution-program.md).
+Deterministic goal evidence and the file-write checker have integrated receipts
+below; Root admission/finalization is undergoing Main acceptance. Production
+AgentRunner assembly and bounded correction remain unfinished. The historical
+baseline `3043095` had physical completion only, not these goal capabilities.
 
 The required outcome is explicit, evidence-backed postconditions and a usable
 host that reports execution, goal satisfaction and remaining work separately.
@@ -130,6 +131,53 @@ an unrelated child, Task or later invocation cannot supply it. Completion must
 still account for admitted child outcomes and required result consumption.
 
 ### Host assembly
+
+#### 首批生产宿主的实现契约
+
+新增可复用 crates/kolyan-agent-host，由服务与一次性 CLI 共同依赖；Server
+领域 crate 不反向依赖 Agent。AgentHost::open 装配真实 AgentRunner、精确
+catalog、SQLite Ledger/FactJournal、FileSessionStore、ArtifactStore、
+BindingStore 和 InstanceRegistry；重建复用相同路径和稳定 host ID，不
+重新选择已保存 definition。ProviderFactory 使用真实两协议适配器与参数表，
+EnvironmentToolFactory 使用真实 IsolatedToolSet 和 snapshot 权限。
+不导入 integration-tests 或测试 factory，也不新增 Agent loop。
+
+配置显式提供 workspace、worker、staging、受保护控制目录、工具 scope、
+Provider deployment、参数表、环境凭据字段、精确 Agent catalog、当前 host
+permissions、context policy 和预算。首批支持一个明确匹配的 deployment，
+不匹配 definition 的模型必须在准入前拒绝；设计保留 factory 扩展而不猜测
+供应商。输出上限须在进入 Root 前明确解析；未知计数仅在显式 Inspect 策略
+下运行，不偷换为 Strict 通过。控制存储、配置与工作区沿用真实物理隔离检查。
+
+公共操作为 start(session_id, request)、query(session_id, task_id)、
+cancel(session_id, task_id)、decide_approval(session_id, task_id,
+invocation_id, approval_id, decision)。所有调用都核验逻辑 Session 与实际
+保存 ownership，不接受客户端提供的 snapshot、grant、checkpoint 或可信
+FactRef。selector 复用严格 AgentSelector，具名必须精确 revision；inline
+权限不能超过当前 host ceiling，不能从具名配置或 display_name 借权限。
+
+首批业务 Goal 输入是相对文件 path 和期望 UTF-8 content。Host 在准入前
+解析物理目录身份、取得实际 adapter revision、计算 bytes/SHA-256，构造
+FileWriteCommittedV1 criterion；客户端和模型不选择 checker/revision。
+Task view 分别呈现物理执行、Goal verdict、待审批、外部等待、恢复需求和
+错误，不把最终文字视为文件目标成功，也不自动启动尚未实现的纠错。
+
+审批 Accept 沿用 root resume_approval 或 child resume_agent_child_approval，
+子恢复后继续真实 pump_agent_children，不能返回等待而无人推进。Deny 必须
+增加 Agent/Task-aware 的验证与收尾入口，复用相同 ownership/attempt 检查
+和已有底层 deny；不得绕过 Runner，也不得替换为整 Task cancel。取消使用
+真实 Task 服务及 Ledger 投递，不承诺跨库原子或所有进行中效果立即停止。
+
+宿主批次先实现可复用 crate 与 Agent 审批拒绝缺口；涉及服务和 CLI 的共享
+装配迁移、HTTP API、跨语言 schema 由主控另冻下一批，再接产品入口。已
+存在的 Session/Turn API 保留其合法低层语义，不伪装成 Agent API。新增四类
+Task HTTP 操作的精确路径与 DTO 必须先登记到 HTTP/OpenAPI 契约；首批不
+添加事件流、分布式租约或传输层命令账本。
+
+新增数据门覆盖具名/inline、成功/未满足、扩权拒绝、根/子审批 Accept/Deny
+跨进程重建、取消及重复恢复零重入。真实 MiniMax 两协议必须由生产 Host
+执行，不能以现有测试 factory 矩阵代替。共享装配避免复制 Provider/工具
+治理实现；新源码与测试分文件，写集交叉和 Cargo.lock 由主控协调。
 
 Compose the existing AgentRunner, exact catalog, ownership stores, real providers,
 context preparation, isolated tools and Task/Session services. Do not copy the
@@ -643,3 +691,58 @@ completion 均重新核验，不以 submitted verdict 或纯模型结束状态�
 读回，覆盖明确匹配、完整缺失、不完整来源与损坏证据。历史用例的模型及
 工具为本机脚本适配器，不能声称已经验证原生 worker 或实际网络目标闭环。
 Root 输入/收尾接线、纠错和真实宿主仍是未完成的后续工作。
+
+### Root 目标准入和真实原生场景集成
+
+Root 接线和新增审批矩阵已按隔离清单集成到主干，旧调用方只补显式空 goals，
+不改旧输入与断言。主干 Agent 回归 101 passed、0 failed、0 ignored，日志
+`/tmp/kolyan-root-goals-main-agent-v1.log`；workspace all-target check 退出 0，
+日志 `/tmp/kolyan-root-goals-main-all-targets-v1.log`。新增模块矩阵覆盖 14 行
+准入及收尾契约。新本机 worker 场景为 Memory/SQLite 各八行，另新增审批
+数据矩阵各三行；最终回归与供应商网络结果另行登记，不能从这些结果推断。
+
+集成过程中修改新测试输出配置暴露两次真实拒绝，失败日志和 JSONL 保留：
+v1 的 None 违反 Root 显式输出预算契约；v2 的 2048 与测试宿主 reserve 64
+不一致，被 Context 校验拒绝，未到网络模型。现统一从新增 dataset 的
+output_limit_tokens 读取请求上限与 reserve，不放宽生产准入或目标断言。
+v3 聚焦新矩阵终态退出 0：2 passed、0 failed、2 ignored，16 加 6 行本机
+原生观察均通过；日志 `/tmp/kolyan-root-goals-main-targeted-v3.log`。
+
+网络验收入口分别执行 MiniMax 两协议下具名/内联正确写入，以及具名/内联
+审批暂停、重建恢复和已有文件替换。预期共十行场景；审批前零效果、实际
+worker receipt、Goal 六个来源坐标、Satisfied 及重复收尾零重入均比较。
+输出上限 2048 是显式测试数据，不是可信计数或保证模型完成的声明。已有
+文件替换只检查实际历史提交和内容，不冒称独立测量了替换后的 inode。
+
+完整 agent_root 离线 v3 终态退出 0：74 passed、0 failed、22 ignored，日志
+`/tmp/kolyan-root-goals-main-offline-v3.log`；同源码 workspace 严格 Clippy
+退出 0，日志 `/tmp/kolyan-root-goals-main-strict-v3.log`。
+
+真实 MiniMax 首次矩阵终态退出 101，188.48 秒，两个测试函数均失败。十行
+实际场景中两行取得 Satisfied，其余八行实际工具参数与文件都只有四字节
+goal，缺目标规定的 LF。OpenAI 保存的 SDK 响应 arguments、参数 delta、
+completed 与 worker bytes 一致，没有发现 Tools 后丢换行；Anthropic
+本轨迹没有原始 SSE，只能证明中立 delta 与后续一致，不能冒称原始 wire。
+两个实际轨迹为临时父目录下 .tmpmu64vk/actual.jsonl 和 .tmp6vOxWX/actual.jsonl，
+日志 `/tmp/kolyan-root-goals-main-minimax-live-v1.log`。
+
+新增数据修订 root-goals-v2-explicit-json-input 将实际用户输入移入 dataset，
+明确 JSON 示例及五个目标字节，不预置模型调用、不修改工具参数或 Goal。
+新数据 22 行本机聚焦与 workspace strict 均通过，日志
+`/tmp/kolyan-root-goals-main-targeted-v4.log`、
+`/tmp/kolyan-root-goals-main-strict-v4.log`。第二次网络终态退出 101，85.55 秒，
+仍是两个失败测试函数。十行中七行实际取得 Satisfied；三行 OpenAI 场景
+仍缺 LF并保持 Waiting/Unsatisfied。七行后置条件成功不能称为矩阵通过。
+具名和内联审批均实际暂停、重建及恢复；整体目标验收仍未全通过。
+轨迹为 .tmpqeHsd3/actual.jsonl 和 .tmp7kc3wT/actual.jsonl，日志
+`/tmp/kolyan-root-goals-main-minimax-live-v2.log`。上述四个临时目录的父目录
+均为 /var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/。
+
+保留未满足证据，不追加随机重跑来冒充修复。有限纠错尚未实施，当前只能
+正确区分物理 FinalAnswer 与业务目标完成；这份真实运行为后续纠错提供
+实际失败输入，不使需求 0035 或整个演进计划完成。
+
+随后主控同一集成源码全仓回归终态退出 0，82 个结果组共 862 passed、
+0 failed、66 ignored；日志 `/tmp/kolyan-evolution-root-goals-workspace-main-v1.log`。
+此结果包含当前 Root 接线、新数据和已集成截止时间/生成消费者，不包括
+隔离开发中的 Skills 或生产 AgentHost，也不改变上述网络矩阵未全通过结论。

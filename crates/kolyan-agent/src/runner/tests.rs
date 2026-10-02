@@ -2,6 +2,7 @@
 //! Only the network Provider and external-effect adapter are test implementations.
 
 mod error_feedback;
+mod goals;
 mod resume;
 pub(super) mod support;
 

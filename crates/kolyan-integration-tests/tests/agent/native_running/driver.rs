@@ -80,6 +80,7 @@ pub(super) async fn run_selected(
         execution_id: format!("execution-{}", case.id),
     };
     let request = RootRunRequest {
+        goals: vec![],
         task_id: case.id.clone(),
         invocation_id: "root".into(),
         attempt_id: "root-attempt".into(),

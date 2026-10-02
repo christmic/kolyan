@@ -29,6 +29,7 @@ enum Mutation {
 async fn scenario(case: &LifecycleCase, fixture: &Fixture, row: &mut Value) -> Result<(), String> {
     let source = &fixture.request;
     let mut request = crate::RootRunRequest {
+        goals: vec![],
         task_id: source.task_id.clone(),
         invocation_id: source.invocation_id.clone(),
         attempt_id: source.attempt_id.clone(),

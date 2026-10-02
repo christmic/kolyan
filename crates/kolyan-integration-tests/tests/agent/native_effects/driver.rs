@@ -69,6 +69,7 @@ pub(super) async fn observe(
     let result = host
         .runner
         .start(RootRunRequest {
+            goals: vec![],
             task_id: case.id.clone(),
             invocation_id: "root".into(),
             attempt_id: "root-attempt".into(),

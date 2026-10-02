@@ -208,6 +208,7 @@ async fn observe(case: &Case, installation: &tools::worker::WorkerRun) -> Actual
     let started = host
         .runner
         .start(RootRunRequest {
+            goals: vec![],
             task_id: case.id.clone(),
             invocation_id: "root".into(),
             attempt_id: "root-attempt".into(),

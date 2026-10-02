@@ -320,6 +320,7 @@ impl Harness {
     pub fn request(&self, task: &str, named: bool) -> RootRunRequest {
         let execution = execution(task);
         RootRunRequest {
+            goals: vec![],
             task_id: task.into(),
             invocation_id: "root".into(),
             attempt_id: "attempt".into(),

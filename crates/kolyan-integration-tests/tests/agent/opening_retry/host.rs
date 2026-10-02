@@ -126,6 +126,7 @@ pub(super) async fn run(case: &Case, installation: &WorkerRun) -> Value {
     );
     let result = runner
         .start(RootRunRequest {
+            goals: vec![],
             task_id: "opening-task".into(),
             invocation_id: "root".into(),
             attempt_id: "attempt-1".into(),

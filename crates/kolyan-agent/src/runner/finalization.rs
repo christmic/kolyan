@@ -241,6 +241,32 @@ where
             return Ok(task);
         }
         if failures.is_empty() {
+            // Immutable Task criteria are the only goal inventory. Historical
+            // terminal and consumption checks above precede every assessment.
+            for criterion in &task.definition.criteria {
+                let kolyan_server::CompletionCriterion::Goal(goal) = criterion else {
+                    continue;
+                };
+                if !task
+                    .goal_assessments
+                    .iter()
+                    .any(|saved| saved.assessment.criterion_id == goal.id)
+                {
+                    self.service.assess_goal(
+                        &request.task_id,
+                        &format!(
+                            "agent-goal-assessment-{}",
+                            crate::digest(&(
+                                "kolyan.agent.root-goal-assessment/v1",
+                                &request.task_id,
+                                &goal.id,
+                                &request.root_attempt_id,
+                            ))?
+                        ),
+                        &goal.id,
+                    )?;
+                }
+            }
             Ok(self.service.complete(
                 &request.task_id,
                 &format!("{}/agent-root/completed", request.task_id),

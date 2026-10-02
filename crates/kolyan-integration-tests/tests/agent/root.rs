@@ -14,6 +14,7 @@ mod native_running;
 mod opening_retry;
 mod providers;
 mod restart;
+mod root_goals;
 mod self_iteration;
 mod tools;
 mod usage;

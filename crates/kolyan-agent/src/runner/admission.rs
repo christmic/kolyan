@@ -42,6 +42,23 @@ where
         mut request: RootRunRequest,
     ) -> Result<Admission<J, L, S, SS, P, T>, RunnerError> {
         crate::identity(&request.attempt_id)?;
+        let mut criteria = vec![CompletionCriterion::ExecutionCompleted {
+            id: "root-final-answer".into(),
+            invocation_id: request.invocation_id.clone(),
+        }];
+        if request.goals.len() > 127 {
+            return Err(RunnerError::Host("root accepts at most 127 goals".into()));
+        }
+        let mut ids = std::collections::BTreeSet::from(["root-final-answer".to_owned()]);
+        for goal in request.goals {
+            goal.validate()?;
+            if goal.invocation_id != request.invocation_id || !ids.insert(goal.id.clone()) {
+                return Err(RunnerError::Host(
+                    "duplicate goal or wrong root goal owner".into(),
+                ));
+            }
+            criteria.push(CompletionCriterion::Goal(goal));
+        }
         if request.turn.turn_id != request.execution.turn_id {
             return Err(RunnerError::Host(
                 "Turn identity differs from execution".into(),
@@ -71,10 +88,7 @@ where
                 TaskDefinition {
                     task_id: request.task_id.clone(),
                     objective: request.objective,
-                    criteria: vec![CompletionCriterion::ExecutionCompleted {
-                        id: "root-final-answer".into(),
-                        invocation_id: request.invocation_id.clone(),
-                    }],
+                    criteria,
                     agent: snapshot.identity().clone(),
                     constraints_digest: snapshot.digest().into(),
                     limits: request.limits,

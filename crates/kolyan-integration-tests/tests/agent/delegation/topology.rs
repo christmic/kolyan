@@ -2,7 +2,6 @@
 //! Network runs never consume scripted frames or manufacture model calls.
 
 mod comparison;
-pub(super) mod explicit_contract;
 mod minimax_live;
 
 use std::{collections::BTreeSet, fs, os::unix::fs::DirBuilderExt, sync::Arc};
@@ -254,6 +253,7 @@ async fn run_with_policy(
     let started = host
         .runner
         .start(RootRunRequest {
+            goals: vec![],
             task_id: case.id.clone(),
             invocation_id: "root".into(),
             attempt_id: "root-attempt".into(),
