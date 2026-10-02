@@ -23,6 +23,15 @@ fn binding() -> AttemptBinding {
             instance_id: "instance-1".into(),
         },
         constraints_digest: "c".repeat(64),
+        // Physical evidence inspection does not admit a Task or authenticate
+        // input sources. This coordinate is deliberately fixture-only.
+        input_source: crate::InvocationInputSource::Standalone {
+            fact: kolyan_ledger::FactRef {
+                stream_id: "fixture.input-source".into(),
+                position: 1,
+                fact_id: "fixture-input-source".into(),
+            },
+        },
     }
 }
 
@@ -429,16 +438,37 @@ fn final_response_and_source_are_actual_and_foreign_execution_cannot_contaminate
 fn exclusive_observation_cursor_counts_only_new_step_usage_but_keeps_actual_final_response() {
     let original = binding();
     let ledger = seed(&original);
-    request(&ledger, &original, "step-1");
-    step(&ledger, &original, "step-1", reported(10, 5));
+    let mut saved = crate::suspension::tests::fixture();
+    saved.checkpoint.scope.execution = serde_json::from_value(json!(original.execution)).unwrap();
+    saved.checkpoint.scope.step_id = format!("{}-step-0", original.execution.turn_id);
+    saved.checkpoint.approvals[0].scope = saved.checkpoint.scope.clone();
+    saved.checkpoint.steps[0].step_id = saved.checkpoint.scope.step_id.clone();
+    saved.checkpoint.steps[0].response.usage = reported(10, 5);
+    saved.checkpoint.model_request.request_id = saved.checkpoint.scope.step_id.clone();
+    saved.waiting = saved
+        .checkpoint
+        .suspension_summary(&saved.checkpoint.scope)
+        .unwrap();
+    request(&ledger, &original, &saved.checkpoint.scope.step_id);
+    append(
+        &ledger,
+        &original,
+        LedgerEventKind::StepCompleted,
+        json!({
+            "step_id":saved.checkpoint.scope.step_id,"step":saved.checkpoint.steps[0]
+        }),
+    );
     let wait = append(
         &ledger,
         &original,
         LedgerEventKind::ExecutionSuspended,
-        json!({"approval_id": "approval-1"}),
+        json!({"schema_version":1,"publication_cursor":0,"suspension":saved}),
     );
     let suspended = inspect(&ledger, &original, 0).unwrap();
-    assert!(matches!(suspended.stopped, StoppedOutcome::Approval(ref id) if id == "approval-1"));
+    assert!(
+        matches!(suspended.stopped, StoppedOutcome::Suspended(ref waiting)
+        if waiting.checkpoint_id == "checkpoint" && waiting.approval_ids == ["a"])
+    );
     assert_eq!((suspended.input_tokens, suspended.output_tokens), (10, 5));
     request(&ledger, &original, "step-2");
     usage(&ledger, &original, "step-2", reported(18, 3));

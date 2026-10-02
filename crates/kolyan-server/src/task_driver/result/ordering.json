@@ -1,0 +1,29 @@
+{
+ "completed":[{"type":"text","text":"actual completed response"}],
+ "max_steps":[{"type":"tool_call","call":{"id":"query/工具","name":"fixture.query","arguments":{"query":"bounded fixture"}}}],
+ "refused":[{"type":"text","text":"fixture refusal"}],
+ "cases":[
+  {"id":"genuine_completed","seed":"completed","mutation":"none","expected_inspect":"completed","expected_result":"completed"},
+  {"id":"diagnostic_notification_not_new_authority","seed":"completed","mutation":"notification","expected_inspect":"completed","expected_result":"completed"},
+  {"id":"repeated_same_boundary_preserves_original_source","seed":"completed","mutation":"repeated_boundary","expected_inspect":"completed","expected_result":"completed"},
+  {"id":"late_incomplete_contradicts_completed","seed":"completed","mutation":"late_incomplete","expected_inspect":"error","expected_result":null},
+  {"id":"late_refused_contradicts_completed","seed":"completed","mutation":"late_refused","expected_inspect":"error","expected_result":null},
+  {"id":"late_step_cannot_replace_response","seed":"completed","mutation":"late_step","expected_inspect":"error","expected_result":null},
+  {"id":"backfilled_final_answer_cannot_supply_proof","seed":"completed","mutation":"backfilled_step","expected_inspect":"error","expected_result":null},
+  {"id":"model_request_after_terminal_refused","seed":"completed","mutation":"late_request","expected_inspect":"error","expected_result":null},
+  {"id":"model_delta_after_terminal_refused","seed":"completed","mutation":"late_delta","expected_inspect":"error","expected_result":null},
+  {"id":"genuine_cancelled_has_real_stop","seed":"cancelled","mutation":"none","expected_inspect":"cancelled","expected_result":"cancelled"},
+  {"id":"cancel_intent_without_stop_unresolved","seed":"cancelled","mutation":"intent_only","expected_inspect":"recovery","expected_result":null},
+  {"id":"debug_completed_is_not_physical_stop","seed":"completed","mutation":"debug_only","expected_inspect":"recovery","expected_result":null},
+  {"id":"missing_final_step_not_success","seed":"completed","mutation":"missing_step","expected_inspect":"failed","expected_result":null},
+  {"id":"foreign_step_identity_refused","seed":"completed","mutation":"corrupt_step","expected_inspect":"error","expected_result":null},
+  {"id":"real_core_max_steps","seed":"max_steps","mutation":"none","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"real_core_refused","seed":"refused","mutation":"none","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"real_core_incomplete_with_lifecycle_notification","seed":"incomplete","mutation":"none","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"cancelled_debug_notification_carries_no_success_authority","seed":"cancelled","mutation":"notification","expected_inspect":"cancelled","expected_result":"cancelled"},
+  {"id":"real_core_no_progress","seed":"no_progress","mutation":"none","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"real_core_failed_diagnostic_duplicate","seed":"failed","mutation":"failure_notification","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"real_core_timed_out_diagnostic_duplicate","seed":"timed_out","mutation":"failure_notification","expected_inspect":"failed","expected_result":"failed"},
+  {"id":"real_core_approval_rejected_diagnostic_duplicate","seed":"approval_rejected","mutation":"failure_notification","expected_inspect":"failed","expected_result":"failed"}
+ ]
+}

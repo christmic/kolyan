@@ -1,15 +1,21 @@
 //! Host-driven durable task attempts; scheduling and tool authority stay explicit.
 
 mod evidence;
+mod historical_context;
+pub use historical_context::{HistoricalContextRequest, VerifiedHistoricalContext};
+mod result;
 mod retry;
 
-use kolyan_core::{ToolExecutor, TurnExecutor, TurnRequest};
+pub use result::{VerifiedConsumedResult, VerifiedTaskOutcome, VerifiedTaskResult};
+
+use kolyan_core::{ResumeInput, ToolExecutor, TurnExecutor, TurnRequest};
 use kolyan_ledger::{FactJournal, LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelProvider;
 use kolyan_runtime::{DurableTurnResult, ExecutionBinding};
 use kolyan_storage::SessionStore;
 use kolyan_trace::{ArtifactRef, ArtifactStore, Retention, TraceSink};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::{
@@ -63,6 +69,115 @@ where
     }
     pub fn sessions(&self) -> &SessionExecutionService<L, S, SS> {
         &self.execution
+    }
+
+    /// Read-only exact terminal proof for a host delegation adapter. This does
+    /// not reconcile a commit gap, consume a result, or authorize child work.
+    pub fn load_verified_result(
+        &self,
+        task_id: &str,
+        binding: &AttemptBinding,
+        max_bytes: usize,
+    ) -> Result<VerifiedTaskResult, TaskExecutionError> {
+        if self
+            .execution
+            .execution()
+            .server()
+            .coordinator()
+            .is_active(&binding.execution.execution_id)
+        {
+            return Err(invalid("active child has no consumable result").into());
+        }
+        Ok(result::load(
+            &self.coordinator,
+            self.ledger(),
+            task_id,
+            binding,
+            max_bytes,
+        )?)
+    }
+
+    /// Forensic/idempotent-finalization read, never active resume authority.
+    /// Task failure/cancellation does not erase independently verified physical
+    /// terminal history. No work, grant, result consumption or fact is created.
+    pub fn load_verified_historical_result(
+        &self,
+        task_id: &str,
+        binding: &AttemptBinding,
+        max_bytes: usize,
+    ) -> Result<VerifiedTaskResult, TaskExecutionError> {
+        if self
+            .execution
+            .execution()
+            .server()
+            .coordinator()
+            .is_active(&binding.execution.execution_id)
+        {
+            return Err(invalid("active execution has no historical terminal result").into());
+        }
+        Ok(result::load_for(
+            &self.coordinator,
+            self.ledger(),
+            task_id,
+            binding,
+            max_bytes,
+            result::ResultRead::Historical,
+        )?)
+    }
+
+    /// Exact already-committed edge between physically terminal attempts.
+    /// Terminal Task/parent history is readable, but this does not consume again
+    /// or confer active recovery authority. Missing consumption returns None.
+    pub fn load_verified_historical_consumed_result(
+        &self,
+        task_id: &str,
+        parent: &AttemptBinding,
+        child: &AttemptBinding,
+        max_bytes: usize,
+    ) -> Result<Option<VerifiedConsumedResult>, TaskExecutionError> {
+        let coordinator = self.execution.execution().server().coordinator();
+        if coordinator.is_active(&parent.execution.execution_id)
+            || coordinator.is_active(&child.execution.execution_id)
+        {
+            return Err(invalid("active execution has no historical consumed result").into());
+        }
+        Ok(result::load_consumed_for(
+            &self.coordinator,
+            self.ledger(),
+            task_id,
+            parent,
+            child,
+            max_bytes,
+            result::ResultRead::Historical,
+        )?)
+    }
+
+    /// Read-only recovery of an already committed result edge. None means no
+    /// consumption fact; it never admits, consumes, grants, or drives work.
+    pub fn load_verified_consumed_result(
+        &self,
+        task_id: &str,
+        parent: &AttemptBinding,
+        child: &AttemptBinding,
+        max_bytes: usize,
+    ) -> Result<Option<VerifiedConsumedResult>, TaskExecutionError> {
+        if self
+            .execution
+            .execution()
+            .server()
+            .coordinator()
+            .is_active(&child.execution.execution_id)
+        {
+            return Err(invalid("active child has no consumable result").into());
+        }
+        Ok(result::load_consumed(
+            &self.coordinator,
+            self.ledger(),
+            task_id,
+            parent,
+            child,
+            max_bytes,
+        )?)
     }
 
     /// A new attempt requires explicit immutable identities and host-supplied
@@ -129,23 +244,32 @@ where
         Ok((self.coordinator.snapshot(task_id)?, stopped))
     }
 
-    /// Approval resume retains the attempt, validates the current definition and
+    /// Checkpoint resume retains the attempt, validates the current definition and
     /// constraints, and reconstructs the original Runtime checkpoint from storage.
     pub async fn resume<P: ModelProvider, T: ToolExecutor>(
         &self,
         task_id: &str,
         binding: AttemptBinding,
-        approval_id: &str,
+        checkpoint_id: &str,
+        input: ResumeInput,
         executor: TurnExecutor<P, T>,
     ) -> Result<(TaskSnapshot, DurableTurnResult), TaskExecutionError> {
+        let saved = self
+            .execution
+            .execution()
+            .load_suspension(&binding.execution.execution_id, checkpoint_id)?;
+        crate::suspension::verify_resume_input(self.ledger(), &binding.execution, &saved, &input)?;
+        let coordinate = serde_json::to_vec(&(checkpoint_id, &input))
+            .map_err(|error| invalid(error.to_string()))?;
         self.coordinator.resume_attempt(
             task_id,
             &format!(
-                "{task_id}/attempt/{}/resume/{approval_id}",
-                binding.attempt_id
+                "{task_id}/attempt/{}/resume/{:x}",
+                binding.attempt_id,
+                Sha256::digest(coordinate)
             ),
             binding.clone(),
-            approval_id,
+            checkpoint_id,
         )?;
         self.bind_execution(task_id, &binding)?;
         let result = self
@@ -154,12 +278,58 @@ where
                 executor,
                 &binding.execution.session_id,
                 &binding.execution.execution_id,
-                approval_id,
+                checkpoint_id,
+                input,
             )
             .await;
         self.record_stopped(task_id, &binding)?;
         let stopped = result?;
         Ok((self.coordinator.snapshot(task_id)?, stopped))
+    }
+
+    pub async fn resume_approval<P: ModelProvider, T: ToolExecutor>(
+        &self,
+        task_id: &str,
+        binding: AttemptBinding,
+        approval_id: &str,
+        executor: TurnExecutor<P, T>,
+    ) -> Result<(TaskSnapshot, DurableTurnResult), TaskExecutionError> {
+        let saved = self
+            .execution
+            .execution()
+            .load_current_suspension(&binding.execution.execution_id)?;
+        if !saved
+            .checkpoint
+            .approvals
+            .iter()
+            .any(|approval| approval.approval_id == approval_id)
+        {
+            return Err(invalid("approval is not pending in current checkpoint").into());
+        }
+        let coordinate = serde_json::to_vec(&(&saved.checkpoint.checkpoint_id, approval_id))
+            .map_err(|error| invalid(error.to_string()))?;
+        self.coordinator.resume_attempt(
+            task_id,
+            &format!(
+                "{task_id}/attempt/{}/resume/{:x}",
+                binding.attempt_id,
+                Sha256::digest(coordinate)
+            ),
+            binding.clone(),
+            &saved.checkpoint.checkpoint_id,
+        )?;
+        self.bind_execution(task_id, &binding)?;
+        let result = self
+            .execution
+            .resume_approval(
+                executor,
+                &binding.execution.session_id,
+                &binding.execution.execution_id,
+                approval_id,
+            )
+            .await;
+        self.record_stopped(task_id, &binding)?;
+        Ok((self.coordinator.snapshot(task_id)?, result?))
     }
 
     /// Observe a stopped attempt after reconstruction. This never executes it.
@@ -400,7 +570,7 @@ where
                 }
                 AttemptOutcome::Completed { evidence }
             }
-            StoppedOutcome::Approval(approval_id) => AttemptOutcome::Suspended { approval_id },
+            StoppedOutcome::Suspended(waiting) => AttemptOutcome::Suspended { waiting },
             StoppedOutcome::Failed(reason) => AttemptOutcome::Failed {
                 reason,
                 safe_to_retry: false,
@@ -437,3 +607,6 @@ where
 fn invalid(message: impl Into<String>) -> TaskError {
     TaskError::Invalid(message.into())
 }
+
+#[cfg(test)]
+mod tests;

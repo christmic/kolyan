@@ -1,0 +1,11 @@
+[
+ {"id":"paired_complete","mutation":"read","accepted":true},
+ {"id":"orphan_result","mutation":"orphan_result","accepted":false},
+ {"id":"missing_result","mutation":"missing_result","accepted":false},
+ {"id":"step_after_final","mutation":"step_after_final","accepted":false},
+ {"id":"tool_after_final","mutation":"tool_after_final","accepted":false},
+ {"id":"foreign_step_turn","mutation":"foreign_step","accepted":false},
+ {"id":"event_idempotency_mismatch","mutation":"wrong_identity","accepted":false},
+ {"id":"outer_outcome_mismatch","mutation":"wrong_outcome","accepted":false},
+ {"id":"missing_outer_outcome","mutation":"missing_outcome","accepted":false}
+]

@@ -1,0 +1,11 @@
+[
+ {"id":"frozen_context","mutation":"read","max_bytes":16777216,"expected":"exact_context"},
+ {"id":"foreign_query","mutation":"query_scope","max_bytes":16777216,"expected":"refused"},
+ {"id":"unknown_admission","mutation":"admission_schema","max_bytes":16777216,"expected":"refused"},
+ {"id":"unknown_prepared","mutation":"prepared_unknown","max_bytes":16777216,"expected":"refused"},
+ {"id":"changed_delta","mutation":"prepared_delta","max_bytes":16777216,"expected":"refused"},
+ {"id":"missing_commit","mutation":"missing_commit","max_bytes":16777216,"expected":"refused"},
+ {"id":"foreign_terminal","mutation":"terminal_ref","max_bytes":16777216,"expected":"refused"},
+ {"id":"unordered_endpoint","mutation":"endpoint","max_bytes":16777216,"expected":"refused"},
+ {"id":"one_byte","mutation":"read","max_bytes":1,"expected":"refused"}
+]
