@@ -283,3 +283,62 @@ The production module compiles and existing Agent regression exited 0 with
 Clippy exited 0 in `/tmp/kolyan-hooks-main-foundation-strict-v1.log`. This proves
 foundation integration and existing regression, not Main's new 62 data rows,
 native 16-row gate, Runner/Runtime consumers or actual-model acceptance.
+
+## Main independent hook test acceptance
+
+The second integration batch adds seven independent module test/data files and
+five central native framework/data/expected files, restores the test declaration
+and registers `agent_hooks`. Existing tests and assertions are unchanged. The
+new framework flushes, synchronizes and closes each actual JSONL writer before
+physically reading it back; production hooks never write test trajectory files.
+
+On 2026-10-03 the Agent module exited 0 with 112 passed, zero failed or ignored
+in `/tmp/kolyan-hooks-main-tests-module-v1.log`. Main physically reloaded and
+compared all 62 new rows: 36 catalog/binding, 16 provenance/storage and 10 strict
+output-protocol rows. Their retained paths are printed in that log.
+
+The central native gate exited 0 with one test framework and all 16 cases in
+`/tmp/kolyan-hooks-main-tests-native-v1.log`. Actual trajectory:
+`/private/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-native-hooks-wfhepk/actual.jsonl`.
+Independent readback verified the expected result of every case, 14 actual
+spawns and 28 capture-completion observations. Each spawned case also requires
+actual reaping and successful process-group cleanup. Policy denial and
+revocation prevent launch; timeout/cancellation/drop retain their distinct
+outcomes; a completed operation does not replay; completion-storage failure
+leaves Started and restoration refuses implicit replay.
+
+Workspace all-target strict Clippy exited 0 in
+`/tmp/kolyan-hooks-main-tests-strict-v1.log`; formatting, source-layout and diff
+checks exited 0. These are actual local OS script tests, not vendor model tests.
+The BeforeModel/BeforeTool/AfterTool event inputs are declared fixtures, not
+proof of the corresponding Agent/Runtime consumer. C/D remains outstanding.
+
+The same frozen source completed the full workspace regression with exit 0:
+89 result groups, 896 passed, zero failed and 67 ignored, recorded in
+`/tmp/kolyan-hooks-main-tests-workspace-v1.log`. The ignored vendor-network
+cases were not run. This preserves the existing long-task, approval, HTTP and
+native-tool regression; it does not close the outstanding C/D consumer gates.
+
+## Required tool execution window
+
+Main inspected Core's actual `turn/dispatch.rs`: it computes the minimum of
+the Turn deadline, tool timeout and grant timeout, then applies that cutoff to
+the outer execution future. The existing ToolInvocation does not carry it.
+The next Core increment adds mandatory `window: ToolExecutionWindow`, with a
+private monotonic Instant, an explicit `at_deadline` constructor and read-only
+`deadline`/`remaining` accessors. An exhausted window returns zero. The type is
+not serializable, not a grant and has no default or timeout-renewing fallback.
+
+Dispatch computes the cutoff once and passes the identical Instant to both the
+invocation and its existing outer timeout. Wrappers preserve window, control,
+scope and grant. Checkpoint restoration continues to reconstruct deadlines
+through the existing persisted-budget contract; it never restores an Instant
+or restarts the original grant duration. Hooks may only tighten the window.
+
+The isolated first migration covers Core's type/export/dispatch and existing
+direct invocation fixtures in Tools, Agent and central integration tests. The
+Runtime preparation fixture is owned by Main with the concurrent opening
+Driver migration, avoiding overlapping worker edits. Separate new tests must
+verify each winning cutoff, budget consumed before the wrapper, expired windows
+and unchanged control/authority across forwarding. Original cases and assertions
+remain intact. These are approved contracts, not completed consumer evidence.

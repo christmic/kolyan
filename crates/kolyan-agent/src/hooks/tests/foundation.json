@@ -1,0 +1,20 @@
+[
+  {"id":"exact-retry","action":"retry","expected":"ok"},
+  {"id":"body-conflict","action":"conflict","expected":"conflict"},
+  {"id":"metadata-conflict","action":"metadata","expected":"conflict"},
+  {"id":"new-version","action":"revision","expected":"ok"},
+  {"id":"reconstructed-binding","action":"restore","expected":"ok"},
+  {"id":"revoked-binding","action":"revoke","expected":"revoked"},
+  {"id":"default-deny","action":"deny","expected":"permission"},
+  {"id":"changed-policy","action":"policy","expected":"permission"},
+  {"id":"changed-native","action":"native","expected":"permission"},
+  {"id":"foreign-owner","action":"owner","expected":"integrity"},
+  {"id":"foreign-private-scope","action":"scope","expected":"integrity"},
+  {"id":"foreign-namespace","action":"namespace","expected":"integrity"},
+  {"id":"duplicate-selection","action":"duplicate","expected":"invalid"},
+  {"id":"missing-exact-version","action":"missing","expected":"integrity"},
+  {"id":"write-capability-denied","action":"write","expected":"permission"},
+  {"id":"network-capability-denied","action":"network","expected":"permission"},
+  {"id":"oversized-script","action":"oversized","expected":"capacity"},
+  {"id":"foreign-revocation-ref","action":"foreign_revoke","expected":"integrity"}
+]

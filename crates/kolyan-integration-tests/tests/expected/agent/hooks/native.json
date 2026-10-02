@@ -1,0 +1,18 @@
+[
+ {"id":"model-continue","result":"continue","spawned":1,"completed":1},
+ {"id":"tool-deny","result":"deny","spawned":1,"completed":1},
+ {"id":"after-observe","result":"continue","spawned":1,"completed":1},
+ {"id":"after-cannot-undo","result":"protocol","spawned":1,"completed":1},
+ {"id":"malformed","result":"protocol","spawned":1,"completed":1},
+ {"id":"nonzero","result":"native","spawned":1,"completed":1},
+ {"id":"duplicate-key","result":"protocol","spawned":1,"completed":1},
+ {"id":"readonly-os","result":"native","spawned":1,"completed":1},
+ {"id":"output-limit","result":"native","spawned":1,"completed":1},
+ {"id":"timeout","result":"expired","spawned":1,"completed":1},
+ {"id":"explicit-cancel","result":"cancelled","spawned":1,"completed":1,"cause":"explicit_control"},
+ {"id":"drop-rebuild","result":"interrupted","spawned":1,"completed":0,"cause":"dropped_future"},
+ {"id":"revoked-before-launch","result":"revoked","spawned":0,"completed":0},
+ {"id":"policy-deny-before-launch","result":"permission","spawned":0,"completed":0},
+ {"id":"completed-not-replayed","result":"conflict","spawned":1,"completed":1},
+ {"id":"completion-storage-fault","result":"journal","spawned":1,"completed":0}
+]

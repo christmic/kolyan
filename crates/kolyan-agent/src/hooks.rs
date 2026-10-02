@@ -91,3 +91,6 @@ pub(super) fn reference(row: &FactRecord) -> FactRef {
         fact_id: row.draft.fact_id.clone(),
     }
 }
+
+#[cfg(test)]
+mod tests;

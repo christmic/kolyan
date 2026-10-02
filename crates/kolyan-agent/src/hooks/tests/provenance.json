@@ -1,0 +1,10 @@
+[
+ {"id":"unknown-catalog-schema","action":"catalog-schema","expected":"integrity"},
+ {"id":"foreign-catalog-subject","action":"catalog-subject","expected":"integrity"},
+ {"id":"noncritical-catalog","action":"catalog-critical","expected":"integrity"},
+ {"id":"unknown-binding-field","action":"binding-field","expected":"integrity"},
+ {"id":"missing-binding-causes","action":"binding-causes","expected":"integrity"},
+ {"id":"foreign-owner-fact","action":"owner-field","expected":"integrity"},
+ {"id":"catalog-storage-error","action":"catalog-storage","expected":"journal"},
+ {"id":"owner-storage-error","action":"owner-storage","expected":"journal"}
+]

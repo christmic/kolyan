@@ -1,0 +1,18 @@
+[
+ {"id":"model-continue","phase":"before_model","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"tool-deny","phase":"before_tool","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"deny\",\"reason\":\"host guard\"}'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"after-observe","phase":"after_tool","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"observed\"}'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"after-cannot-undo","phase":"after_tool","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"deny\",\"reason\":\"undo\"}'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"malformed","phase":"before_model","script":"input=$(cat); printf 'not JSON'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"nonzero","phase":"before_model","script":"input=$(cat); printf 'reason' >&2; exit 7","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"duplicate-key","phase":"before_model","script":"input=$(cat); printf '%s' '{\"schema_version\":1,\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"readonly-os","phase":"before_model","script":"input=$(cat); printf breach > ../forbidden.txt || exit 9","action":"run","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"output-limit","phase":"before_model","script":"input=$(cat); while :; do printf 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'; done","action":"run","timeout_ms":5000,"max_output_bytes":1024},
+ {"id":"timeout","phase":"before_model","script":"input=$(cat); while :; do :; done","action":"run","timeout_ms":100,"max_output_bytes":4096},
+ {"id":"explicit-cancel","phase":"before_tool","script":"input=$(cat); while :; do :; done","action":"cancel","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"drop-rebuild","phase":"before_tool","script":"input=$(cat); while :; do :; done","action":"drop","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"revoked-before-launch","phase":"before_model","script":"printf unreachable","action":"revoke","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"policy-deny-before-launch","phase":"before_model","script":"printf unreachable","action":"deny-policy","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"completed-not-replayed","phase":"before_model","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","action":"replay","timeout_ms":5000,"max_output_bytes":4096},
+ {"id":"completion-storage-fault","phase":"before_model","script":"input=$(cat); printf '%s\\n' '{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}'","action":"record-failure","timeout_ms":5000,"max_output_bytes":4096}
+]

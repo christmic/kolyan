@@ -1,0 +1,12 @@
+[
+ {"id":"continue","phase":"before_model","stdout":"{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}","valid":true},
+ {"id":"deny","phase":"before_tool","stdout":"{\"schema_version\":1,\"decision\":\"deny\",\"reason\":\"host guard\"}","valid":true},
+ {"id":"observer-deny","phase":"after_tool","stdout":"{\"schema_version\":1,\"decision\":\"deny\",\"reason\":\"cannot undo\"}","valid":false},
+ {"id":"prose","phase":"before_model","stdout":"approved!","valid":false},
+ {"id":"duplicate","phase":"before_model","stdout":"{\"schema_version\":1,\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\"}","valid":false},
+ {"id":"grant-output","phase":"before_model","stdout":"{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\",\"grant\":true}","valid":false},
+ {"id":"input-rewrite","phase":"before_tool","stdout":"{\"schema_version\":1,\"decision\":\"continue\",\"reason\":\"\",\"updated_input\":{}}","valid":false},
+ {"id":"allow-not-grant","phase":"before_model","stdout":"{\"schema_version\":1,\"decision\":\"allow\",\"reason\":\"\"}","valid":false},
+ {"id":"empty","phase":"before_model","stdout":"","valid":false},
+ {"id":"version","phase":"before_model","stdout":"{\"schema_version\":2,\"decision\":\"continue\",\"reason\":\"\"}","valid":false}
+]
