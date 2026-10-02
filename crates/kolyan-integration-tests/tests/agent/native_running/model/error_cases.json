@@ -1,0 +1,4 @@
+[
+ {"stream_error":false,"kind":"protocol","phase":"decode","message":"original opening decode detail","provider":"original-model","status":502},
+ {"stream_error":true,"kind":"transport","phase":"stream","message":"original stream detail","provider":"original-model","status":503}
+]

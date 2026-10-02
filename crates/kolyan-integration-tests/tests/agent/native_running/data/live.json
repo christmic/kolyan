@@ -1,0 +1,8 @@
+{
+  "configured_combinations": 19,
+  "planned_rows": 76,
+  "model_timeout_ms": 120000,
+  "phase_timeout_ms": 15000,
+  "cleanup_timeout_ms": 15000,
+  "case_ids": ["agent_shell_phase_cancel", "agent_shell_phase_drop", "agent_shell_observation_loss", "agent_shell_natural_before_control"]
+}

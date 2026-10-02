@@ -1,0 +1,5 @@
+[
+ {"id":"immediate_capture","captured_after_ms":0,"cleanup_after_ms":5,"expected_phase_ms":10,"expected_cleanup_ms":25},
+ {"id":"slow_model_does_not_spend_phase","captured_after_ms":90,"cleanup_after_ms":100,"expected_phase_ms":100,"expected_cleanup_ms":120},
+ {"id":"expired_phase_does_not_spend_cleanup","captured_after_ms":90,"cleanup_after_ms":150,"expected_phase_ms":100,"expected_cleanup_ms":170}
+]

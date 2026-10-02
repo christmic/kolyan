@@ -1,0 +1,172 @@
+{
+  "model_timeout_ms": 15000,
+  "gate_timeout_ms": 15000,
+  "cleanup_timeout_ms": 15000,
+  "max_steps": 4,
+  "cases": [
+    {
+      "id": "agent_shell_phase_cancel",
+      "mode": "cancel",
+      "marker": "CANCEL_PHASE\n",
+      "expected_content": "cancel-effect",
+      "input": "Use shell to write exactly cancel-effect into safe/running.txt. Execute arithmetic, print CANCEL_PHASE followed by newline, then keep incrementing n until cancelled. Do not repeat any tool.",
+      "frames": [
+        {
+          "reasoning": "Provider text alone cannot prove CANCEL_PHASE native readiness.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "agent_shell_phase_cancel/native",
+                "name": "shell",
+                "arguments": {
+                  "command": "printf 'cancel-effect' > safe/running.txt; n=$((0+1)); printf 'CANCEL_PHASE\\n'; while :; do n=$((n+1)); done"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 7
+          }
+        },
+        {
+          "reasoning": "Actual tool returned.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Completed once."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "agent_shell_phase_drop",
+      "mode": "drop",
+      "marker": "DROP_PHASE\n",
+      "expected_content": "drop-effect",
+      "input": "Use shell to write exactly drop-effect into safe/running.txt. Execute arithmetic, print DROP_PHASE followed by newline, then keep incrementing n until cancelled. Do not repeat any tool.",
+      "frames": [
+        {
+          "reasoning": "Provider text alone cannot prove DROP_PHASE native readiness.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "agent_shell_phase_drop/native",
+                "name": "shell",
+                "arguments": {
+                  "command": "printf 'drop-effect' > safe/running.txt; n=$((0+1)); printf 'DROP_PHASE\\n'; while :; do n=$((n+1)); done"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 7
+          }
+        },
+        {
+          "reasoning": "Actual tool returned.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Completed once."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "agent_shell_observation_loss",
+      "mode": "loss",
+      "marker": "LOSS_PHASE\n",
+      "expected_content": "loss-effect",
+      "input": "Use shell to write exactly loss-effect into safe/running.txt. Execute arithmetic, print LOSS_PHASE followed by newline, then return. Do not repeat any tool.",
+      "frames": [
+        {
+          "reasoning": "Provider text alone cannot prove LOSS_PHASE native readiness.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "agent_shell_observation_loss/native",
+                "name": "shell",
+                "arguments": {
+                  "command": "printf 'loss-effect' > safe/running.txt; n=$((0+1)); printf 'LOSS_PHASE\\n'; exit 0"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 7
+          }
+        },
+        {
+          "reasoning": "Actual tool returned.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Completed once."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 5
+          }
+        }
+      ]
+    },
+    {
+      "id": "agent_shell_natural_before_control",
+      "mode": "natural",
+      "marker": "NATURAL_PHASE\n",
+      "expected_content": "natural-effect",
+      "input": "Use shell to write exactly natural-effect into safe/running.txt. Execute arithmetic, print NATURAL_PHASE followed by newline, then return. Do not repeat any tool.",
+      "frames": [
+        {
+          "reasoning": "Provider text alone cannot prove NATURAL_PHASE native readiness.",
+          "content": [
+            {
+              "type": "tool_call",
+              "call": {
+                "id": "agent_shell_natural_before_control/native",
+                "name": "shell",
+                "arguments": {
+                  "command": "printf 'natural-effect' > safe/running.txt; n=$((0+1)); printf 'NATURAL_PHASE\\n'; exit 0"
+                }
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 11,
+            "output_tokens": 7
+          }
+        },
+        {
+          "reasoning": "Actual tool returned.",
+          "content": [
+            {
+              "type": "text",
+              "text": "Completed once."
+            }
+          ],
+          "usage": {
+            "input_tokens": 12,
+            "output_tokens": 5
+          }
+        }
+      ]
+    }
+  ]
+}
