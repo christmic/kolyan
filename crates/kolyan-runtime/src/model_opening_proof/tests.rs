@@ -1,5 +1,6 @@
 //! Independent protocol fixtures, exported in full before verdict comparisons.
 
+mod binding;
 mod fixtures;
 mod stores;
 

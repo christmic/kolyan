@@ -3,6 +3,7 @@
 //! reconciliation or write port is exposed; a digest cannot reconstruct a generation.
 
 mod dto;
+mod prefix;
 mod reader;
 mod verify;
 

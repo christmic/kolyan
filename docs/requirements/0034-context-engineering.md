@@ -931,3 +931,39 @@ synthetic test providers explicitly exercise prepared/count/admitted generation,
 never implement a pass-through Bind or fabricate proof. Actual Host SDK, guards,
 root/child/resume/pump and public retry/failure enforcement are acceptance gates,
 not consequences of this specification or a private Runtime-only test pass.
+
+### Canonical Task binding before execution start
+
+The real Task producer publishes ExecutionBound before ExecutionStarted and
+ExecutionInputAdmitted. The original opening reader incorrectly required the
+first scoped event to be ExecutionStarted. Main independently matched the new
+three-row fixture against the original physical Task producer capture; it is
+not an invented successful model request.
+
+The narrow reader correction accepts either no prestart event or exactly one
+canonical ExecutionBound in that slot. It validates the strict binding envelope,
+existing six-field ExecutionBinding, canonical event/idempotency identity and
+execution/Session/Turn equality. Arbitrary, duplicate and post-start bindings
+refuse. Server still owns Task/invocation/attempt membership; Runtime cannot
+certify those identities from a request that does not supply them.
+
+Main verified four frozen source digests and the exact patch before import.
+Existing 163 cases and expectations are unchanged. The Main module gate exited
+0 in `/tmp/kolyan-opening-prefix-main-module-v1.log`: Runtime 67 and Server 129
+passed, zero failed or ignored. Each of Memory and reopened SQLite adds fifteen
+rows: one accepted no-Steps producer prefix and fourteen rejected mutations.
+Main physically reloaded all thirty new rows and checked unchanged Ledger
+contents. Actual files are `kolyan-opening-binding-LrR7lf/actual.jsonl` and
+`kolyan-opening-binding-qxnZm3/actual.jsonl` under the macOS temporary directory.
+
+This validates the reader prefix and existing Server regression. It does not
+establish successful Task generation under the not-yet-integrated mandatory
+Driver/Server opening contract. That actual consumer gate, authenticated resume
+migration and full opening-increment regression remain required. The earlier
+full 901-pass workspace receipt belongs to the preceding tool-window source,
+not this subsequently modified reader. No vendor request ran in this gate.
+
+Workspace/all-target strict Clippy exited 0 in
+`/tmp/kolyan-opening-prefix-main-strict-v1.log`; formatting, source-layout and
+diff checks exited 0. These checks compiled all existing callers without
+introducing a compatibility path or replacing the larger Driver write set.

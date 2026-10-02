@@ -6,6 +6,7 @@ use kolyan_model::{ModelRequest, StopReason, digest_json};
 use kolyan_policy::ToolExecutionScope;
 
 use super::dto::{Admission, Completed, Requested, StepStarted};
+use super::prefix::execution_prefix;
 use super::reader::{Budget, binding, coordinate, decode, fact, invalid, model_source};
 use super::{
     ModelContextPrepared, ModelOpeningAccounting, ModelOpeningAdmitted,
@@ -46,9 +47,12 @@ pub(super) fn verify<F: FactJournal + ?Sized>(
     .validate()
     .map_err(|error| invalid(&admission_id, error))?;
     let started_id = format!("{}/execution-started", request.execution.execution_id);
-    let started = events.first().ok_or_else(|| Error::MissingEvidence {
-        source_id: started_id.clone(),
-    })?;
+    let started = events
+        .iter()
+        .find(|event| event.event_id == started_id)
+        .ok_or_else(|| Error::MissingEvidence {
+            source_id: started_id.clone(),
+        })?;
     if started.event_id != started_id
         || started.kind != Kind::ExecutionStarted
         || started.cursor >= admission_event.cursor
@@ -59,6 +63,7 @@ pub(super) fn verify<F: FactJournal + ?Sized>(
             "missing canonical execution identity before admission",
         ));
     }
+    execution_prefix(events, started)?;
 
     let mut steps: Vec<VerifiedModelOpeningStep> = Vec::new();
     let mut current_request: Option<ModelRequest> = None;

@@ -1,0 +1,9 @@
+{
+ "origin":"physical TaskExecutionService producer capture; original run failed at old reader before Step; no successful Task/GEN claim",
+ "source":"/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-physical-ordering-KLbSHm/actual.jsonl",
+ "ledger":[
+  {"cursor":1,"event_id":"execution/task-binding","execution_id":"execution","idempotency_key":"execution/task-binding","kind":"execution_bound","payload":{"binding":{"attempt_id":"attempt","execution_id":"execution","invocation_id":"root","session_id":"session","task_id":"task","turn_id":"turn"}},"turn_id":"turn"},
+  {"cursor":2,"event_id":"execution/execution-started","execution_id":"execution","idempotency_key":"execution/execution-started","kind":"execution_started","payload":{"execution_id":"execution","session_id":"session","turn_id":"turn"},"turn_id":"turn"},
+  {"cursor":3,"event_id":"execution/input-admitted","execution_id":"execution","idempotency_key":"execution/input-admitted","kind":"execution_input_admitted","payload":{"agent_snapshot_digest":null,"deadline_at_ms":null,"dispatch":{"mode":"Serial","on_error":"FailTurn"},"key":{"execution_id":"execution","session_id":"session","turn_id":"turn"},"max_steps":1,"max_tool_calls":null,"model_request":{"extensions":null,"max_output_tokens":64,"messages":[],"model":{"model":"ordering","provider":"fixture"},"output_format":null,"prompt_cache":null,"reasoning":null,"request_id":"request","system":[],"tool_choice":"auto","tools":[]},"opening_protocol":1,"schema_version":1,"tool_timeout_ms":null},"turn_id":"turn"}
+ ]
+}

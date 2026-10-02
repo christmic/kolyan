@@ -1,0 +1,17 @@
+[
+ {"id":"canonical-task-producer-prefix","expected":"no_steps"},
+ {"id":"foreign-session","expected":"binding"},
+ {"id":"foreign-turn","expected":"binding"},
+ {"id":"foreign-execution","expected":"binding"},
+ {"id":"empty-task","expected":"invalid_payload"},
+ {"id":"control-invocation","expected":"invalid_payload"},
+ {"id":"oversized-attempt","expected":"invalid_payload"},
+ {"id":"missing-attempt","expected":"invalid_payload"},
+ {"id":"unknown-binding-field","expected":"invalid_payload"},
+ {"id":"unknown-envelope-field","expected":"invalid_payload"},
+ {"id":"wrong-event-id","expected":"binding"},
+ {"id":"wrong-idempotency-key","expected":"binding"},
+ {"id":"arbitrary-prestart","expected":"ordering"},
+ {"id":"duplicate-binding","expected":"ordering"},
+ {"id":"binding-after-start","expected":"ordering"}
+]
