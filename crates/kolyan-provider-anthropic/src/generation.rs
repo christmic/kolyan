@@ -83,5 +83,34 @@ impl AnthropicProvider {
         })
     }
 }
+impl kolyan_model::PreparedModelGeneration for PreparedAnthropicGeneration {
+    fn wire(&self) -> &PreparedContextWire {
+        PreparedAnthropicGeneration::wire(self)
+    }
+}
+
+impl kolyan_model::PreparedModelProvider for AnthropicProvider {
+    type Prepared = PreparedAnthropicGeneration;
+
+    fn prepare_generation(&self, request: &ModelRequest) -> Result<Self::Prepared, ProviderError> {
+        AnthropicProvider::prepare_generation(self, request)
+    }
+
+    fn count_prepared<'a>(
+        &'a self,
+        prepared: &'a Self::Prepared,
+        timeout: std::time::Duration,
+    ) -> kolyan_model::ProviderCountFuture<'a> {
+        Box::pin(AnthropicProvider::count_prepared(
+            self,
+            prepared.wire(),
+            timeout,
+        ))
+    }
+
+    fn stream_prepared(&self, prepared: Self::Prepared) -> ProviderFuture<'_> {
+        AnthropicProvider::stream_prepared(self, prepared)
+    }
+}
 #[cfg(test)]
 mod tests;

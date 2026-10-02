@@ -645,6 +645,8 @@ ModelOpeningEventRef 使用 event_id/cursor，严格区别于 Journal 的 FactRe
 Runtime recorder 保存每次实际 ModelRequested 的 exact ledger coordinate、
 step_id 和完整 neutral digest；禁止按 latest request 猜绑定。ModelContextPrepared
 使用 critical schema1 的 model.context_prepared fact，subject 为精确 execution。
+subject.kind 必须是现有 Journal 支持的 runtime.execution，subject.id 为
+execution_id；不使用会被 Journal 拒绝的裸 execution kind。
 payload 必须包含协议版本、ExecutionKey、step_id、model_requested coordinate、
 neutral_digest、完整 mapping identity、count_profile_digest、generation_wire_digest、
 generation_wire_bytes、count_input_digest、unsupported_count_fields 和 accounting。
@@ -747,3 +749,43 @@ passed，均 0 failed、0 ignored；日志
 它验证已有原生工具、审批/重建、子调用及 Goal 场景仍可运行；忽略的
 供应商网络未执行，隔离开发中的新 Host/Skills load/Opening inspector
 尚未纳入该次回归，不能据此扩大完成声明。
+
+### 适配器统一准备与计量接口
+
+Model 层新增 PreparedModelProvider，扩展已有 ModelProvider 的适配器能力，
+不是 Core 的第二套执行或开启接口。关联类型 Prepared 保留各协议真实的
+owned generation plan；PreparedModelGeneration 仅提供只读 wire。prepare_generation
+不执行 I/O；count_prepared 借用同一个 owned plan，返回带真实身份与摘要的
+ProviderInputCount；stream_prepared 消费它并使用现有 SDK 发送固定 body。
+三者没有默认实现或普通 stream 回退，不把 count 支持、精度或发送许可混同。
+
+PreparedContextWire 提供当前私有 CountProfile 的有界 JSON 摘要，供准备事实
+绑定；默认不支持与显式注册、counter revision 变化必须产生不同的摘要。
+协议适配器实现只转发现有 preparation、count 与 GEN 管线，不重写映射、
+SSE 解析或网络重试。MiniMax 未注册计量时仍使用明确字节预算，不试探接口。
+
+新增独立 localhost 集成框架，通过泛型接口运行两套真实 SDK，数据驱动覆盖
+未注册、注册、同实例 clone、外部 owner、profile 变更及调用方输入变更。
+记录实际 count/GEN HTTP body、原始字节、摘要、profile 与完整事件，写入临时
+JSONL 后 flush、sync、close 并物理回读比较。验证零请求拒绝、count 与 GEN
+引用同一准备对象及 GEN 发送字节未变化；count 沿用 typed DTO 序列化，
+严格比较完整解码 body 与 canonical digest，不要求 JSON 对象键序相同。
+保留旧测试和数据。这是本地 HTTP 证据，
+不是实际供应商计量或完整 Runtime 开启准入验收。
+
+此接口的主干模块回归终态 exit0：Model 26、Anthropic Provider 20、OpenAI
+Provider 23 passed，均 0 failed、0 ignored；日志
+`/tmp/kolyan-prepared-port-main-modules-v1.log`。新增最终 localhost 门终态
+exit0、2 tests passed，按同一个框架实际跑 6 场景乘两协议共 12 行；日志
+`/tmp/kolyan-prepared-port-main-http-v4.log`。逐行完整事件与 HTTP 观测由测试
+写入 `kolyan-prepared-port-Lr6F0b/actual.jsonl` 和
+`kolyan-prepared-port-woLN0d/actual.jsonl`，同步关闭并物理回读后比较。
+相同最终源码 workspace all-targets 严格 Clippy exit0，日志
+`/tmp/kolyan-prepared-port-main-strict-v2.log`；fmt、源码布局和 diff 检查通过。
+
+首次新门因测试服务给 Anthropic 返回 OpenAI 的 object 字段而失败，实际
+decode error 与请求、响应均已保留；修正仅复用各协议已有 full_fields
+计量响应数据。另一次新断言误把 count DTO 对象键序与 canonical JSON 键序
+视为相同，已按原合同改为完整 decoded body/digest 校验；GEN 仍比较实际
+原始字节。这两项是新增测试框架问题，不修改生产解析器、旧场景或旧断言；
+失败日志 v1/v3 保留，不追溯记为通过。

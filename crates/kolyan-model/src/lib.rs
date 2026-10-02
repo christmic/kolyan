@@ -5,6 +5,7 @@ mod cache;
 mod capability;
 mod error;
 mod event;
+mod generation;
 mod message;
 mod planning;
 mod provider;
@@ -22,6 +23,7 @@ pub use cache::{CacheBreakpoint, CacheRetention, PromptCacheConfig};
 pub use capability::{ModelDescriptor, ModelFeature, ModelFeatures, ModelRef};
 pub use error::{ProviderError, ProviderErrorKind, ProviderErrorPhase};
 pub use event::{ModelEvent, ProviderMetadata};
+pub use generation::{PreparedModelGeneration, PreparedModelProvider, ProviderCountFuture};
 pub use message::{ContentBlock, ImageSource, Message, MessageRole, SystemInstruction};
 pub use planning::{
     ModelParameterOverrides, ParameterAction, ParameterConstraints, ParameterDecision,

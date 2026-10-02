@@ -1,0 +1,8 @@
+[
+  {"id":"unsupported-count-explicit-generation","mode":"default","registered":false,"count_requests":0,"generation_requests":1,"input_tokens":null,"generation_error":false},
+  {"id":"registered-count-same-generation","mode":"registered","registered":true,"count_requests":1,"generation_requests":1,"input_tokens":42,"generation_error":false},
+  {"id":"unchanged-clone-same-owner","mode":"unchanged_clone","registered":true,"count_requests":1,"generation_requests":1,"input_tokens":42,"generation_error":false},
+  {"id":"foreign-owner-no-network","mode":"foreign_owner","registered":true,"count_requests":0,"generation_requests":0,"input_tokens":null,"generation_error":true},
+  {"id":"changed-profile-no-network","mode":"profile_changed","registered":true,"count_requests":0,"generation_requests":0,"input_tokens":null,"generation_error":true},
+  {"id":"mutated-caller-does-not-remap-plan","mode":"caller_changed","registered":true,"count_requests":1,"generation_requests":1,"input_tokens":42,"generation_error":false}
+]

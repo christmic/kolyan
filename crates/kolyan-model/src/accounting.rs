@@ -199,6 +199,10 @@ impl PreparedContextWire {
     pub fn coverage(&self) -> &CountCoverage {
         &self.coverage
     }
+    /// Bind the actual prepared registration, including explicit unsupported state.
+    pub fn count_profile_digest(&self) -> Result<String, ProviderError> {
+        digest_json(&self.profile)
+    }
     /// Validate generation binding without requiring count support or coverage.
     /// Unsupported profiles can still generate; changing a profile invalidates preparation.
     pub fn verify_generation_for(

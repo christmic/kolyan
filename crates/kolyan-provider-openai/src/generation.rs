@@ -99,5 +99,34 @@ impl OpenAiProvider {
         })
     }
 }
+impl kolyan_model::PreparedModelGeneration for PreparedOpenAiGeneration {
+    fn wire(&self) -> &PreparedContextWire {
+        PreparedOpenAiGeneration::wire(self)
+    }
+}
+
+impl kolyan_model::PreparedModelProvider for OpenAiProvider {
+    type Prepared = PreparedOpenAiGeneration;
+
+    fn prepare_generation(&self, request: &ModelRequest) -> Result<Self::Prepared, ProviderError> {
+        OpenAiProvider::prepare_generation(self, request)
+    }
+
+    fn count_prepared<'a>(
+        &'a self,
+        prepared: &'a Self::Prepared,
+        timeout: std::time::Duration,
+    ) -> kolyan_model::ProviderCountFuture<'a> {
+        Box::pin(OpenAiProvider::count_prepared(
+            self,
+            prepared.wire(),
+            timeout,
+        ))
+    }
+
+    fn stream_prepared(&self, prepared: Self::Prepared) -> ProviderFuture<'_> {
+        OpenAiProvider::stream_prepared(self, prepared)
+    }
+}
 #[cfg(test)]
 mod tests;
