@@ -453,3 +453,82 @@ the Task remains Waiting. This is correct refusal of false completion, not C1/C2
 acceptance. Preserve the complete failed row under requirement 0036. C1 must
 admit new work from exact trustworthy assessment/opening evidence, rather than
 rewriting the original tool arguments, relaxing the goal or replaying the attempt.
+
+## C1 generation and strong source implementation contract
+
+The reviewed A2 slice makes evaluation identity and opening proof mandatory
+inputs rather than optional checker conventions. It follows the preceding C1
+atomic edge contract; automatic C2 orchestration remains a separate increment.
+The original Root criterion, predicate and Agent authority are immutable.
+
+GoalSourceReader::new and LedgerTaskGoalVerifier::new require the actual
+Arc<dyn FactJournal> and explicit validated ModelOpeningInspectionLimits, in
+addition to their existing Ledger/checker/source inputs. No default Journal,
+fake opening adapter or permissive source fallback is allowed. The verifier
+implements GoalCorrectionProofVerifier by recomputing the assessment from
+authenticated Task prefix, actual physical execution and its frozen source range.
+
+GoalAssessment requires evaluation: GoalEvaluationCoordinate and
+opening_evidence: Option<GoalOpeningEvidence>. The latter is required nullable:
+missing fields, unknown fields and duplicate keys refuse strict typed decoding;
+explicit null cannot establish Satisfied or correctable Unsatisfied. Absent,
+corrupt or unknown sources are typed operational errors. Recognized incomplete
+or exhausted reads may produce explicitly explained Indeterminate, never
+fabricated completed proof. All existing assessment and proof byte/cause limits
+remain enforced; oversized evidence cannot be truncated into acceptance.
+
+GoalOpeningEvidence records schema 1, exact input-admission and inspected-through
+event references, ordered completed Steps and a domain-separated digest. Each
+Step carries its actual started/requested/preparation/opening/completed
+coordinates. The assessment digest covers the evaluation and full opening
+evidence separately from checker proof. These are integrity coordinates, not
+execution permissions.
+
+VerifiedGoalEvaluationBinding is private-construction, non-default and
+non-deserializable. It exposes the immutable Root anchor, full evaluation
+coordinate and actual latest attempt through read-only accessors. GoalChecker
+assess receives criterion, verified evaluation and verified source. The file
+checker validates both the Root anchor and actual source attempt; it must not
+clone a criterion with a changed invocation ID or borrow another owner's effect.
+Current permission checks remain the responsibility of actual fresh execution,
+not historical proof recomputation.
+
+Source verification first validates exact Task ownership, admitted input and
+stopped physical terminal, then inventories the bounded scoped execution to an
+actual empty page. Runtime inspect_model_openings consumes the exact observed-end
+event ID/cursor and the real preparation Journal. Every actual model request
+must have its own verified Completed opening, in matching physical order. Steps
+must be nonempty; the final completed Step must be FinalAnswer/EndTurn, with no
+later model/Step/effect activity. Uncertain, NotAdmitted, unmatched requests,
+unresolved effects or read exhaustion cannot become correctable failure.
+
+Historical assessment recomputation uses its exact frozen inspected-through
+endpoint and original prefix, retaining a bounded post-terminal activity guard.
+It cannot substitute the current head and silently change the original digest.
+Legitimate later Session metadata does not rewrite old physical proof; missing
+endpoint or forbidden activity refuses.
+
+There is at most one assessment per criterion and full owner generation. Current
+admission requires the prefix's current owner; historical replay uses the owner
+at that historical prefix. Correction assessment causes include the exact edge,
+stopped observation and preparation references, within actual cause limits.
+Ordinary Continuation does not acquire evaluation ownership. Current completion
+selects only the exact latest Satisfied assessment for each current generation.
+
+Generation-aware refresh_goals becomes the sole goal-waiting implementation.
+The A1 invocation-ID-only temporary owner fence must be removed in the same
+integration batch, and completion must use the same full-coordinate selection.
+Old success cannot clear successor waiting; unselected criteria retain their
+owners. Existing execution, approval, child-result and recovery state machines
+are preserved rather than replaced with a second goal scheduler.
+
+The isolated slice owns Server goal source, opening reader, goal DTO/registry/
+transitions and new independent datasets. Main owns public exports, Agent file
+checker, existing constructor/fixture migrations and the two reducer seams.
+Prerequisite A1 and Runtime opening files are frozen separately, not claimed as
+A2 changes. New Memory/reopened SQLite cases must cover two corrections,
+partial criteria, stale/duplicate owner, ordinary Continuation, required-field
+and nullable decoding, all opening/order/ref failures, post-terminal activity,
+read exhaustion and frozen historical recomputation. Export complete inputs,
+physical facts, sources, assessments and actual outcomes before readback and
+comparison. Module passes do not replace actual Agent/Host or C2 acceptance.

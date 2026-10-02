@@ -963,6 +963,13 @@ migration and full opening-increment regression remain required. The earlier
 full 901-pass workspace receipt belongs to the preceding tool-window source,
 not this subsequently modified reader. No vendor request ran in this gate.
 
+The subsequent full workspace regression on frozen main `f9ab53d` exited 0 in
+`/tmp/kolyan-opening-prefix-main-workspace-v1.log`. The retained log contains
+90 successful result groups, 903 passed, zero failed and 69 ignored tests,
+including helper subprocess results. There are no failed result groups.
+Ignored network cases were not executed; this receipt does not certify the
+pending mandatory Driver/Host assembly or add live MiniMax acceptance.
+
 Workspace/all-target strict Clippy exited 0 in
 `/tmp/kolyan-opening-prefix-main-strict-v1.log`; formatting, source-layout and
 diff checks exited 0. These checks compiled all existing callers without

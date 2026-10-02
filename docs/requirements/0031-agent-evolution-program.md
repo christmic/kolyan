@@ -20,6 +20,10 @@ authority for its retained actual-model cases and run evidence. The user's
 2026-10-02 clarification makes self-iteration an experimental feedback activity
 after functional development, not a prerequisite for mainline delivery or an
 obligation to immediately produce an accepted code change.
+Functional implementation remains the primary delivery stream. MiniMax is the
+model used to run Kolyan for post-feature feedback, not a separate framework to
+develop. The coordinator diagnoses that feedback and implements verified fixes;
+Kolyan does not have to author those fixes for an increment to be accepted.
 This program owns stage dependencies and completion rules. Each increment owns
 its precise contracts, implementation decisions, cases and validation receipts
 in a separate numbered requirement, linked here before implementation.
