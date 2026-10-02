@@ -37,6 +37,7 @@ pub(super) struct AssembledRoot<E> {
     pub saved: AgentInvocationBinding,
     original_input: ModelRequest,
     tool_set: RunnerToolSet<E>,
+    pub(super) skill_binding: Option<crate::VerifiedSkillBinding>,
 }
 
 impl<J, L, S, SS, P, T> AgentRunner<J, L, S, SS, P, T>
@@ -108,7 +109,24 @@ where
             &self.host,
             &request.requested_permissions,
         )?;
-        let tool_set = self.routed_tool_set(&snapshot, &request.execution)?;
+        let saved = AgentInvocationBinding {
+            task_id: request.task_id.clone(),
+            invocation_id: request.invocation_id.clone(),
+            logical_session_id: request.execution.session_id.clone(),
+            private_session_id: request.execution.session_id.clone(),
+            context_kind: BindingContextKind::Root,
+            snapshot: snapshot.clone(),
+        };
+        // Only explicitly configured Skills require ownership before inventory
+        // freezing. Unconfigured roots retain the existing fail-before-owner order.
+        let skill_binding = if self.skills.is_some() {
+            let ownership = self.bindings.save(&saved)?;
+            self.prepare_skills(&saved, &ownership)?
+        } else {
+            None
+        };
+        let tool_set =
+            self.routed_tool_set(&snapshot, &request.execution, skill_binding.as_ref())?;
         request.model_request.model = snapshot.definition().model().clone();
         request.model_request.system.push(SystemInstruction {
             text: snapshot.definition().instructions().into(),
@@ -119,6 +137,7 @@ where
             .iter()
             .filter(|definition| {
                 definition.name == crate::AGENT_INVOKE_NAME
+                    || definition.name == crate::skills::SKILL_LOAD_NAME
                     || super::tools::permits(&snapshot, &definition.name)
             })
             .cloned()
@@ -142,19 +161,12 @@ where
             }
             _ => {}
         }
-        let saved = AgentInvocationBinding {
-            task_id: request.task_id.clone(),
-            invocation_id: request.invocation_id.clone(),
-            logical_session_id: request.execution.session_id.clone(),
-            private_session_id: request.execution.session_id.clone(),
-            context_kind: BindingContextKind::Root,
-            snapshot: snapshot.clone(),
-        };
         Ok(AssembledRoot {
             request,
             saved,
             original_input,
             tool_set,
+            skill_binding,
         })
     }
 
@@ -174,6 +186,7 @@ where
             saved,
             original_input,
             tool_set,
+            skill_binding,
         } = assembled;
         let inventory = tool_set.definitions.clone();
         let snapshot = saved.snapshot.clone();
@@ -182,6 +195,7 @@ where
             &saved,
             kolyan_server::InvocationInputKind::Standalone,
             &super::input::RootInput {
+                skill_binding: skill_binding.as_ref().map(|b| b.reference().clone()),
                 ownership: ownership.clone(),
                 original_input,
                 execution: request.execution.clone(),
@@ -189,7 +203,10 @@ where
                 selected_input: request.model_request.clone(),
                 inventory,
             },
-            vec![ownership.clone()],
+            super::skills::causes(
+                vec![ownership.clone()],
+                skill_binding.as_ref().map(|b| b.reference()),
+            ),
         )?;
         Ok((
             PreparedRootInput {

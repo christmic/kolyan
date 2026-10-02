@@ -30,6 +30,8 @@ pub(super) struct InputBody {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RootInput {
+    #[serde(deserialize_with = "super::skills::required_binding")]
+    pub skill_binding: Option<FactRef>,
     pub ownership: FactRef,
     pub execution: kolyan_server::ExecutionRef,
     pub requested_permissions: crate::AgentPermissions,
@@ -43,6 +45,8 @@ pub(super) struct RootInput {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ChildInput {
+    #[serde(deserialize_with = "super::skills::required_binding")]
+    pub skill_binding: Option<FactRef>,
     pub parent: DelegationOwner,
     pub parent_ownership: FactRef,
     pub issued: IssuedToolAuthority,
@@ -142,7 +146,10 @@ where
         let environment_inventory = input
             .inventory
             .iter()
-            .filter(|definition| definition.name != crate::AGENT_INVOKE_NAME)
+            .filter(|definition| {
+                definition.name != crate::AGENT_INVOKE_NAME
+                    && definition.name != crate::skills::SKILL_LOAD_NAME
+            })
             .cloned()
             .collect::<Vec<_>>();
         super::tools::validate_inventory(&saved.snapshot, &environment_inventory)?;
@@ -162,6 +169,7 @@ where
             .iter()
             .filter(|definition| {
                 definition.name == crate::AGENT_INVOKE_NAME
+                    || definition.name == crate::skills::SKILL_LOAD_NAME
                     || super::tools::permits(&saved.snapshot, &definition.name)
             })
             .cloned()
@@ -169,7 +177,8 @@ where
         if proof.envelope.kind != InvocationInputKind::Standalone
             || &input.requested_permissions != saved.snapshot.permissions()
             || input.execution.session_id != saved.logical_session_id
-            || proof.causes != vec![ownership.clone()]
+            || proof.causes
+                != super::skills::causes(vec![ownership.clone()], input.skill_binding.as_ref())
             || input.ownership != ownership
             || !input.original_input.tools.is_empty()
             || selected != input.selected_input
@@ -181,6 +190,18 @@ where
             return Err(invalid(
                 "standalone source differs from actual root input and ownership",
             ));
+        }
+        let binding =
+            self.verify_skill_origin(saved, input.skill_binding.as_ref(), &proof.causes)?;
+        let expected_skill = binding
+            .as_ref()
+            .and_then(crate::skills::skill_load_definition);
+        let mut skill_schemas = input
+            .inventory
+            .iter()
+            .filter(|d| d.name == crate::skills::SKILL_LOAD_NAME);
+        if skill_schemas.next() != expected_skill.as_ref() || skill_schemas.next().is_some() {
+            return Err(invalid("root Skill schema differs from saved selection"));
         }
         Ok(())
     }
@@ -266,11 +287,14 @@ where
         .map_err(|error| invalid(error.to_string()))?;
         if proof.envelope.kind != InvocationInputKind::Derived
             || proof.causes
-                != vec![
-                    input.parent_ownership.clone(),
-                    ownership.clone(),
-                    input.initialization.clone(),
-                ]
+                != super::skills::causes(
+                    vec![
+                        input.parent_ownership.clone(),
+                        ownership.clone(),
+                        input.initialization.clone(),
+                    ],
+                    input.skill_binding.as_ref(),
+                )
             || input.ownership != ownership
             || input.parent.task_id != saved.task_id
             || input.parent.logical_session_id != saved.logical_session_id
@@ -303,6 +327,7 @@ where
                 "derived child source differs from actual invoke input and owner",
             ));
         }
+        self.verify_skill_origin(saved, input.skill_binding.as_ref(), &proof.causes)?;
         Ok(input)
     }
 

@@ -194,7 +194,7 @@ async fn admission_and_actual_child_drive_export_then_compare() {
         let ownership = mutable.bindings.save(&saved).unwrap();
         let original_input = template_source.model_request.clone();
         let inventory = mutable
-            .routed_tool_set(&snapshot, &execution(&task_id))
+            .routed_tool_set(&snapshot, &execution(&task_id), None)
             .unwrap()
             .definitions;
         let mut selected_input = original_input.clone();
@@ -216,6 +216,7 @@ async fn admission_and_actual_child_drive_export_then_compare() {
                 &saved,
                 kolyan_server::InvocationInputKind::Standalone,
                 &crate::runner::input::RootInput {
+                    skill_binding: None,
                     ownership: ownership.clone(),
                     execution: execution(&task_id),
                     requested_permissions: snapshot.permissions().clone(),

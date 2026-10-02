@@ -35,6 +35,7 @@ pub(super) struct RoutedTools<J, L, S, SS, P, T: EnvironmentToolFactory> {
     pub saved: AgentInvocationBinding,
     pub parent: AttemptBinding,
     pub environment: SnapshotTools<T::Executor>,
+    pub skill: Option<crate::skills::SkillExecutor>,
 }
 
 impl<J, L, S, SS, P, T> ToolExecutor for RoutedTools<J, L, S, SS, P, T>
@@ -48,6 +49,14 @@ where
 {
     fn prepare(&self, call: ToolCall) -> ToolPreparationFuture<'_> {
         Box::pin(async move {
+            if call.name == crate::skills::SKILL_LOAD_NAME {
+                return self
+                    .skill
+                    .as_ref()
+                    .ok_or_else(|| denied("Skills not bound for this invocation"))?
+                    .prepare(call)
+                    .await;
+            }
             if call.name != AGENT_INVOKE_NAME {
                 return self.environment.prepare(call).await;
             }
@@ -88,6 +97,14 @@ where
 
     fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
+            if invocation.prepared.call().name == crate::skills::SKILL_LOAD_NAME {
+                return self
+                    .skill
+                    .as_ref()
+                    .ok_or_else(|| denied("Skills not bound for this invocation"))?
+                    .execute_invocation(invocation)
+                    .await;
+            }
             if invocation.prepared.call().name != AGENT_INVOKE_NAME {
                 return self.environment.execute_invocation(invocation).await;
             }
@@ -199,9 +216,16 @@ where
         &self,
         snapshot: &AgentSnapshot,
         execution: &kolyan_server::ExecutionRef,
+        skill_binding: Option<&crate::VerifiedSkillBinding>,
     ) -> Result<RunnerToolSet<T::Executor>, RunnerError> {
         let mut set = self.tools.build(snapshot, execution)?;
         super::tools::validate_inventory(snapshot, &set.definitions)?;
+        if let Some(definition) = skill_binding.and_then(crate::skills::skill_load_definition) {
+            let mut policy = (*set.policy).clone();
+            policy.register(crate::skills::skill_load_manifest());
+            set.policy = Arc::new(policy);
+            set.definitions.push(definition);
+        }
         if let Some(definition) = self.delegation_definition(snapshot)? {
             let config = self
                 .delegation
@@ -219,6 +243,7 @@ where
         &self,
         snapshot: &AgentSnapshot,
         execution: &kolyan_server::ExecutionRef,
+        skill_binding: Option<&crate::VerifiedSkillBinding>,
     ) -> Result<
         AdvertisementProvider<crate::provider::ContextPreparingProvider<P::Provider>>,
         RunnerError,
@@ -226,6 +251,14 @@ where
         Ok(AdvertisementProvider {
             inner: self.providers.build(snapshot, execution)?,
             expected: self.delegation_definition(snapshot)?,
+            skills: skill_binding
+                .map(|binding| {
+                    self.skills
+                        .clone()
+                        .map(|runtime| (runtime, binding.clone()))
+                        .ok_or_else(|| RunnerError::Host("Skill runtime missing".into()))
+                })
+                .transpose()?,
         })
     }
 }

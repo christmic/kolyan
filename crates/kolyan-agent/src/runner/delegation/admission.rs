@@ -147,11 +147,15 @@ where
                     super::super::input::MAX_INPUT_DOCUMENT_BYTES,
                 )
                 .map_err(uncertain)?;
+            let skill_binding = self
+                .prepare_skills(&saved, &binding_fact)
+                .map_err(uncertain)?;
             let input = self
                 .publish_input_document(
                     &saved,
                     kolyan_server::InvocationInputKind::Derived,
                     &super::super::input::ChildInput {
+                        skill_binding: skill_binding.as_ref().map(|b| b.reference().clone()),
                         parent: owner.clone(),
                         parent_ownership: parent_fact.clone(),
                         issued: issued.clone(),
@@ -163,11 +167,14 @@ where
                         initialization_digest: initialization_digest.clone(),
                         initial_messages: initialization.initialization.messages,
                     },
-                    vec![
-                        parent_fact.clone(),
-                        binding_fact.clone(),
-                        initialization.initialization_fact,
-                    ],
+                    super::super::skills::causes(
+                        vec![
+                            parent_fact.clone(),
+                            binding_fact.clone(),
+                            initialization.initialization_fact,
+                        ],
+                        skill_binding.as_ref().map(|b| b.reference()),
+                    ),
                 )
                 .map_err(uncertain)?;
             let input_source = kolyan_server::InvocationInputSource::Derived {
@@ -454,11 +461,14 @@ where
             .map_err(denied)?;
             if source.envelope.kind != kolyan_server::InvocationInputKind::Derived
                 || source.causes
-                    != vec![
-                        parent_fact.clone(),
-                        child.binding_fact.clone(),
-                        initialized.initialization_fact.clone(),
-                    ]
+                    != super::super::skills::causes(
+                        vec![
+                            parent_fact.clone(),
+                            child.binding_fact.clone(),
+                            initialized.initialization_fact.clone(),
+                        ],
+                        input.skill_binding.as_ref(),
+                    )
                 || input.parent != *owner
                 || input.parent_ownership != parent_fact
                 || input.issued != *issued

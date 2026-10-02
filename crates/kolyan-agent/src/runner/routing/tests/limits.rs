@@ -144,6 +144,7 @@ async fn actual_host_child_bound_matches_schema_preparation_and_restoration() {
         let mut historical = harness.request(&case.id, false).turn.model_request;
         historical.tools = vec![advertised.clone()];
         let provider = AdvertisementProvider {
+            skills: None,
             inner: Probe::default(),
             expected,
         };

@@ -118,15 +118,33 @@ where
                 .permissions()
                 .require_subset_of(&ceiling)
                 .map_err(denied)?;
+            let skill_binding = runner
+                .restored_skills(&saved, &loaded_child.attempt.input_source)
+                .map_err(denied)?;
             let provider = runner
-                .routed_provider(&saved.snapshot, &loaded_child.attempt.execution)
+                .routed_provider(
+                    &saved.snapshot,
+                    &loaded_child.attempt.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             let set = runner
-                .routed_tool_set(&saved.snapshot, &loaded_child.attempt.execution)
+                .routed_tool_set(
+                    &saved.snapshot,
+                    &loaded_child.attempt.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             Ok(TurnExecutor::with_tools(
                 provider,
                 RoutedTools {
+                    skill: runner
+                        .skill_executor(
+                            skill_binding.as_ref(),
+                            &loaded_child.attempt.execution,
+                            set.policy.clone(),
+                        )
+                        .map_err(denied)?,
                     runner: runner.clone(),
                     saved: saved.clone(),
                     parent: loaded_child.attempt.clone(),

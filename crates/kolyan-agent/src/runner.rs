@@ -12,6 +12,7 @@ mod input;
 mod preparation;
 mod resume;
 mod routing;
+mod skills;
 mod tools;
 
 pub use delegation::{
@@ -182,6 +183,7 @@ pub struct AgentRunner<J, L, S, SS, P, T> {
     execution_budget: AgentExecutionBudget,
     continuation_projection: Option<ContinuationProjectionConfig>,
     input_artifacts: Arc<kolyan_trace::ArtifactStore>,
+    skills: Option<Arc<crate::SkillRuntime>>,
 }
 
 impl<J, L, S, SS, P, T> AgentRunner<J, L, S, SS, P, T>
@@ -217,6 +219,7 @@ where
             execution_budget: AgentExecutionBudget::new(1)?,
             continuation_projection: None,
             input_artifacts,
+            skills: None,
         })
     }
 
@@ -238,6 +241,13 @@ where
     /// and remaining budgets, even when this Runner has a different selection.
     pub fn with_tool_error_policy(mut self, policy: ToolErrorPolicy) -> Self {
         self.tool_error_policy = policy;
+        self
+    }
+
+    /// Explicit host knowledge ACL, independent of environment/delegation authority.
+    /// Saved sources remain exact; restoring a source never selects new versions.
+    pub fn with_skills(mut self, skills: Arc<crate::SkillRuntime>) -> Self {
+        self.skills = Some(skills);
         self
     }
 

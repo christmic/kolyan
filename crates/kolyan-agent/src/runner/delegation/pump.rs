@@ -90,15 +90,33 @@ where
                 )
                 .map_err(denied)?
                 .ok_or_else(|| denied("parent binding disappeared"))?;
+            let skill_binding = runner
+                .restored_skills(&saved, &loaded_owner.parent.input_source)
+                .map_err(denied)?;
             let provider = runner
-                .routed_provider(&saved.snapshot, &loaded_owner.parent.execution)
+                .routed_provider(
+                    &saved.snapshot,
+                    &loaded_owner.parent.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             let set = runner
-                .routed_tool_set(&saved.snapshot, &loaded_owner.parent.execution)
+                .routed_tool_set(
+                    &saved.snapshot,
+                    &loaded_owner.parent.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             let executor = TurnExecutor::with_tools(
                 provider,
                 RoutedTools {
+                    skill: runner
+                        .skill_executor(
+                            skill_binding.as_ref(),
+                            &loaded_owner.parent.execution,
+                            set.policy.clone(),
+                        )
+                        .map_err(denied)?,
                     runner: runner.clone(),
                     saved: saved.clone(),
                     parent: loaded_owner.parent,

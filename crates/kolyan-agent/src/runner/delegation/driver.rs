@@ -245,11 +245,22 @@ where
                 .permissions()
                 .require_subset_of(&ceiling)
                 .map_err(denied)?;
+            let skill_binding = runner
+                .restored_skills(&saved, &current_child.attempt.input_source)
+                .map_err(denied)?;
             let provider = runner
-                .routed_provider(&saved.snapshot, &current_child.attempt.execution)
+                .routed_provider(
+                    &saved.snapshot,
+                    &current_child.attempt.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             let set = runner
-                .routed_tool_set(&saved.snapshot, &current_child.attempt.execution)
+                .routed_tool_set(
+                    &saved.snapshot,
+                    &current_child.attempt.execution,
+                    skill_binding.as_ref(),
+                )
                 .map_err(denied)?;
             let mut turn = input;
             turn.turn_id = current_child.attempt.execution.turn_id.clone();
@@ -265,6 +276,7 @@ where
                 .into_iter()
                 .filter(|definition| {
                     definition.name == crate::AGENT_INVOKE_NAME
+                        || definition.name == crate::skills::SKILL_LOAD_NAME
                         || permits(&saved.snapshot, &definition.name)
                 })
                 .collect();
@@ -286,6 +298,13 @@ where
             let executor = TurnExecutor::with_tools(
                 provider,
                 RoutedTools {
+                    skill: runner
+                        .skill_executor(
+                            skill_binding.as_ref(),
+                            &current_child.attempt.execution,
+                            set.policy.clone(),
+                        )
+                        .map_err(denied)?,
                     runner: runner.clone(),
                     saved: saved.clone(),
                     parent: current_child.attempt.clone(),

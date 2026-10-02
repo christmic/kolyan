@@ -59,6 +59,7 @@ async fn resumed_advertisements_dispatch_unchanged_or_reject_before_provider() {
         let restored: ModelRequest =
             serde_json::from_value(serde_json::to_value(&request).unwrap()).unwrap();
         let provider = AdvertisementProvider {
+            skills: None,
             inner: DispatchProbe::default(),
             expected: case.expected.then(|| exact.clone()),
         };

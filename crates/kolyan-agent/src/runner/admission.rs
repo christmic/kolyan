@@ -73,8 +73,11 @@ where
             model_request: request.turn.model_request,
         })?;
         // Preserve fail-before-owner admission when the Provider factory refuses.
-        let provider =
-            self.routed_provider(&assembled.saved.snapshot, &assembled.request.execution)?;
+        let provider = self.routed_provider(
+            &assembled.saved.snapshot,
+            &assembled.request.execution,
+            assembled.skill_binding.as_ref(),
+        )?;
         let (prepared, tool_set, saved) = self.retain_root_input(assembled)?;
         let snapshot = prepared.snapshot;
         request.turn.model_request = prepared.selected_input;
@@ -119,9 +122,16 @@ where
             constraints_digest: snapshot.digest().into(),
             input_source,
         };
+        let skill_binding = self.restored_skills(&saved, &binding.input_source)?;
+        let skill = self.skill_executor(
+            skill_binding.as_ref(),
+            &binding.execution,
+            tool_set.policy.clone(),
+        )?;
         let executor = TurnExecutor::with_tools(
             provider,
             RoutedTools {
+                skill,
                 runner: self.clone(),
                 saved,
                 parent: binding.clone(),

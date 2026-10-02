@@ -13,6 +13,10 @@ use serde_json::{Value, json};
 pub(in crate::runner) struct AdvertisementProvider<P> {
     pub inner: P,
     pub expected: Option<ToolDefinition>,
+    pub skills: Option<(
+        std::sync::Arc<crate::SkillRuntime>,
+        crate::VerifiedSkillBinding,
+    )>,
 }
 impl<P: ModelProvider> ModelProvider for AdvertisementProvider<P> {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
@@ -31,7 +35,42 @@ impl<P: ModelProvider> ModelProvider for AdvertisementProvider<P> {
         }
         // Core's recorded request is dispatched unchanged, or rejected. A changed
         // catalog on resume cannot silently rewrite immutable checkpoint history.
-        self.inner.stream(request)
+        let skills = self.skills.clone();
+        Box::pin(async move {
+            let expected = skills
+                .as_ref()
+                .and_then(|(_, binding)| crate::skills::skill_load_definition(binding));
+            let mut schemas = request
+                .tools
+                .iter()
+                .filter(|d| d.name == crate::skills::SKILL_LOAD_NAME);
+            if schemas.next() != expected.as_ref() || schemas.next().is_some() {
+                return Err(ProviderError::new(
+                    ProviderErrorKind::InvalidRequest,
+                    ProviderErrorPhase::Validate,
+                    "saved Skill advertisement differs from exact source binding",
+                ));
+            }
+            if let Some((runtime, binding)) = skills {
+                tokio::task::spawn_blocking(move || runtime.validate_current(&binding))
+                    .await
+                    .map_err(|_| {
+                        ProviderError::new(
+                            ProviderErrorKind::InvalidRequest,
+                            ProviderErrorPhase::Validate,
+                            "Skill guard worker failed",
+                        )
+                    })?
+                    .map_err(|error| {
+                        ProviderError::new(
+                            ProviderErrorKind::InvalidRequest,
+                            ProviderErrorPhase::Validate,
+                            error.to_string(),
+                        )
+                    })?;
+            }
+            self.inner.stream(request).await
+        })
     }
 }
 

@@ -150,7 +150,7 @@ async fn scenario(case: &LifecycleCase, fixture: &Fixture, row: &mut Value) -> R
         .ok_or("parent binding absent")?;
     let policy = fixture
         .runner
-        .routed_tool_set(&saved.snapshot, &root.owner.parent.execution)
+        .routed_tool_set(&saved.snapshot, &root.owner.parent.execution, None)
         .map_err(|error| error.to_string())?
         .policy;
     row["admission_refusal"] = json!(

@@ -263,6 +263,7 @@ async fn typed_route_preparation_and_actual_feedback_export_all_before_compariso
         policy.register(crate::agent_invoke_manifest(ApprovalMode::Never));
         set.policy = Arc::new(policy);
         let routed = RoutedTools {
+            skill: None,
             runner: Arc::new(runner),
             saved,
             parent,

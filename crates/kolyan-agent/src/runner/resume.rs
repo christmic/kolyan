@@ -94,11 +94,25 @@ where
                     "saved attempt and Agent ownership differ or are terminal".into(),
                 ));
             }
-            let provider = runner.routed_provider(&saved.snapshot, &binding.execution)?;
-            let set = runner.routed_tool_set(&saved.snapshot, &binding.execution)?;
+            let skill_binding = runner.restored_skills(&saved, &binding.input_source)?;
+            let provider = runner.routed_provider(
+                &saved.snapshot,
+                &binding.execution,
+                skill_binding.as_ref(),
+            )?;
+            let set = runner.routed_tool_set(
+                &saved.snapshot,
+                &binding.execution,
+                skill_binding.as_ref(),
+            )?;
             let executor = TurnExecutor::with_tools(
                 provider,
                 RoutedTools {
+                    skill: runner.skill_executor(
+                        skill_binding.as_ref(),
+                        &binding.execution,
+                        set.policy.clone(),
+                    )?,
                     runner: runner.clone(),
                     saved: saved.clone(),
                     parent: binding.clone(),

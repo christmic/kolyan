@@ -36,6 +36,8 @@ pub struct ContinuationProjectionRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Body {
+    #[serde(deserialize_with = "crate::runner::skills::required_binding")]
+    skill_binding: Option<FactRef>,
     request: ContinuationProjectionRequest,
     source: ModelRequest,
     projected: ProjectedContext,
@@ -144,6 +146,20 @@ where
         let initialization = contexts
             .load_verified_initialization(&owner, &ownership, MAX_CONTEXT_BYTES)
             .map_err(|error| invalid(error.to_string()))?;
+        let skill_binding = self.prepare_skills(&saved, &ownership)?;
+        let expected_skill = skill_binding
+            .as_ref()
+            .and_then(crate::skills::skill_load_definition);
+        let mut schemas = request
+            .current_input
+            .tools
+            .iter()
+            .filter(|d| d.name == crate::skills::SKILL_LOAD_NAME);
+        if schemas.next() != expected_skill.as_ref() || schemas.next().is_some() {
+            return Err(invalid(
+                "Continuation input must contain the exact prepared Skill schema before selecting context",
+            ));
+        }
         let mut source = request.current_input.clone();
         source.messages = history.messages.clone();
         source
@@ -168,6 +184,7 @@ where
             committed: history.committed,
         };
         let body = Body {
+            skill_binding: skill_binding.as_ref().map(|b| b.reference().clone()),
             request,
             source,
             projected,
@@ -177,11 +194,14 @@ where
             &saved,
             kolyan_server::InvocationInputKind::Derived,
             &body,
-            vec![
-                ownership,
-                initialization.initialization_fact,
-                history.terminal_fact,
-            ],
+            crate::runner::skills::causes(
+                vec![
+                    ownership,
+                    initialization.initialization_fact,
+                    history.terminal_fact,
+                ],
+                body.skill_binding.as_ref(),
+            ),
         )
     }
 
@@ -202,11 +222,14 @@ where
         let proof = &body.proof;
         if source.envelope.kind != kolyan_server::InvocationInputKind::Derived
             || source.causes
-                != vec![
-                    initialization.ownership_fact.clone(),
-                    initialization.initialization_fact.clone(),
-                    history.terminal_fact.clone(),
-                ]
+                != crate::runner::skills::causes(
+                    vec![
+                        initialization.ownership_fact.clone(),
+                        initialization.initialization_fact.clone(),
+                        history.terminal_fact.clone(),
+                    ],
+                    body.skill_binding.as_ref(),
+                )
             || proof.ownership != initialization.ownership_fact
             || proof.initialization != initialization.initialization_fact
             || proof.predecessor != history.binding
@@ -216,6 +239,9 @@ where
         {
             return Err(invalid("Continuation source provenance coordinates differ"));
         }
+        let binding =
+            self.verify_skill_origin(&saved, body.skill_binding.as_ref(), &source.causes)?;
+        verify_skill_schema(&body.request.current_input, binding.as_ref())?;
         let config = self
             .continuation_projection
             .as_ref()
@@ -343,11 +369,14 @@ where
         .load_verified_initialization(&owner, &ownership, MAX_CONTEXT_BYTES)
         .map_err(|error| invalid(error.to_string()))?;
         if source.causes
-            != vec![
-                ownership.clone(),
-                initialization.initialization_fact.clone(),
-                history.terminal_fact.clone(),
-            ]
+            != crate::runner::skills::causes(
+                vec![
+                    ownership.clone(),
+                    initialization.initialization_fact.clone(),
+                    history.terminal_fact.clone(),
+                ],
+                body.skill_binding.as_ref(),
+            )
             || body.proof.ownership != ownership
             || body.proof.initialization != initialization.initialization_fact
             || body.proof.predecessor != history.binding
@@ -357,6 +386,9 @@ where
         {
             return Err(invalid("Continuation source coordinates differ"));
         }
+        let binding =
+            self.verify_skill_origin(saved, body.skill_binding.as_ref(), &source.causes)?;
+        verify_skill_schema(&body.request.current_input, binding.as_ref())?;
         let mut expected = body.request.current_input.clone();
         expected.messages = history.messages;
         expected
@@ -387,6 +419,23 @@ where
         }
         selected_matches_initialization(&body.request, &actual, &initialization)
     }
+}
+
+fn verify_skill_schema(
+    request: &ModelRequest,
+    binding: Option<&crate::VerifiedSkillBinding>,
+) -> Result<(), RunnerError> {
+    let expected = binding.and_then(crate::skills::skill_load_definition);
+    let mut schemas = request
+        .tools
+        .iter()
+        .filter(|d| d.name == crate::skills::SKILL_LOAD_NAME);
+    if schemas.next() != expected.as_ref() || schemas.next().is_some() {
+        return Err(invalid(
+            "Continuation Skill schema differs from saved exact binding",
+        ));
+    }
+    Ok(())
 }
 
 fn selected_matches_initialization(
