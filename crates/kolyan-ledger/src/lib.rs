@@ -37,6 +37,7 @@ pub enum LedgerEventKind {
     TurnCompleted,
     ExecutionStarted,
     ExecutionBound,
+    ExecutionInputAdmitted,
     ExecutionRetryAuthorized,
     /// Cancellation-checked permission to enter a boundary, not a saved pause.
     ExecutionBoundaryAdmitted,
@@ -45,6 +46,10 @@ pub enum LedgerEventKind {
     EffectPrepared,
     EffectAuthorized,
     EffectAwaitingDecision,
+    EffectAwaitingExternal,
+    ToolAwaitingExternal,
+    TurnCheckpointMerged,
+    TurnCheckpointPrepared,
     EffectStarted,
     EffectCompleted,
     EffectFailed,
