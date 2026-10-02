@@ -1,0 +1,8 @@
+[
+ {"id":"no_sends","attempts":0,"offset":0,"text_repeats":0,"expected":{"attempts":0,"retried":false,"rejected":0,"truncated":false,"bounded":true}},
+ {"id":"one_send","attempts":1,"offset":0,"text_repeats":2,"expected":{"attempts":1,"retried":false,"rejected":0,"truncated":false,"bounded":true}},
+ {"id":"two_sends","attempts":2,"offset":0,"text_repeats":2,"expected":{"attempts":2,"retried":true,"rejected":0,"truncated":false,"bounded":true}},
+ {"id":"oversized_utf8","attempts":2,"offset":0,"text_repeats":500,"expected":{"attempts":2,"retried":true,"rejected":0,"truncated":true,"bounded":true}},
+ {"id":"report_full","attempts":65,"offset":0,"text_repeats":1,"expected":{"attempts":64,"retried":true,"rejected":1,"truncated":false,"bounded":true}},
+ {"id":"foreign_attempt_sequence","attempts":3,"offset":1,"text_repeats":1,"expected":{"attempts":0,"retried":false,"rejected":3,"truncated":false,"bounded":true}}
+]

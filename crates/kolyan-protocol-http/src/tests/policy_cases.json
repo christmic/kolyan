@@ -1,0 +1,1050 @@
+[
+  {
+    "id": "disabled",
+    "policy": {
+      "max_retries": 0,
+      "max_elapsed_ms": 0,
+      "max_server_delay_ms": 0,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "Disabled"
+      }
+    }
+  },
+  {
+    "id": "quota_overrides_true",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "Throttling.AllocationQuota",
+      "should_retry": "true",
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "PermanentQuota"
+      }
+    }
+  },
+  {
+    "id": "insufficient_quota_503",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "insufficient_quota",
+      "should_retry": "true",
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "PermanentQuota"
+      }
+    }
+  },
+  {
+    "id": "unknown_429_true",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": "true",
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "UnknownRateLimit"
+      }
+    }
+  },
+  {
+    "id": "substring_not_code",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "message: rate_limit_exceeded quota",
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "UnknownRateLimit"
+      }
+    }
+  },
+  {
+    "id": "transient_429",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "rate_limit_exceeded",
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "transient_anthropic",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "rate_limit_error",
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "transient_qwen",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 429,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": "Throttling.RateLimit",
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "408",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 408,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "409",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 409,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "529",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 529,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "false_overrides_503",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": "false",
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "HeaderDenied"
+      }
+    }
+  },
+  {
+    "id": "true_overrides_400",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 400,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": "true",
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "ordinary_400",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 400,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "Ineligible"
+      }
+    }
+  },
+  {
+    "id": "shared_transport_count_exhausted",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 3,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "Exhausted"
+      }
+    }
+  },
+  {
+    "id": "jitter_lower",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 0.75,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 375,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "backoff_next",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 1,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 1000,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "backoff_cap",
+    "policy": {
+      "max_retries": 16,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 12,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 8000,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "invalid_jitter",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 0.74,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "InvalidInput"
+      }
+    }
+  },
+  {
+    "id": "ms_precedes_seconds",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "1500",
+      "retry_after": "2"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 1500,
+        "basis": "RetryAfterMs"
+      }
+    }
+  },
+  {
+    "id": "fraction_ms_rounds_up",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "0.25",
+      "retry_after": null
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 1,
+        "basis": "RetryAfterMs"
+      }
+    }
+  },
+  {
+    "id": "invalid_ms_uses_seconds",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "bad",
+      "retry_after": "1.25"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 1250,
+        "basis": "RetryAfterSeconds"
+      }
+    }
+  },
+  {
+    "id": "http_date",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "Tue, 14 Nov 2023 22:13:25 GMT"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 5000,
+        "basis": "RetryAfterDate"
+      }
+    }
+  },
+  {
+    "id": "past_date_fallback",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "Tue, 14 Nov 2023 22:13:19 GMT"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "nan_fallback",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "NaN",
+      "retry_after": "Infinity"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "negative_hints_fallback",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "-1",
+      "retry_after": "0"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 500,
+        "basis": "Backoff"
+      }
+    }
+  },
+  {
+    "id": "host_server_cap",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "31000",
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ServerDelayLimit"
+      }
+    }
+  },
+  {
+    "id": "delay_equal_remaining",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 59500,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ElapsedLimit"
+      }
+    }
+  },
+  {
+    "id": "opening_elapsed",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 60000,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ElapsedLimit"
+      }
+    }
+  },
+  {
+    "id": "hint_no_room_no_shortening",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 59900,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": "200",
+      "retry_after": null
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ElapsedLimit"
+      }
+    }
+  },
+  {
+    "id": "openai_above_sdk_hint_cap",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 300000,
+      "max_server_delay_ms": 200000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "121"
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ServerDelayLimit"
+      }
+    }
+  },
+  {
+    "id": "openai_sdk_hint_exact",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 300000,
+      "max_server_delay_ms": 200000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "120"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 120000,
+        "basis": "RetryAfterSeconds"
+      }
+    }
+  },
+  {
+    "id": "anthropic_long_hint",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 300000,
+      "max_server_delay_ms": 200000,
+      "profile": "Anthropic"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "150"
+    },
+    "expected": {
+      "Retry": {
+        "delay_ms": 150000,
+        "basis": "RetryAfterSeconds"
+      }
+    }
+  },
+  {
+    "id": "anthropic_huge_finite_refused",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "Anthropic"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": "1e30"
+    },
+    "expected": {
+      "Stop": {
+        "reason": "ServerDelayLimit"
+      }
+    }
+  },
+  {
+    "id": "too_many_retries",
+    "policy": {
+      "max_retries": 17,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "unbounded_window",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 86400001,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "server_cap_outside_window",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 60001,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "zero_enabled_window",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 0,
+      "max_server_delay_ms": 0,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "zero_enabled_server_cap",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 0,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "missing_required_ms",
+    "policy": {
+      "max_retries": 2,
+      "max_elapsed_ms": 60000,
+      "profile": "OpenAi"
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "unknown_config_field",
+    "policy": {
+      "max_retries": 3,
+      "max_elapsed_ms": 60000,
+      "max_server_delay_ms": 30000,
+      "profile": "OpenAi",
+      "unlimited": true
+    },
+    "input": {
+      "status": 503,
+      "retries_used": 0,
+      "elapsed_ms": 0,
+      "now_unix_ms": 1700000000000,
+      "jitter": 1,
+      "code": null,
+      "should_retry": null,
+      "retry_after_ms": null,
+      "retry_after": null
+    },
+    "expected": {
+      "invalid_policy": true
+    }
+  },
+  {
+    "id": "openai_long_hint_header_true",
+    "policy": {"max_retries": 3, "max_elapsed_ms": 300000, "max_server_delay_ms": 200000, "profile": "OpenAi"},
+    "input": {"status": 529, "retries_used": 0, "elapsed_ms": 0, "now_unix_ms": 1700000000000, "jitter": 1, "code": null, "should_retry": "true", "retry_after_ms": "120001", "retry_after": "1"},
+    "expected": {"Stop": {"reason": "ServerDelayLimit"}}
+  },
+  {
+    "id": "finite_seconds_conversion_overflow",
+    "policy": {"max_retries": 3, "max_elapsed_ms": 300000, "max_server_delay_ms": 200000, "profile": "Anthropic"},
+    "input": {"status": 529, "retries_used": 0, "elapsed_ms": 0, "now_unix_ms": 1700000000000, "jitter": 1, "code": null, "should_retry": "true", "retry_after_ms": null, "retry_after": "1e308"},
+    "expected": {"Stop": {"reason": "ServerDelayLimit"}}
+  },
+  {
+    "id": "accepted_http_never_reopens",
+    "policy": {"max_retries": 3, "max_elapsed_ms": 300000, "max_server_delay_ms": 200000, "profile": "OpenAi"},
+    "input": {"status": 200, "retries_used": 0, "elapsed_ms": 0, "now_unix_ms": 1700000000000, "jitter": 1, "code": null, "should_retry": "true", "retry_after_ms": null, "retry_after": null},
+    "expected": {"Stop": {"reason": "Ineligible"}}
+  }
+]

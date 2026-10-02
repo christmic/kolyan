@@ -1,0 +1,17 @@
+[package]
+name = "kolyan-protocol-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+httpdate = "1"
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile = "3"

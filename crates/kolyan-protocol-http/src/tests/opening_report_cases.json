@@ -1,0 +1,259 @@
+[
+  {
+    "id": "zero_send_elapsed",
+    "sends": [],
+    "terminal_stop": "ElapsedLimit",
+    "expected": {
+      "report": {
+        "observations": [],
+        "terminal_stop": "ElapsedLimit"
+      },
+      "attempts": 0,
+      "was_retried": false,
+      "terminal_stop": "ElapsedLimit",
+      "observations_preserved": true,
+      "rejected": []
+    }
+  },
+  {
+    "id": "eligible_transport_retry_then_elapsed",
+    "sends": [
+      {
+        "attempt": 1,
+        "status": null,
+        "error_code": null,
+        "request_id": null,
+        "decision": {
+          "Retry": {
+            "delay_ms": 500,
+            "basis": "Backoff"
+          }
+        }
+      }
+    ],
+    "terminal_stop": "ElapsedLimit",
+    "expected": {
+      "report": {
+        "observations": [
+          {
+            "attempt": 1,
+            "status": null,
+            "error_code": null,
+            "request_id": null,
+            "decision": {
+              "Retry": {
+                "delay_ms": 500,
+                "basis": "Backoff"
+              }
+            },
+            "fields_truncated": false
+          }
+        ],
+        "terminal_stop": "ElapsedLimit"
+      },
+      "attempts": 1,
+      "was_retried": false,
+      "terminal_stop": "ElapsedLimit",
+      "observations_preserved": true,
+      "rejected": []
+    }
+  },
+  {
+    "id": "single_permanent_quota",
+    "sends": [
+      {
+        "attempt": 1,
+        "status": 429,
+        "error_code": "Throttling.AllocationQuota",
+        "request_id": "quota-1",
+        "decision": {
+          "Stop": {
+            "reason": "PermanentQuota"
+          }
+        }
+      }
+    ],
+    "terminal_stop": "PermanentQuota",
+    "expected": {
+      "report": {
+        "observations": [
+          {
+            "attempt": 1,
+            "status": 429,
+            "error_code": "Throttling.AllocationQuota",
+            "request_id": "quota-1",
+            "decision": {
+              "Stop": {
+                "reason": "PermanentQuota"
+              }
+            },
+            "fields_truncated": false
+          }
+        ],
+        "terminal_stop": "PermanentQuota"
+      },
+      "attempts": 1,
+      "was_retried": false,
+      "terminal_stop": "PermanentQuota",
+      "observations_preserved": true,
+      "rejected": []
+    }
+  },
+  {
+    "id": "two_sends_exhausted",
+    "sends": [
+      {
+        "attempt": 1,
+        "status": 529,
+        "error_code": null,
+        "request_id": "overload-1",
+        "decision": {
+          "Retry": {
+            "delay_ms": 500,
+            "basis": "Backoff"
+          }
+        }
+      },
+      {
+        "attempt": 2,
+        "status": 529,
+        "error_code": null,
+        "request_id": "overload-2",
+        "decision": {
+          "Stop": {
+            "reason": "Exhausted"
+          }
+        }
+      }
+    ],
+    "terminal_stop": "Exhausted",
+    "expected": {
+      "report": {
+        "observations": [
+          {
+            "attempt": 1,
+            "status": 529,
+            "error_code": null,
+            "request_id": "overload-1",
+            "decision": {
+              "Retry": {
+                "delay_ms": 500,
+                "basis": "Backoff"
+              }
+            },
+            "fields_truncated": false
+          },
+          {
+            "attempt": 2,
+            "status": 529,
+            "error_code": null,
+            "request_id": "overload-2",
+            "decision": {
+              "Stop": {
+                "reason": "Exhausted"
+              }
+            },
+            "fields_truncated": false
+          }
+        ],
+        "terminal_stop": "Exhausted"
+      },
+      "attempts": 2,
+      "was_retried": true,
+      "terminal_stop": "Exhausted",
+      "observations_preserved": true,
+      "rejected": []
+    }
+  },
+  {
+    "id": "success_one_send",
+    "sends": [
+      {
+        "attempt": 1,
+        "status": 200,
+        "error_code": null,
+        "request_id": "success-1",
+        "decision": null
+      }
+    ],
+    "terminal_stop": null,
+    "expected": {
+      "report": {
+        "observations": [
+          {
+            "attempt": 1,
+            "status": 200,
+            "error_code": null,
+            "request_id": "success-1",
+            "decision": null,
+            "fields_truncated": false
+          }
+        ],
+        "terminal_stop": null
+      },
+      "attempts": 1,
+      "was_retried": false,
+      "terminal_stop": null,
+      "observations_preserved": true,
+      "rejected": []
+    }
+  },
+  {
+    "id": "success_two_sends",
+    "sends": [
+      {
+        "attempt": 1,
+        "status": 529,
+        "error_code": null,
+        "request_id": "recover-1",
+        "decision": {
+          "Retry": {
+            "delay_ms": 500,
+            "basis": "Backoff"
+          }
+        }
+      },
+      {
+        "attempt": 2,
+        "status": 200,
+        "error_code": null,
+        "request_id": "recover-2",
+        "decision": null
+      }
+    ],
+    "terminal_stop": null,
+    "expected": {
+      "report": {
+        "observations": [
+          {
+            "attempt": 1,
+            "status": 529,
+            "error_code": null,
+            "request_id": "recover-1",
+            "decision": {
+              "Retry": {
+                "delay_ms": 500,
+                "basis": "Backoff"
+              }
+            },
+            "fields_truncated": false
+          },
+          {
+            "attempt": 2,
+            "status": 200,
+            "error_code": null,
+            "request_id": "recover-2",
+            "decision": null,
+            "fields_truncated": false
+          }
+        ],
+        "terminal_stop": null
+      },
+      "attempts": 2,
+      "was_retried": true,
+      "terminal_stop": null,
+      "observations_preserved": true,
+      "rejected": []
+    }
+  }
+]
