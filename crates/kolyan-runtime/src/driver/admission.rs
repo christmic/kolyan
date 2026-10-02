@@ -1,7 +1,7 @@
 //! Immutable execution input and ceilings. A checkpoint cannot authenticate its
 //! own initial history, Agent snapshot or remaining budget after a restart.
 
-use kolyan_core::{ToolDispatchPolicy, TurnCheckpoint, TurnRequest};
+use kolyan_core::{ToolDispatchPolicy, TurnCheckpoint, TurnDeadline, TurnRequest};
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelRequest;
 use kolyan_policy::ToolExecutionScope;
@@ -35,22 +35,10 @@ impl InputAdmission {
         dispatch: ToolDispatchPolicy,
         tool_timeout_ms: Option<u64>,
         agent_snapshot_digest: Option<String>,
+        deadline: &TurnDeadline,
     ) -> Result<Self, RuntimeError> {
-        let deadline_at_ms = request
-            .config
-            .deadline
-            .map(|duration| {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .map_err(invalid)?
-                    .as_millis();
-                u64::try_from(
-                    now.checked_add(duration.as_millis())
-                        .ok_or_else(|| invalid("deadline overflow"))?,
-                )
-                .map_err(invalid)
-            })
-            .transpose()?;
+        deadline.validate_duration(request.config.deadline)?;
+        let deadline_at_ms = deadline.deadline_at_ms();
         let value = Self {
             schema_version: 1,
             key,

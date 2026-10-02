@@ -61,6 +61,8 @@ pub struct Trajectory {
 
 #[derive(Debug, Error)]
 pub enum RuntimeError {
+    #[error("deadline failed: {0}")]
+    Deadline(#[from] kolyan_core::TurnDeadlineError),
     #[error("turn execution failed: {0}")]
     Turn(#[from] kolyan_core::TurnError),
     #[error("ledger failed: {0}")]

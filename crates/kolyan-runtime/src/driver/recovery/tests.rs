@@ -79,6 +79,7 @@ impl Fixture {
             dispatch,
             Some(1000),
             None,
+            &kolyan_core::TurnDeadline::capture(None, None).unwrap(),
         )
         .unwrap();
         let bindings: Vec<_> = ["head", "sibling", "tail"]

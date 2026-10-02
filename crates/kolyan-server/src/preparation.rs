@@ -4,7 +4,7 @@
 use std::io::{self, Write};
 use std::time::{Duration, Instant};
 
-use kolyan_core::TurnRequest;
+use kolyan_core::{TurnDeadline, TurnRequest};
 use kolyan_model::ModelRequest;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,12 +41,12 @@ pub(crate) async fn prepare_turn(
     session_version: u64,
     request: &mut TurnRequest,
     current_message_count: usize,
-    started: Instant,
+    deadline: &TurnDeadline,
 ) -> Result<(), ServerError> {
-    remaining_deadline(request, started)?;
+    remaining_deadline(deadline)?;
     bounded_request(&request.model_request)?;
     // Do not even construct the host future once the original window is gone.
-    let remaining = remaining_deadline(request, started)?;
+    let remaining = remaining_deadline(deadline)?;
     let wait = remaining.map_or(MAX_PREPARATION_WAIT, |limit| {
         limit.min(MAX_PREPARATION_WAIT)
     });
@@ -59,24 +59,20 @@ pub(crate) async fn prepare_turn(
         return Err(PreparationFailure::TimedOut.into());
     }
     validate_selection(&request.model_request, &selected, current_message_count)?;
-    let remaining = remaining_deadline(request, started)?;
+    remaining_deadline(deadline)?;
     request.model_request = selected;
-    request.config.deadline = remaining;
     Ok(())
 }
 
-fn remaining_deadline(
-    request: &TurnRequest,
-    started: Instant,
-) -> Result<Option<Duration>, PreparationFailure> {
-    request
-        .config
-        .deadline
+fn remaining_deadline(deadline: &TurnDeadline) -> Result<Option<Duration>, PreparationFailure> {
+    deadline
+        .remaining()
         .map(|limit| {
-            limit
-                .checked_sub(started.elapsed())
-                .filter(|remaining| !remaining.is_zero())
-                .ok_or(PreparationFailure::DeadlineExpired)
+            if limit.is_zero() {
+                Err(PreparationFailure::DeadlineExpired)
+            } else {
+                Ok(limit)
+            }
         })
         .transpose()
 }

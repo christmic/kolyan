@@ -13,7 +13,7 @@ use tools::DurableTools;
 use crate::{ExecutionKey as RuntimeTurnKey, RuntimeError, Trajectory, TrajectoryRecord};
 use kolyan_core::{
     ResumableTurn, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind,
-    TurnError, TurnExecution, TurnExecutor, TurnRequest, TurnSuspension,
+    TurnDeadline, TurnError, TurnExecution, TurnExecutor, TurnRequest, TurnSuspension,
 };
 use kolyan_ledger::{LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::ModelProvider;
@@ -86,6 +86,27 @@ where
         P: ModelProvider,
         T: kolyan_core::ToolExecutor,
     {
+        let deadline =
+            TurnDeadline::capture(request.config.deadline, executor.absolute_deadline_at_ms())?;
+        self.start_with_deadline(executor, request, session_id, execution_id, deadline)
+            .await
+    }
+
+    /// Admit and execute the same anchored window. Dropping does not renew it.
+    pub async fn start_with_deadline<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        request: TurnRequest,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        deadline: TurnDeadline,
+    ) -> Result<DurableTurnResult, RuntimeError>
+    where
+        P: ModelProvider,
+        T: kolyan_core::ToolExecutor,
+    {
+        deadline.validate_duration(request.config.deadline)?;
+        let deadline = deadline.tighten_absolute(executor.absolute_deadline_at_ms())?;
         let key = RuntimeTurnKey {
             session_id: session_id.into(),
             turn_id: request.turn_id.clone(),
@@ -101,6 +122,7 @@ where
                 .transpose()
                 .map_err(|error| RuntimeError::Driver(error.to_string()))?,
             executor.agent_snapshot_digest().map(str::to_owned),
+            &deadline,
         )?;
         let executor = if let Some(deadline) = admitted.deadline_at_ms {
             executor.with_absolute_deadline_at_ms(deadline)
@@ -140,7 +162,10 @@ where
             .with_boundary_control(control)
             .with_event_recorder(recorder.clone())
             .with_step_event_recorder(recorder);
-        match controlled.start_resumable(request).await {
+        match controlled
+            .start_resumable_with_deadline(request, deadline)
+            .await
+        {
             Ok(ResumableTurn::Completed(execution)) => self.completed(&key, *execution),
             Ok(ResumableTurn::Suspended(suspension)) => self.suspended(&key, *suspension),
             Err(error) => {

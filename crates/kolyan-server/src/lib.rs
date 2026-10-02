@@ -123,6 +123,8 @@ pub enum CoordinatorError {
 
 #[derive(Debug, Error)]
 pub enum ServerError {
+    #[error("deadline failed: {0}")]
+    Deadline(#[from] kolyan_core::TurnDeadlineError),
     #[error("Turn preparation failed: {0}")]
     Preparation(#[from] PreparationFailure),
     #[error("coordinator failed: {0}")]
@@ -269,6 +271,29 @@ where
         P: ModelProvider,
         T: ToolExecutor,
     {
+        let deadline = kolyan_core::TurnDeadline::capture(
+            request.config.deadline,
+            executor.absolute_deadline_at_ms(),
+        )?;
+        self.start_with_deadline(executor, request, session_id, execution_id, deadline)
+            .await
+    }
+
+    /// Preserve the caller's execution window across Coordinator and Runtime I/O.
+    pub(crate) async fn start_with_deadline<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        request: TurnRequest,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        deadline: kolyan_core::TurnDeadline,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        deadline.validate_duration(request.config.deadline)?;
+        let deadline = deadline.tighten_absolute(executor.absolute_deadline_at_ms())?;
         let session_id = session_id.into();
         let execution_id = execution_id.into();
         let execution = ExecutionRef {
@@ -283,7 +308,13 @@ where
         };
         let driver = self.driver();
         let result = driver
-            .start(executor, request, session_id, execution_id.clone())
+            .start_with_deadline(
+                executor,
+                request,
+                session_id,
+                execution_id.clone(),
+                deadline,
+            )
             .await;
         self.server.release(&execution_id);
         Ok(result?)

@@ -107,6 +107,7 @@ fn verified_input_public_port_is_readonly_exact_and_bounded() {
         ToolDispatchPolicy::default(),
         None,
         Some("a".repeat(64)),
+        &kolyan_core::TurnDeadline::capture(request.config.deadline, None).unwrap(),
     )
     .unwrap();
     saved.persist(&ledger).unwrap();

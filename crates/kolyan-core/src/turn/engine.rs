@@ -17,23 +17,22 @@ pub(super) struct RunState {
     resume_boundary: Option<String>,
 }
 impl RunState {
-    pub fn new(
+    pub fn with_deadline(
         request: TurnRequest,
         dispatch: ToolDispatchPolicy,
         tool_timeout: Option<Duration>,
+        deadline: TurnDeadline,
     ) -> Result<Self, TurnError> {
         validate_request(&request)?;
+        deadline.validate_duration(request.config.deadline)?;
         Ok(Self {
             turn_id: request.turn_id,
             input_message_count: request.model_request.messages.len(),
             model_request: request.model_request,
             steps: Vec::new(),
             config: request.config,
-            deadline: request.config.deadline.map(|limit| Instant::now() + limit),
-            deadline_at_ms: request
-                .config
-                .deadline
-                .map(|limit| now_ms().saturating_add(limit.as_millis() as u64)),
+            deadline: deadline.instant(),
+            deadline_at_ms: deadline.deadline_at_ms(),
             tool_calls_used: 0,
             dispatch,
             tool_timeout,
@@ -47,6 +46,7 @@ impl RunState {
         scope: &ToolExecutionScope,
     ) -> Result<Self, TurnError> {
         checkpoint.validate(scope).map_err(checkpoint_error)?;
+        let deadline = TurnDeadline::restore(checkpoint.budget.deadline_at_ms)?;
         Ok(Self {
             turn_id: scope.execution.turn_id.clone(),
             model_request: checkpoint.model_request.clone(),
@@ -57,7 +57,7 @@ impl RunState {
                 max_tool_calls: checkpoint.budget.max_tool_calls,
                 deadline: None,
             },
-            deadline: deadline_instant(checkpoint.budget.deadline_at_ms),
+            deadline: deadline.instant(),
             deadline_at_ms: checkpoint.budget.deadline_at_ms,
             tool_calls_used: checkpoint.budget.prior_tool_calls_used,
             dispatch: checkpoint.dispatch,
@@ -86,17 +86,9 @@ impl RunState {
 }
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
     pub(super) fn new_run_state(&self, request: TurnRequest) -> Result<RunState, TurnError> {
-        let mut state = RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
-        if let Some(host) = self.absolute_deadline_at_ms {
-            state.deadline_at_ms = Some(state.deadline_at_ms.map_or(host, |saved| saved.min(host)));
-            let host_instant = deadline_instant(Some(host)).expect("absolute deadline");
-            state.deadline = Some(
-                state
-                    .deadline
-                    .map_or(host_instant, |saved| saved.min(host_instant)),
-            );
-        }
-        Ok(state)
+        let deadline =
+            TurnDeadline::capture(request.config.deadline, self.absolute_deadline_at_ms)?;
+        RunState::with_deadline(request, self.tool_dispatch, self.tool_timeout, deadline)
     }
     pub(super) fn validate_resume_scope(
         &self,

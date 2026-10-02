@@ -24,6 +24,7 @@ use thiserror::Error;
 mod boundary;
 mod checkpoint;
 mod control;
+mod deadline;
 mod dispatch;
 mod engine;
 mod outcome;
@@ -36,6 +37,7 @@ pub use checkpoint::{
     TURN_CHECKPOINT_SCHEMA, TurnCheckpoint,
 };
 pub use control::TurnControl;
+pub use deadline::{TurnDeadline, TurnDeadlineError};
 pub use outcome::{ExternalResolution, ExternalWait, MAX_EXTERNAL_BINDING_BYTES, ToolOutcome};
 pub use suspension::{
     ApprovalConfirmation, ApprovalRequest, PendingExternalWait, ResumeInput, SuspensionSummary,
@@ -419,6 +421,8 @@ pub enum TurnOutcome {
 
 #[derive(Debug, Error)]
 pub enum TurnError {
+    #[error("deadline failed: {0}")]
+    Deadline(#[from] TurnDeadlineError),
     #[error("turn stopped for no progress: repeated tool {tool_name}")]
     NoProgress { tool_name: String },
     #[error("turn boundary control failed: {message}")]
@@ -450,7 +454,8 @@ impl TurnError {
             Self::MaxSteps => TurnEndReason::MaxSteps,
             Self::Tool(ToolError::Cancelled) => TurnEndReason::Cancelled,
             Self::Tool(ToolError::TimedOut) => TurnEndReason::TimedOut,
-            Self::InvalidRequest { .. }
+            Self::Deadline(_)
+            | Self::InvalidRequest { .. }
             | Self::BoundaryControl { .. }
             | Self::Step(_)
             | Self::Tool(_)
@@ -650,6 +655,11 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
         self.tool_timeout
     }
 
+    /// Inspect the configured absolute ceiling without creating a new window.
+    pub fn absolute_deadline_at_ms(&self) -> Option<u64> {
+        self.absolute_deadline_at_ms
+    }
+
     /// Tighten the Turn's duration-based deadline with an admitted absolute
     /// deadline. Repeated configuration cannot enlarge an existing ceiling.
     pub fn with_absolute_deadline_at_ms(mut self, deadline: u64) -> Self {
@@ -673,7 +683,37 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         request: TurnRequest,
         control: TurnControl,
     ) -> Result<ResumableTurn, TurnError> {
-        let state = self.new_run_state(request)?;
+        let deadline =
+            TurnDeadline::capture(request.config.deadline, self.absolute_deadline_at_ms)?;
+        self.start_resumable_with_control_and_deadline(request, control, deadline)
+            .await
+    }
+
+    /// Start with the caller's original anchor, never a fresh relative window.
+    pub async fn start_resumable_with_deadline(
+        &self,
+        request: TurnRequest,
+        deadline: TurnDeadline,
+    ) -> Result<ResumableTurn, TurnError> {
+        self.start_resumable_with_control_and_deadline(request, TurnControl::default(), deadline)
+            .await
+    }
+
+    /// Validate the original duration and intersect this executor's ceiling.
+    pub async fn start_resumable_with_control_and_deadline(
+        &self,
+        request: TurnRequest,
+        control: TurnControl,
+        deadline: TurnDeadline,
+    ) -> Result<ResumableTurn, TurnError> {
+        deadline.validate_duration(request.config.deadline)?;
+        let deadline = deadline.tighten_absolute(self.absolute_deadline_at_ms)?;
+        let state = engine::RunState::with_deadline(
+            request,
+            self.tool_dispatch,
+            self.tool_timeout,
+            deadline,
+        )?;
         self.run(state, control, true, None).await
     }
 
@@ -914,11 +954,6 @@ fn now_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
-}
-
-fn deadline_instant(deadline_at_ms: Option<u64>) -> Option<Instant> {
-    deadline_at_ms
-        .map(|deadline| Instant::now() + Duration::from_millis(deadline.saturating_sub(now_ms())))
 }
 
 fn outcome_from_step(step: &StepResult) -> (TurnOutcome, TurnEndReason) {

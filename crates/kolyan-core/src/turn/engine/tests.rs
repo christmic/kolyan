@@ -3,6 +3,17 @@ use kolyan_model::ToolChoice;
 use kolyan_model::{ModelRef, ModelResponse, StopReason, TokenUsage};
 use serde_json::json;
 
+impl RunState {
+    fn new(
+        request: TurnRequest,
+        dispatch: ToolDispatchPolicy,
+        tool_timeout: Option<Duration>,
+    ) -> Result<Self, TurnError> {
+        let deadline = TurnDeadline::capture(request.config.deadline, None)?;
+        Self::with_deadline(request, dispatch, tool_timeout, deadline)
+    }
+}
+
 #[tokio::test]
 async fn failed_fact_recording_prevents_model_invocation() {
     struct NeverProvider;

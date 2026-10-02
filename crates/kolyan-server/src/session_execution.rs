@@ -58,8 +58,13 @@ where
             };
             let suspended = state == ExecutionState::Suspended
                 && suspension::current_suspension(&key, &facts)?.is_some();
-            let status =
-                terminal_status(&facts).or(suspended.then_some(SessionTurnStatus::Suspended));
+            let status = match terminal_status(&facts) {
+                Some(status) => Some(status),
+                None if self.verified_execution_cancellation(&key)? => {
+                    Some(SessionTurnStatus::Cancelled)
+                }
+                None => suspended.then_some(SessionTurnStatus::Suspended),
+            };
             if let Some(status) = status
                 && (status != turn.status
                     || !facts.iter().any(|event| {
@@ -84,7 +89,10 @@ where
         P: ModelProvider,
         T: ToolExecutor,
     {
-        let preparation_started = std::time::Instant::now();
+        let deadline = kolyan_core::TurnDeadline::capture(
+            request.config.deadline,
+            executor.absolute_deadline_at_ms(),
+        )?;
         let session_id = session_id.into();
         let execution_id = execution_id.into();
         let turn_id = request.turn_id.clone();
@@ -107,9 +115,15 @@ where
                 session.version,
                 &mut request,
                 current_messages.len(),
-                preparation_started,
+                &deadline,
             )
             .await?;
+        }
+        if deadline
+            .remaining()
+            .is_some_and(|remaining| remaining.is_zero())
+        {
+            return Err(PreparationFailure::DeadlineExpired.into());
         }
         self.sessions.store.begin_turn_with_projection(
             &session_id,
@@ -125,7 +139,13 @@ where
 
         let result = self
             .execution
-            .start(executor, request, session_id.clone(), execution_id)
+            .start_with_deadline(
+                executor,
+                request,
+                session_id.clone(),
+                execution_id,
+                deadline,
+            )
             .await;
         self.commit_result(&session_id, &turn_id, current_messages, result)
     }
@@ -384,6 +404,14 @@ where
         let state = self.execution.state(execution_id)?;
         let status = match terminal_status(&events) {
             Some(status) => status,
+            None if self.verified_execution_cancellation(&ExecutionRef {
+                session_id: session_id.into(),
+                turn_id: turn.turn_id.clone(),
+                execution_id: execution_id.into(),
+            })? =>
+            {
+                SessionTurnStatus::Cancelled
+            }
             None if state == ExecutionState::Suspended
                 && suspension::current_suspension(
                     &ExecutionRef {
@@ -565,14 +593,58 @@ where
                     .ledger()
                     .execution_events_after(&turn.execution_id, 0)
                     .map_err(CoordinatorError::from)?;
+                let status = match terminal_status(&events) {
+                    Some(status) => Some(status),
+                    None if self.verified_execution_cancellation(&ExecutionRef {
+                        session_id: session_id.into(),
+                        turn_id: turn_id.into(),
+                        execution_id: turn.execution_id.clone(),
+                    })? =>
+                    {
+                        Some(SessionTurnStatus::Cancelled)
+                    }
+                    None => None,
+                };
                 if let Some(status @ (SessionTurnStatus::Failed | SessionTurnStatus::Cancelled)) =
-                    terminal_status(&events)
+                    status
                 {
                     self.commit_session(session_id, turn_id, status, Vec::new())?;
                 }
                 Err(error)
             }
         }
+    }
+
+    /// Authenticate cancellation of this exact registered Session Turn, not an
+    /// error string or a fabricated Core terminal. Completed facts win elsewhere.
+    fn verified_execution_cancellation(
+        &self,
+        execution: &ExecutionRef,
+    ) -> Result<bool, ServerError> {
+        let id = format!("{}/execution-cancelled", execution.execution_id);
+        let ledger = self.execution.server.coordinator().ledger();
+        let Some(event) = ledger.event_by_id(&id).map_err(CoordinatorError::from)? else {
+            return Ok(false);
+        };
+        if event.event_id != id
+            || event.idempotency_key != id
+            || event.kind != LedgerEventKind::ExecutionCancelled
+            || event.execution_id != execution.execution_id
+            || event.turn_id != execution.turn_id
+            || !event.payload.is_null()
+        {
+            return Err(CoordinatorError::Ledger(kolyan_ledger::LedgerError::Conflict(id)).into());
+        }
+        let session = self.sessions.load(&execution.session_id)?;
+        if !session.turns.iter().any(|turn| {
+            turn.turn_id == execution.turn_id && turn.execution_id == execution.execution_id
+        }) {
+            return Err(StorageError::Conflict(
+                "cancellation differs from registered Session Turn".into(),
+            )
+            .into());
+        }
+        Ok(self.execution.state(&execution.execution_id)? == ExecutionState::Cancelled)
     }
 }
 
@@ -606,3 +678,6 @@ fn completed_messages(execution: &TurnExecution, input: Vec<Message>) -> Vec<Mes
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod deadline_tests;

@@ -225,8 +225,8 @@ Server 在开始 Session Turn 之前独立检查：除 messages 外 ModelRequest
 hook 修改。以后摘要生成或 Turn 内缩减必须另行扩展契约。
 
 Server 对 prepare future 施加硬上限 30 秒，并取请求剩余 deadline 的更小值；
-零剩余时间不调用 hook。等待消耗从有 deadline 的 Turn 剩余时间中扣除，不能
-把计量时间加在执行窗口之外。超时、丢弃或拒绝不开始 Session Turn、Runtime、
+零剩余时间不调用 hook。等待消耗通过同一截止锚点的余额自然减少，不改写
+request.config.deadline，也不能把计量时间加在执行窗口之外。超时、丢弃或拒绝不开始 Session Turn、Runtime、
 Provider 或工具效果。丢弃 future 不证明远端 count 已停止；可能已保存的准备
 artifact 保持未准入状态。并发 Session version 冲突在 begin_turn 时拒绝，不能
 重新加载历史、再次计量后静默重试。调用方明确不配置 hook 的普通执行不是兼容
@@ -489,3 +489,145 @@ ProviderReported、可信模型计数、Unknown 与字节预算；实际 usage �
 及生产宿主接入 → 数据门与跨层回归 → 授权真实场景 → 主控完整门禁及正常 hooks。
 未接入、未运行、Unknown 和未通过项都明确列出；文档、局部通过或单次回答不构成
 完整 E2 或整个 0031 的完成。实现 gate 与网络 receipts 待实际运行后记录。
+
+### 统一的执行截止锚点
+
+已确认当前 preparation 扣除准备耗时后，Session begin 与 Coordinator 操作
+仍发生在 Runtime 重新计算 deadline 前，会赠送额外执行时间。该修复必须
+贯穿入口、准入及 Core，不只在 begin 后再次减去一个 Duration。
+
+冻结 Core `TurnDeadline` 为 private-fields、Clone、无 Serialize/Deserialize 的
+中立执行时间值。`capture(Option<Duration>, Option<u64>)`、
+`tighten_absolute(self, Option<u64>)` 返回 `Result<_, TurnDeadlineError>`；
+另有 `validate_duration(&self, Option<Duration>)`、`remaining()` 与
+`deadline_at_ms()`。原 Duration 绑定不变，None 表示无限、Some ZERO 表示
+耗尽；收紧只取交集，None 不能移除上限。错误明确区分 ClockBeforeUnixEpoch、
+UnixOverflow、InstantOverflow、DurationMismatch，不能默认成无限或 timeout。
+
+入口在实际首次 poll、任何 Session/Coordinator/admission I/O 前捕获一次。
+同时保存当前进程单调截止点及向下取整的 Unix 毫秒截止时间。使用 checked
+时间加法、转换与 Instant::checked_add；精确 Unix Duration 加相对 Duration
+后再 floor 到毫秒，禁止各自取整后相加。单调点与 Unix 对应的更紧 ceiling
+取交集，时钟采样跨度采用保守映射，不让转换或后续收紧扩大任何已有窗口。
+无任何上限不需读取 Unix 时间。新增独立纯时间算法用例覆盖亚毫秒、采样
+跨度、epoch 前、整数与 Instant 溢出、零和 None，不修改真实系统时钟。
+
+外部传入的 Unix 毫秒 absolute ceiling 是已声明的 durable 身份，不扣采样
+跨度改写它。没有更紧的相对窗口时原毫秒值必须保持；有相对窗口则与其
+保守生成的 Unix 截止值取 min。采样跨度用于相对锚点的保守序列化与外部
+absolute 到本进程 Instant 的保守映射；tighten_absolute 同时分别收紧
+单调点和原始 Unix ceiling，不能把单调映射误差再次扣成新的 durable 时间。
+旧 absolute ceiling 重复收紧与精确毫秒断言保留，新增注入采样跨度用例。
+
+`TurnExecutor` 增加只读 `absolute_deadline_at_ms()`，以及显式
+`start_resumable_with_deadline(request, deadline)` 和
+`start_resumable_with_control_and_deadline(request, control, deadline)`。
+原 standalone 入口在自身入口 capture 后共用执行路径；显式路径只验证原
+Duration 并与 executor ceiling 再取交集，不进入重新锚定的 RunState::new。
+单调点仅 Core 内部可读。checked checkpoint 恢复从已验证的绝对 deadline
+映射当前进程时钟，不从 request Duration 重获预算。
+
+Runtime 已进入 resume 后，checked Core merge 返回实际 TurnError::TimedOut
+时沿用 persist_error 保存真实 timeout，以供 Session 收尾；其他 merge 错误
+不借此制造 terminal。
+
+Server 的 crate-internal `ExecutionService::start_with_deadline` 与 Runtime
+跨 crate 公开的 `DurableTurnDriver::start_with_deadline` 沿用现有 start 参数，
+末尾增加 TurnDeadline。独立 public start 各在自己的入口 capture；Session
+start 在 load 前 capture。prepare 使用 min(30 秒, 当前余额)，不改写原
+request.config.deadline。Session load、计量、来源保存、begin、Coordinator
+及 admission 均耗用同一窗口。InputAdmission::new 接收 &TurnDeadline，
+直接保存有效 deadline_at_ms；准入与 Core 消费同一收紧后的锚点，durable
+schema 不变，不保存 Instant 或第二份相对预算。更紧 executor 上限同时
+约束 admission 和 Core。TurnError/RuntimeError/ServerError 增加 typed
+Deadline cause，时钟/绑定错误不冒充已经执行或 StorageConflict。
+
+登记前耗尽沿用 PreparationFailure::DeadlineExpired，无 Session Turn 或
+Runtime terminal。begin 成功后耗尽仍交给真实 Runtime 准入和 Core timeout，
+在 Step/模型/工具前停止，再关闭 Session；不能直接返回留下 Running，
+也不能伪造 TurnTimedOut。取消先赢交接时，Server 私有 helper 精确核对
+`{execution_id}/execution-cancelled` 的 ID、key、kind、execution/turn 与
+既有 null payload，及 Session execution 绑定，再关闭 Cancelled。错误字符串
+或 Task 状态不是取消证据。不制造 TurnCancelled，不覆盖已提交终态。
+commit_result 与重建 reconciliation 共用该核对，保存失败保留真实事实
+和错误以便重建收尾。跨进程仍明确依赖可信墙钟，不声称 Instant 跨重启防回拨。
+
+该核对还要求 Coordinator 重建状态为 Cancelled。缺少 canonical cancellation
+返回 false；字段损坏返回 typed LedgerError::Conflict，不关闭 Session。
+commit_result、reconcile、load_reconciled 共用此规则；load_reconciled 跳过
+active execution，既有 Core terminal 优先，不只 Completed。
+
+新增 Memory/SQLite 数据覆盖 SlowSessionStore load/begin、Coordinator/admission
+延迟、begin 后耗尽、交接取消、无/零 deadline、standalone 入口、更紧 executor、
+审批恢复不刷新窗口与收尾存储失败重建。完整实际时序、Session/Ledger、
+admission/checkpoint 和调用计数导出关闭物理读回；旧场景及断言不静默降级。
+写集限定 Core deadline/turn、Runtime driver/admission、Server preparation/
+session/start 及独立测试；不触及 Task、Agent、Provider、Tools。该修复是
+E2 异步消费者的必要时间边界，不代表上下文或演进计划已经验收。
+
+### 计量适配器主干验证
+
+主控已按冻结清单逐文件校验并集成 Model、两套 Protocol 与两套 Provider
+的 48 个文件。集成后独立五 crate 回归终态退出 0，共 88 passed、0 failed、
+0 ignored，doc tests 为零；日志 `/tmp/kolyan-context-counting-main-v1.log`。
+五 crate 全目标严格 Clippy 终态退出 0，日志
+`/tmp/kolyan-context-counting-main-strict-v1.log`；格式与差异检查通过。
+Cargo.lock 只补相应本地 crate 的依赖边，没有新增第三方 package。
+
+这些用例验证 localhost 协议请求、响应边界和计量证据绑定，不是供应商网络
+计数验收。默认不支持计数的 MiniMax 配置保持不支持，不能凭兼容端点获得
+可信 token 数。生产 Agent 的逐 Step 计量消费者与受控缩减仍未集成；统一
+deadline 的后续集成证据见下文。适配器通过不代表 E2 已完成。
+
+### 已准备请求的真实生成消费
+
+下一适配器批次新增协议明确的 opaque `PreparedOpenAiGeneration` 与
+`PreparedAnthropicGeneration`，private fields、不可 Deserialize/Clone；各
+Provider 暴露 `prepare_generation(&ModelRequest)`、对象只读 `wire()` 和
+消费该对象的 `stream_prepared(prepared)`。对象保留真实 planner 的请求、
+映射与中立 output validator 所需输入；准备无网络、无计数、不选择历史。
+`wire()` 返回同一次映射产生的 PreparedContextWire，可交原 count_prepared。
+
+生成前重新核对实际 Provider 的 opaque owner、精确配置身份、profile 和
+全部摘要；不把 profile 未注册或 coverage 不完整误当作禁止生成。这些状态
+禁止可信计数，但合法 MiniMax 请求仍可生成且零 count。需要分离 count
+准入与 generation 绑定核验，不能从 count 接口静默忽略 Unsupported 错误。
+改变 parameter table、Provider 实例或计量配置后，旧准备不能用于新消费。
+正常 ModelProvider::stream 共用同一准备和消费实现，不能再 map 第二次，
+不能复制 SSE loop、放宽协议终态、修补工具参数或隐藏网络重试。
+
+实际传出的生成 body 必须与 wire 中固定的完整 generation body 字节摘要
+一致，保留 tools、schema、cache、reasoning、厂商扩展和字段省略规划。
+原 stream 仍是合法低层生成调用；新增消费口不自行授予发送权限，不承诺
+跨崩溃 exactly-once。Runtime 的模型开启准入和 Agent 的真实预算消费者在
+后续批次装配，不能凭此适配器宣称取消线性化已经实现。
+
+新增 localhost 数据覆盖同一准备的 count/GEN 原始请求摘要、两协议完整
+事件、未知计数合法生成、错误 owner、修改配置、计数配置变更和结构化输出。
+错误绑定必须零 GEN，所有原始 HTTP body、完整响应事件和观察先写 JSONL、
+关闭物理读回再比较；原 88 个模块测试及旧断言保持，真实 MiniMax 网络由
+主控整合消费者后单独启动。本批写集仅 Model accounting 的分离核验、两套
+Provider 的准备/消费及必要 Protocol body 消费口和独立 tests，不改 Core、
+Runtime、Server、Agent、源码候选或现有源数据。
+
+### 截止时间与生成消费者的主干验证
+
+统一锚点已逐文件集成，保留 Server 现有 GoalSource 导出及旧 absolute 精确
+断言。主干 workspace all-target check 退出 0；Core 102、Runtime 61、Server
+124 tests passed，均 0 failed、0 ignored，日志分别为
+`/tmp/kolyan-deadline-main-all-targets-v1.log` 与
+`/tmp/kolyan-deadline-main-module-v1.log`。新注入时钟 20 行及 Memory/SQLite
+各 25 行观察实际落盘后物理回读。新增矩阵未逐项穷举 cancellation 的全部
+ID/key/kind/execution 损坏及 active-skip，不能由源码检查冒称这些均有数据验证。
+
+已准备生成消费者另集成 18 个差异文件，普通 stream 共用 prepare_generation
+与 stream_prepared。五个模型/协议/Provider crate 91 tests passed，另 Core
+102 passed，均 0 failed、0 ignored；日志
+`/tmp/kolyan-prepared-generation-main-module-v1.log`。45 行新增证据验证完整
+固定生成 body、count/GEN 绑定与未知计数合法生成；它们是 localhost 证据，
+尚不是供应商网络验收。Core 原仅测试使用的 RunState 构造器移到独立测试
+文件，不修改测试输入和断言。
+
+同一集成源码的 workspace all-target 严格 Clippy 退出 0，日志
+`/tmp/kolyan-evolution-integrated-strict-v1.log`；fmt、布局与 diff 检查通过。
+实际 Agent 计量策略、模型开启准入、缩减消费者及完整真实矩阵仍需后续交付。

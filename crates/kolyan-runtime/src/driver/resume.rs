@@ -120,12 +120,21 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
                     .map_err(invalid)?;
             }
         }
-        let merged = executor.merge_resume_with_control(
+        let merged = match executor.merge_resume_with_control(
             suspension,
             input.clone(),
             scope,
             TurnControl::default(),
-        )?;
+        ) {
+            Ok(merged) => merged,
+            Err(error @ TurnError::TimedOut) => {
+                // The real checked Core merge entered this Runtime resume attempt.
+                // Preserve its timeout so Session projection can close/reconcile.
+                self.persist_error(&key, &error)?;
+                return Err(RuntimeError::Turn(error));
+            }
+            Err(error) => return Err(RuntimeError::Turn(error)),
+        };
         admission.validate_checkpoint(&merged)?;
         if let ResumeInput::ExternalResolved(resolutions) = &input {
             for resolution in resolutions {

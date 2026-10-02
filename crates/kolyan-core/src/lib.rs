@@ -16,7 +16,7 @@ pub use turn::{
     TURN_CHECKPOINT_SCHEMA, ToolCallBatch, ToolDispatchMode, ToolDispatchPolicy,
     ToolDispatchResult, ToolError, ToolErrorPolicy, ToolExecutor, ToolFuture, ToolInvocation,
     ToolOutcome, ToolPreparationFuture, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
-    TurnBoundaryKind, TurnCheckpoint, TurnConfig, TurnControl, TurnEndReason, TurnError, TurnEvent,
-    TurnEventRecorder, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
-    TurnResult, TurnState, TurnSuspension,
+    TurnBoundaryKind, TurnCheckpoint, TurnConfig, TurnControl, TurnDeadline, TurnDeadlineError,
+    TurnEndReason, TurnError, TurnEvent, TurnEventRecorder, TurnEventStream, TurnExecution,
+    TurnExecutor, TurnOutcome, TurnRequest, TurnResult, TurnState, TurnSuspension,
 };
