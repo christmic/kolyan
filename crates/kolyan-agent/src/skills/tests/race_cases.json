@@ -1,0 +1,4 @@
+[
+ {"id":"same_candidate","same":true,"expected_ok":2,"expected_conflict":0,"expected_facts":1},
+ {"id":"different_candidate","same":false,"expected_ok":1,"expected_conflict":1,"expected_facts":1}
+]

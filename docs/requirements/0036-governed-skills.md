@@ -4,8 +4,9 @@
 
 本需求落实阶段计划 E3：模型先看到有界元数据，按精确版本调用 skill.load，
 正文作为真实 ToolResult 回填到现有 Turn 的下一 Step。Skills 提供任务知识，
-不能授予权限、执行脚本或创建另一套 Agent loop。规格已批准分批实现，尚未
-交付；不把目录类型或局部存储测试当作完整 Skills 能力。
+不能授予权限、执行脚本或创建另一套 Agent loop。A 批基础能力已集成并通过
+主干模块验证，B 批执行接线按下述契约开发；完整能力尚未验收，不把目录
+类型或局部存储测试当作完整 Skills 能力。
 
 ## 数据与存储边界
 
@@ -24,7 +25,8 @@ Agent ownership 事实；未知 schema、损坏因果链与外来 namespace 均�
 事实和内容按重建后实际读取校验，不相信提交的可序列化证明。
 
 初始硬上限为 catalog 128 个版本、一次广告 16 项、metadata 总计 64 KiB、
-单正文 32 KiB、完整 ToolResult 512 KiB。配置只能收紧，不截断内容；错误
+单正文 32 KiB、完整 ToolResult 512 KiB。64 KiB 限制每份完整广告、绑定及
+事实 payload，catalog 总量由版本和事实数共同约束。配置只能收紧，不截断内容；错误
 区分非法输入、容量、冲突、撤销、权限、来源、完整性和真实存储失败。
 
 ## 选择与执行契约
@@ -73,6 +75,61 @@ adapter、开启守卫、输入广告与三类来源验证，迁移调用方。�
 
 C 批补实际 Runner 到下一 Step 的消费、真实本机工具和 MiniMax 两协议
 场景。所有批次遵守统一源码布局、测试分文件与编译缓存规范。
+
+## 执行接线冻结契约
+
+B 批使用现有 AgentRunner，新增 with_skills(Arc<SkillRuntime>) 显式配置；
+默认 None 不广告、不加载。独立 skills 执行模块提供严格 SkillLoadInput、
+skill_load_manifest 和真正读取 adapter；不修改 EnvironmentToolFactory
+库存定义，也不把 skill.load 加进四种 EnvironmentTool。RoutedTools 分别
+识别 skill.load、agent.invoke 和环境工具，未知工具仍拒绝。SkillRead 是
+Policy 的独立 capability，ACL 控制知识可见性，Core 的动态 grant 控制
+这次实际读取，不能只检查工具名字或 schema。
+
+RootInput、ChildInput 与 Continuation projection 的 Body 必须增加
+skill_binding: Option<FactRef>。这是必需 nullable 字段：没有配置明确 null，
+反序列化缺字段拒绝；禁止用 Option 的默认缺字段行为建立兼容分支。输入
+来源 causes 追加精确 Skill binding fact，原 ownership、初始化和依赖证明
+仍保留。先按实际 saved ownership discover/bind，再冻结真实工具库存和
+输入来源；不能先冻结请求，再在发送前偷偷修改广告。
+
+Root/Child/Continuation 各自绑定 SkillScope。初始装配和恢复装配共用按
+saved binding、execution 和真实 input source 恢复的方法，不仅凭 snapshot
+或 Session ID 推断。routed_tool_set 与 routed_provider 必须消费同一精确
+绑定；新增广告守卫核对请求中 skill.load 的精确 schema，重新校验当前
+ACL/撤销，但不得修改已冻结请求。空选择不广告 load。skill.load 的 schema
+只允许保存集合中的精确 key/digest，并包含有界标题描述，不包含正文。
+
+SkillRuntime 的读取方法只接受已验证 binding、精确 key/digest；先验证
+当前来源，再通过实际 ArtifactStore 读取选中 Required 内容，校验 UTF-8
+及摘要，返回正文和不可变来源。异步 Tool adapter 用 blocking worker 做
+Journal/ArtifactStore I/O；prepare 不读正文。execute 校验真实执行坐标、
+snapshot digest、当前 policy revision 和 issued grant，并再次检查 ACL。
+完整序列化 ToolResult 同时满足 512 KiB 硬限制和 grant 输出限制，不能截断。
+Future 被丢弃不承诺同步 I/O 回滚；读取无外部写效果，也不能继续开启模型。
+
+本批迁移全部 start、resume、child driver、pump、Continuation 及测试
+constructor，保留已有断言；新增数据集验证实际下一 Step 收到正文、精确
+版本选择、foreign scope、未知工具、恶意正文、撤销后恢复、缺字段及边界。
+生产宿主工作与 Runner resume 交叉文件由主控串行合并，不整文件覆盖。
+Core、Runtime、Server 无需依赖具体 SkillCatalog；当前检查不宣称与 HTTP
+开启原子。强开启准入继续按 0034 单独落实。
+
+## 基础切片主干证据
+
+A 批共 12 个源码/数据文件，逐文件冻结清单为
+`/tmp/kolyan-skills-a-freeze-v1.json`，没有新增依赖或修改 Cargo.lock。
+主干完整 Agent lib 实际运行 103 passed、0 failed、0 ignored，终态 exit0；
+日志 `/tmp/kolyan-skills-a-main-module-v1.log`。主干 Agent all-targets 严格
+Clippy exit0，日志 `/tmp/kolyan-skills-a-main-strict-v1.log`。
+
+新增 37 个基础场景在 Memory/SQLite 各运行一次，另有两个强制同 head
+CAS 场景各运行两个后端，共 78 行。实际观察先写入、flush/sync/关闭，
+再物理回读全部比较。主干观察分别在
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-skills-a-FGs88s/actual.jsonl`
+和 `kolyan-skills-cas-xgTv7W/actual.jsonl`（同一父目录）。覆盖恢复、撤销、
+冲突、容量、损坏及 metadata 路径不读正文；尚不证明 ToolResult 回填、
+动态 grant 或真实模型加载，后者必须由 B/C 实际执行证明。
 
 ## 验收
 

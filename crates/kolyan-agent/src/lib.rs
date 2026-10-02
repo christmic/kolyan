@@ -14,6 +14,7 @@ mod invoke;
 mod permission;
 pub mod provider;
 mod runner;
+pub mod skills;
 mod snapshot;
 
 pub use binding::{
@@ -36,6 +37,11 @@ pub use runner::{
     EnvironmentToolFactory, PreparedRootInput, ProviderFactory, RootApprovalResumeRequest,
     RootInputPreparationRequest, RootRunRequest, RootRunResult, RunnerError, RunnerToolSet,
     TaskFinalizationPolicy, TaskFinalizationRequest,
+};
+pub use skills::{
+    RegisteredSkill, SkillAccessPolicy, SkillAccessRuleInput, SkillAdvertisement, SkillCatalog,
+    SkillDescriptorInput, SkillError, SkillKey, SkillLimits, SkillMetadata, SkillRuntime,
+    SkillScope, VerifiedSkillBinding,
 };
 pub use snapshot::AgentSnapshot;
 
