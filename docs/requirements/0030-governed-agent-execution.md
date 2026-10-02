@@ -3642,3 +3642,380 @@ model remains an independent acceptance row. Export actual requests, effects,
 waits, receipts and trajectory before comparison, including failed attempts.
 Quota exhaustion and the historical rejected self-iteration candidates remain
 unaccepted, not exclusions or success evidence.
+
+### Bounded model request opening retries
+
+Implement the user's earlier request for correctly layered transient retries at
+the protocol HTTP opening boundary. Reuse the frozen serialized body, endpoint,
+model and options for every attempt. A successful HTTP response ends this loop:
+later framing, JSON, UTF-8, incomplete-stream or stream transport errors never
+reopen a request. This also applies to nonstreaming creation before JSON decode.
+Turn, Runtime, tool preparation, effect execution and approval resume do not
+gain retry loops. No request is dispatched by a detached background task.
+
+A shared kolyan-protocol-http module owns policy calculation and bounded typed
+retry observations; it does not own SDK payloads, model loops or authorization.
+Keep existing transport_retries and add an explicit HttpRetryPolicy, disabled
+for HTTP statuses by default. One retry counter covers both categories: each
+branch is limited by its selected cap and all sends by one plus the larger cap,
+not nested or multiplied budgets. Enabled policies bound total opening time and
+server-directed delay. A delay that does not fit must stop, not be shortened.
+Each subsequent request timeout must fit the remaining opening budget.
+Enforce that budget around awaiting headers and unsuccessful error-body reads,
+not by shortening reqwest's whole-response timeout: its request timeout also
+applies to an already accepted stream. Successful headers end opening control;
+a slow valid body retains the original configured transport timeout. Add a
+localhost case whose accepted body outlives the opening window and still
+completes, proving that long reasoning streams are not cut off by retry policy.
+Deadline attribution uses the current attempt: an already received error status
+survives a timeout while reading its body (for example, a 401 following 529 is
+still 401). A dispatched request whose headers time out is an opening transport
+deadline, not the preceding attempt's HTTP status. Only exhaustion before a new
+dispatch retains the prior cause; never misclassify an authentication failure
+as temporary overload merely because the previous attempt returned 529.
+
+Follow the inspected official Python SDK status/header mechanism: explicit
+x-should-retry, then 408, 409, eligible 429 and 5xx including 529. Observe
+retry-after-ms, numeric retry-after and HTTP-date in priority order. Fallback
+uses 0.5-second exponential backoff, eight-second ceiling and 0.75 through one
+jitter. OpenAI's inspected SDK refuses finite hints above 120 seconds; Anthropic's
+inspected SDK allows much longer hints, so retain separate profiles and enforce
+the host's bounded window without pretending those defaults are identical.
+
+Kolyan additionally refuses known permanent structured error codes, including
+Throttling.AllocationQuota and insufficient_quota, even with x-should-retry:true.
+Unclassified 429 is not evidence of temporary rate limiting and fails closed;
+recognised transient rate-limit codes may retry. This is an explicit host policy,
+not a claim that the official SDK parses those codes in the same way. Never use
+diagnostic previews or string-substring guesses as the classifier. Parse only
+the already bounded error envelope and retain its original status and body.
+
+Reports contain actual attempts, status, bounded request ID/error code and
+selected waiting basis/duration, not credentials or raw headers. Successful
+retry reports accompany the accepted protocol stream/response and are mapped
+to clearly local Provider metadata. Failed retries retain a typed report plus
+their original terminal error; Provider classification still uses that cause.
+Neutral `ProviderError.diagnostics` carries optional local, bounded JSON retry
+observations without importing either SDK or the HTTP-policy crate into the
+model contract. Constructors default to no diagnostics. Adapters preserve
+status/kind/phase and expose the report under `local_http_opening_retry`; error
+messages alone are not a machine-readable retry contract. Diagnostics never
+contain raw headers, authentication or full request/response bodies.
+Do not impersonate Stainless headers or promise exactly-once model billing.
+Existing error variants and direct status-check assertions remain unchanged.
+
+Expose explicit retry selection through trusted service/provider configuration.
+Use the same optional `http_retry` field in service JSON and each live-test
+Provider TOML section. Omission disables HTTP-status retry; do not mutate the
+existing fixtures to silently enable it. Enabled settings include `max_retries`,
+`max_elapsed_ms`, `max_server_delay_ms` and the exact protocol `profile`
+(`OpenAi` or `Anthropic`). Validate limits on deserialization and reject an
+enabled profile that disagrees with the selected client. These are trusted host
+settings, not model-generated extensions or tool permission grants.
+Do not silently turn the original failed matrices into retried successes. Add
+independent data-driven localhost HTTP fixtures covering recovery, exhaustion,
+disabled retry, permanent quota, header overrides, delay precedence/limits,
+transport/status mixed budgets, cancellation during waiting and post-acceptance
+stream failures. Export actual requests/attempts/results before comparison.
+Add a receipt-backed integration case proving that a completion-request retry
+after a successful tool call does not repeat the effect. Original tests and
+their assertions remain intact; actual Provider acceptance remains unavailable
+until a verified endpoint has quota, and localhost evidence is labelled as such.
+
+Mechanism sources: the inspected local official Python SDKs' _base_client.py
+retry functions and [OpenAI retry guidance](https://developers.openai.com/api/docs/guides/rate-limits).
+Those sources support eligibility and delay mechanics, not claims that Kolyan's
+explicit host caps, quota exclusions or defaults equal every official SDK.
+
+### 请求开启重试开发验收
+
+2026-10-02 的实现先在 `Kolyan-error-feedback` 开发工作区验证，再将经过审查的
+53 个文件集成到 Main 工作区。尚未提交或推送，不代表实际模型矩阵全部通过。
+
+- 共享策略覆盖 44 条数据，报告覆盖 6 条数据；服务配置覆盖 8 条数据。
+- OpenAI SDK 覆盖 30 条 localhost 场景，Anthropic 覆盖 36 条；分别包含
+  及时响应头加慢正文、错误正文超时保留当前状态、响应头超时不冒充旧状态。
+- 中立 Provider 分类和本地报告分别覆盖 11 条 OpenAI、11 条 Anthropic 数据。
+  另有 2 条 OpenAI 受限文件效果测试，不能作为原生沙箱验收证据。
+- AgentRunner 四条跨层场景使用真实 macOS 沙箱 worker：两协议分别验证
+  完成请求 529 后恢复和写入后永久 quota 拒绝。恢复行均为 3 次 HTTP 尝试、
+  2 次逻辑模型请求、1 次工具执行和 1 份收据；quota 行均为 2 次 HTTP 尝试，
+  保留同一文件与收据且不重放。重发的完成请求原始 body 完全相同，包含原工具结果。
+  场景数据在 `tests/fixtures/agent/opening_retry.json`，框架在
+  `tests/agent/opening_retry/`；请求、账本、收据、物理文件观察先导出再比较。
+
+独立 workspace 回归日志 `kolyan-error-feedback-opening-workspace-v1.log` 为 exit 0，
+包括既有长任务图和审批恢复。随后纠正当前尝试的超时归因，独立 SDK 最终回归
+`kolyan-error-feedback-opening-sdk-final-v3.log`、Provider 最终回归
+`kolyan-error-feedback-provider-opening-final-v2.log`、跨层效果回归
+`kolyan-error-feedback-opening-integration-final-v2.log` 和全 target 严格检查
+`kolyan-error-feedback-opening-strict-final-v2.log` 均 exit 0；日志位于本机 `/tmp/`。
+格式与差异检查通过。两条本轮新建、未合入的 Anthropic fixture 曾错误期待旧状态，
+已按当前尝试契约纠正并加强 status 断言，失败轨迹仍保留；原仓库测试断言未弱化。
+
+Main 集成后的完整 workspace 测试 `kolyan-main-opening-workspace-v2.log` 和
+全 target 严格检查 `kolyan-main-opening-strict-v2.log` 均 exit 0；格式、源码布局
+与差异检查通过。53 个集成文件逐一校验与审查版本一致。首次 Main 编译因集成清单
+漏掉新增的 Anthropic 超时测试数据而失败，补齐数据后重新运行上述完整检查；
+首次失败日志保留，原测试断言未改动。需要 API Key 的 ignored 用例未因此执行。
+
+这些结果证明本地协议故障下不会重放已完成效果，不证明真实 LLM 的输出质量、
+计费幂等或原自我迭代候选合格。原模型失败、quota 和拒绝候选保持原状态；
+实际 Provider 的完整验收与合格自我迭代候选的独立验收仍未完成。
+
+### MiniMax 自我迭代验收
+
+用户明确授权使用现有 MiniMax 配置替代额度耗尽的千问。新增独立的 MiniMax-M3
+Anthropic 场景与 Task 身份，不改写旧候选、旧用例或旧验收结果。凭据仍只读取环境变量。
+[MiniMax 官方参数文档](https://platform.minimax.io/docs/api-reference/text-anthropic-api)
+未声明原生 JSON Schema 输出支持；不得为通过测试虚报 StructuredOutput 能力。
+
+新场景显式采用本地严格 JSON 审核契约，不请求未声明支持的原生输出参数。
+拒绝 Markdown 围栏、非对象、重复字段、错误版本、未知字段、错误文件摘要及无依据结论。
+完整本地 schema、四份当前审核阶段真实读取收据、候选写入来源与固定独立检查
+仍是验收条件；本地审核契约不冒充服务端受约束解码。既有原生输出场景保持原契约。
+
+沿用受限四文件范围、只读审核、一次证据驱动修复和最终源码审查。使用新 worktree，
+由真实模型执行检查、实现、测试、初审、可选修复、终审；每阶段从持久事实恢复上下文。
+先跑新增数据驱动无网络检查，再运行真实 MiniMax 场景，先导出请求、账本、收据和
+固定检查日志再比较。只有最终候选独立验收合格才合入；宿主不得代改候选。
+
+首个独立 MiniMax 场景 r6 已真实运行并拒绝。检查、实现、测试和初审均调用实际模型
+及 macOS 沙箱文件工具；Server 全量 118 项、新增测试、严格检查、构建和独立校验程序
+通过，格式检查失败。初审最终 Text 在 JSON 对象前包含解释段落，严格解析拒绝，
+未进入修复；Task 持久拒绝保留原原因。候选测试将观察写入 stderr，且在导出前进行
+数据断言，独立源码审查同样不允许合入。场景日志为本机
+`/tmp/kolyan-self-iteration-minimax-r6-actual-v1.log`；原始请求、账本、工具收据与
+候选字节位于私有 host 目录中的 `self-iteration-run-8U1urA/actual.jsonl`。
+
+独立 r7 输入已明确观察使用 stdout 单行 JSON、状态字段为不带 JSON 引号的枚举名称、
+所有数据断言在导出之后，并在审核阶段的 system 指令中强调最终 Text 只能是 JSON
+对象。新场景无网络检查 27 项通过；基线 117 项通过。真实运行的七行候选观察比较
+及初审严格 JSON、四份当前读取收据均通过，初审因格式失败准入唯一一次模型修复。
+
+r7 修复阶段实际执行 16 个 Step 后以 MaxSteps 停止，未到终审，候选仍拒绝。模型
+误认为工具去掉了末尾换行；四次实际 file.write 的入参本身均无末尾换行，均为
+5012 UTF-8 字节，收据返回同一长度与摘要。该证据不支持工具截断或上下文丢失的
+解释。保留原日志 `/tmp/kolyan-self-iteration-minimax-r7-actual-v1.log` 与私有 host
+`self-iteration-run-PUt7bK/actual.jsonl`；不代改候选，不修改 Step 预算取得通过。
+
+新增两个独立验证要求。第一，测试宿主在检查阶段结束状态前导出实际 TurnOutcome，
+拒绝原因保留 MaxSteps、取消或原 Provider 错误，不能统一丢失为没有最终回答。
+第二，数据驱动原生 macOS 沙箱测试覆盖没有末尾换行、一个换行、两个换行及
+空白尾部的 write/edit；实际执行前后字节、授权、收据和文件摘要先导出再比较。
+协议 localhost 输入须标为模拟模型，不能冒充真实 LLM 验收。原工具和候选测试
+不得改变断言，也不得用自动补换行、trim、格式化或模型话术替代字节保真证明。
+
+上述两个验证已窄范围集成到 Main 工作区，共八个文件；原 r2 场景的控制流程和
+既有断言保持不变。实际结束状态数据覆盖 12 行，聚焦测试 10 项通过、2 项 ignored；
+原生 macOS 文件字节保真测试的八行 write/edit 场景全部通过。受影响 Agent root
+完整回归 47 项通过、0 项失败、12 项 ignored，日志为
+`/tmp/kolyan-main-agent-root-byte-outcome-v1.log`。集成测试 crate 全 target 严格检查、
+格式和差异检查通过。这是新增测试与诊断的模块回归，不是本次重新执行全 workspace，
+也不是 ignored 真实模型场景全部通过。r7 候选仍未合入；下一轮输入澄清须使用新身份，
+明确实际 JSON 字符串末尾换行的编码，不得由宿主修补旧候选取得验收。
+
+r8 使用独立任务、会话、场景版本与新 worktree。输入在既有 r7 契约上新增
+文件内容编码说明：JSON 字符串中的 `\n` 解码后为真实 LF，而 `\\n` 解码后为
+反斜杠和字母 n；需要末尾 LF 时应在 content 最末明确包含该字符。模型必须以
+实际参数、工具收据和读取内容判断字节，不能仅凭格式检查差异断言工具删除字符。
+说明进入持久输入并在实际模型请求中可见；数据驱动测试须导出各阶段构造请求后，
+验证新增说明可见、身份独立以及旧场景请求不变。
+
+r8 沿用原文件范围、六阶段流程、审核收据、严格 JSON、唯一一次修复和 Step 预算。
+宿主不得补换行、格式化候选或修改原测试。真实模型运行仍须分别记录各阶段结束原因、
+请求、效果收据、固定检查和独立源码验收；到达终审且全部条件成立才能合入。
+输入说明测试通过不代表真实候选合格。
+
+为遵循用户的千问额度限制，新增独立 MiniMax 真实验收入口，复用现有数据集和
+原始执行框架，不改既有全厂商矩阵入口、十九组合规划断言或历史结果。选择范围
+在运行前导出并校验：只能来自项目中明确配置的 MiniMax 部署，不接入千问、不静默
+跳过失败，也不借选择厂商删除正常或异常场景。具名与内联根、跨 Turn 会话、审批
+重建、子调用、递归与多子审批、只读并行与写操作串行、十 Turn 长任务及当前
+Continuation 和最终结果链路均须有独立入口与实际轨迹。真实效果仍以授权、收据、
+账本因果和物理文件为准，不以模型声称完成替代；MiniMax 子矩阵通过不能宣称原
+全厂商矩阵通过。各入口的计划与执行状态分别记录，未运行仍标为未运行。
+
+r8 已实际运行结束，日志 `/tmp/kolyan-self-iteration-minimax-r8-actual-v1.log`
+为 exit 101，286.93 秒。六阶段实际 Step 数分别为 2、4、6、2、3、2；修复阶段
+未耗尽预算，但最终格式仍 exit 1，新 Rust 文件仍无末尾 LF。实际严格检查通过，
+七行观察正确；独立源码审查发现版本、数量及完整集合断言位于观察导出之前，
+违反明确契约，候选拒绝且未合入。宿主未修补候选，旧测试保留。完整请求和账本
+保存在私有 host 的 `self-iteration-run-VvdUgm/actual.jsonl`。新的输入框架独立检查
+29 项通过、9 项 ignored，含实际完整 prompt 构造路径；不等价于候选验收。
+
+MiniMax 专用入口已集成到 Main 工作区：九入口覆盖 44 行，两协议使用原数据和
+执行框架。十个新文件与审查版本字节一致，八个父文件只增加模块声明。Main 选择
+检查 10 项通过，集成测试 crate 全 target 严格检查、格式与差异检查通过。
+本轮长任务完整无网络模型回归为 16 项通过、5 项 ignored，包含实际 macOS 工具、
+十 Turn、审批恢复、Continuation、显式投影及 Runner 最终结果链路。
+
+24 行根与子调用真实矩阵、20 行长任务真实矩阵已经分别启动，日志为
+`/tmp/kolyan-main-minimax-root-live-v1.log` 与
+`/tmp/kolyan-main-minimax-long-live-v1.log`，目前尚未形成全量终态验收。
+已观察到子调用失败：模型实际返回 `named_targets: ""`，而 schema 与 Rust 契约
+要求数组；另有超过有效权限上限的调用被拒绝。原始 Provider 完成事件与中立
+ToolCall 均保留相同非法参数，不能归因于中立映射丢失数组，也不得把字符串转换
+为空数组或放宽权限来取得通过。仍须根据完整结果继续排查真实输入契约的可用性。
+
+### 模型可见委派契约收尾
+
+真实失败和源码核对确认声明缺口：`agent.invoke.children.maxItems` 沿用协议全局
+上限 8，而实际 `InvokePrepareLimits.max_children` 可为 1 或 2。模型可见上限必须
+由 Runner 已验证的当前宿主配置投影，且根调用、子调用、审批恢复和父恢复共用
+同一声明路径；不得显示更大的数量后在准备阶段才拒绝。并行布尔值仍只是调度请求，
+不表示并发许可，实际资源证明和宿主并发上限保持原职责。
+
+工具字段说明须区分本次调用的 target 与子 Agent 将来的 delegation.named_targets。
+权限是子 Agent 和其后代的上限；中间层自己不读文件，不等于可以移除后代需要的
+读取权限。inline 定义静态上限与本次请求权限不能混为同一对象。空工具或空委派
+目标集合继续只接受数组，显式说明空值应写 `[]`，不接受空字符串；空集合 schema
+同时标注 maxItems 0。禁止布尔字段保持 const false 并声明 boolean 类型。
+这些说明和数量投影不颁发权限，不改写模型返回值，不改变 DTO 或输入来源证明。
+
+新增独立数据驱动测试，导出实际声明和结果后比较：宿主数量上限 1、2、8，
+声明与原准备上限一致；禁止与允许的分支、空数组和错误字符串、将 target 复制到
+子委派权限中的越权、零工具中间层向后代授予读取仍须拒绝。重建相同配置声明
+一致，配置改变使旧声明在 Provider 调用前被拒绝。原测试、原失败轨迹与正在运行
+的真实矩阵保留；新声明的真实验证使用独立运行记录，不能覆盖旧失败或承诺模型
+必然服从说明。
+
+真实长任务的 Anthropic MiniMax 出现 HTTP 529 overloaded_error，失败发生在模型
+请求开启阶段，尚未接受该请求的事件流；现有项目测试配置未启用已实现的 HTTP
+状态重试。测试 Provider 配置显式启用最多两次重试，总开启窗口 120 秒、最大服务端
+等待 30 秒，分别使用 OpenAI 和 Anthropic 的已有 SDK 延时配置。总窗口涵盖请求、
+错误体读取和等待；不能通过单次重试重新计算总窗口。未知或永久配额 429、鉴权错误、
+schema 错误、已接受事件流后的失败仍不重试。模型输出不合法不能作为 HTTP 重试。
+测试和策略说明沿用现有协议实现，不新增 Runtime/Turn 重试器。
+
+配置值进入项目内的非秘密 Provider TOML，新增数据驱动检查导出所选策略和
+529、401、永久配额、未知限流及 200 状态决定后比较。已启动进程仍使用原冻结配置，
+原 529 失败保持失败；后续验证使用新的日志与新实际目录，不覆盖旧记录。
+
+### 子调用失败时的完整比较轨迹
+
+递归和多子审批场景必须在检查任何子调用收据数量前，导出全部子调用的实际
+收据统计及总体比较。一个子调用缺少收据或重复读取时，不能阻止后续子调用统计
+和总体因果计数写入 JSONL。统计只读取实际账本，不由预期值生成；原有逐调用
+和总体断言保持原义，失败仍失败。新增独立数据用例验证正常、缺少和重复收据时
+全部观察均先写出，再执行断言；模拟统计仅验证测试框架，不冒充真实模型验收。
+
+真实新一轮内联调用仍出现 definition.permissions.tools 对象而非数组、以及
+definition.permissions.delegation.named_targets 空字符串。外层权限正确不代表
+内层定义正确；两处都必须严格校验。基础权限 schema 的数组说明和空数组示例
+须同时覆盖内联静态定义与外层请求权限，不给静态定义错误套用宿主的动态授权
+上限，不提供自动类型转换或默认权限。新增独立嵌套参数数据验证原准备器与
+JSON Schema 的一致拒绝、数组示例有效和重建稳定。说明改善不能保证模型遵循。
+
+### 当前验证结果与剩余验收
+
+第一轮 MiniMax 根与子调用矩阵已结束：24 行中 13 行通过、11 行失败，日志
+`/tmp/kolyan-main-minimax-root-live-v1.log`，exit 101。数量投影和字段语义改进后，
+第二轮为独立运行 `/tmp/kolyan-main-minimax-root-live-v2.log`；不能覆盖第一轮结果。
+第二轮已结束，exit 101，690.18 秒：24 行中 17 行通过、7 行失败。委派 8 行中
+6 行通过，只读/写入调度 4 行中 2 行通过，递归/多子审批 4 行中 2 行通过，根审批
+重建 4 行全部通过，根普通执行 4 行中 3 行通过。最后的 Anthropic inline 根在
+请求开启阶段 Transport operation timed out；仅凭此错误不能判断厂商故障、重试
+次数或总窗口耗尽，需结合实际重试记录核对。不是全矩阵通过。
+
+独立审查核对两条新委派失败：OpenAI parent-result-restart 的第一步就返回
+named_targets 空字符串，尚未进入恢复；Anthropic inline 的外层权限正确，但
+内联定义的 named_targets 为字符串、tools 为对象。实际事件参数与中立参数一致，
+错误发生在严格反序列化，不支持映射器丢失类型或恢复上下文丢失的解释。
+OpenAI 只读并行失败中，一个子调用直接声称未暴露工具，没有 read 收据，另一个
+实际读取并有收据；父请求收到两者结果。原始 Completed metadata 回显 file.read，
+但它不是出站 HTTP 抓包，也不能证明厂商内部如何呈现工具。逐子收据断言保持失败。
+
+Agent 单测 91 项通过；全 workspace 无网络模型回归 exit 0，日志
+`/tmp/kolyan-main-discovery-retry-workspace-v1.log`。全 workspace all-target 严格检查
+exit 0，日志 `/tmp/kolyan-main-discovery-retry-strict-v1.log`。这些检查完成时尚未包含
+后来新增的嵌套定义说明；真实模型 ignored 用例不在这些通过结果内。
+子调用完整比较轨迹改进的聚焦回归为 3 项通过、2 项 ignored，含正常和异常统计
+数据及原两种拓扑执行；集成 crate all-target 严格检查、格式与差异检查通过，日志
+`/tmp/kolyan-main-topology-export-v1.log` 和
+`/tmp/kolyan-main-topology-export-strict-v1.log`。正在运行的真实根矩阵冻结于此次
+轨迹改进之前，不冒称其已使用改进后的框架。
+
+原长任务真实运行已结束，exit 101，2280.81 秒：20 行中 16 行通过、4 行失败。
+最终结果 6/8、Continuation 3/4、投影 3/4、普通十 Turn 长任务 4/4 通过；四行
+失败均记录 HTTP 529 请求开启错误。该运行仍使用关闭重试的冻结配置。
+新项目配置的十行重试决策数据通过，但不代表原 HTTP 529 已修复或新长任务矩阵
+已实际通过。原进程终态核对后，已启动新配置的独立二十行验证，日志为
+`/tmp/kolyan-main-minimax-long-live-v2.log`，尚未全量终态。
+
+嵌套静态定义说明与新增十一条数据已实现；基于真实准备器的有效数组、字符串和
+对象拒绝、静态定义上限不等于宿主授权以及重建一致性均先导出再比较。Main 独立
+Agent 全量回归 92 项通过，日志 `/tmp/kolyan-main-nested-schema-agent-v1.log`；
+Agent 与集成测试 crate all-target 严格检查通过，日志
+`/tmp/kolyan-main-nested-schema-strict-v1.log`，格式与差异检查通过。受影响集成回归
+已结束，Agent root 54 项、长任务 21 项通过，分别有 17 和 9 项 ignored，日志
+`/tmp/kolyan-main-nested-schema-integration-v1.log`。第二轮真实根矩阵早于此次修改
+冻结，不能当成嵌套说明的真实验证。
+
+### 宿主选择工具错误反馈策略
+
+AgentRunner 的工具错误处理须由可信宿主显式选择，不能由模型入参或 Agent 定义
+提高权限。默认保持 Turn 的 FailTurn，不改变旧场景。新增宿主构造选项只选择现有
+ToolErrorPolicy，不增加隐式 HTTP、Step、Turn 或工具重试器，不改变现有串行工具
+批次默认或子 Agent 并行准入规则。
+
+宿主显式选择 ContinueBatch 时，复用 Core 已有机制：严格准备失败或策略拒绝
+保持拒绝，将实际调用身份和错误 ToolResult 回填下一次模型请求；模型若提交新的
+调用，该调用重新经过 schema、权限、当前策略、审批和执行隔离校验。未准备成功
+的调用不签发授权，不创建子实例，不产生效果收据。已知工具失败如由 Core 允许
+反馈，也不意味着该效果可自动重放；效果是否已进入、是否不确定仍按既有工具
+错误和持久事实契约处理。
+
+Uncertain、Cancelled、TimedOut、InvalidBatch 继续按 Core 的致命规则停止，不得
+为获得最终回答吞掉错误。HTTP 请求重试仍由协议开启层处理。每次拒绝和后续
+模型调用消耗原有 Step/ToolCall 预算；持续错误应在原预算内结束，不无限纠错。
+根、子、根审批、子审批和父接续的所有执行器共用宿主选项；审批后的历史 checkpoint
+保存的 dispatch 策略和剩余预算仍是恢复依据，新 Runner 不改写已挂起 Turn 的策略。
+
+新增模块数据测试覆盖默认失败、显式反馈后合法调用、反馈后继续越权仍拒绝、持续
+错误耗尽预算以及致命错误不反馈，导出实际请求、拒绝、账本与效果后比较。新增
+独立集成/真实模型入口复用原模型矩阵配置，只运行授权的 MiniMax 两协议；普通
+子调用、递归、双子审批与读写调度在反馈策略下仍比较每个真实效果和因果链。
+不删改原 FailTurn 用例、不伪造模型调用，不把未出现拒绝的普通成功运行当成真实
+纠错证明；纠错轨迹是否实际发生须明确导出。
+
+宿主选项已接入五条执行器构造路径，根默认保持 FailTurn，恢复沿用历史 dispatch。
+新增独立反馈策略集成入口覆盖原八种具名/内联/自调用、父重建、只读并行、写入
+串行、两层递归和双子审批场景，两协议真实运行计划共十六行。原入口仍显式走
+FailTurn，原场景与断言不变。每个执行的实际失败和错误反馈数量随账本导出，
+错误反馈数量不等于纠错成功证明。无网络模型、真实 macOS 工具集成的八行全部
+通过，聚焦检查为 2 项通过、1 项 ignored，日志
+`/tmp/kolyan-main-host-feedback-integration-v2.log`。第一版新入口因 Rust closure
+借用错误编译失败，保留 v1 日志；修正只涉及新框架，不改旧断言。新的模块行为
+测试已完成：十八条数据覆盖默认失败、拒绝回填、预算、准备与执行阶段四类致命
+错误、不同宿主策略的审批重建，以及启用真实 RoutedTools 准备器后的两种严格类型
+拒绝。所有数据先导出再比较，非法调用没有授权、效果或子实例；后续合法 read
+有独立授权和收据。模型与效果适配器在模块测试中明确标为模拟，不冒充网络或
+原生工具验收。
+
+Main 独立 Agent 全量回归 94 项通过，日志
+`/tmp/kolyan-main-host-feedback-agent-v1.log`；根集成回归 56 项通过、18 项 ignored，
+日志 `/tmp/kolyan-main-host-feedback-root-v1.log`。Agent 与集成 crate all-target
+严格检查、格式和差异检查通过，日志 `/tmp/kolyan-main-host-feedback-strict-v3.log`。
+之前 v1/v2 的严格检查失败分别为新测试框架的未使用构造函数与在途新测试编译
+错误，保留原日志，未改旧断言取得通过。当前全 workspace 回归和全量严格检查
+已另行启动，尚未全量终态。
+
+十六行 MiniMax 两协议真实反馈矩阵已启动，日志
+`/tmp/kolyan-main-minimax-host-feedback-live-v1.log`，原 FailTurn 矩阵保留。
+普通成功但没有错误反馈不能证明模型纠错；仍按逐调用收据、子结果回填与审批
+重建原条件验收，失败保持失败，不自动改写模型调用或重启旧场景。
+
+根超时独立核对：第三次模型请求到错误为 120.009 秒，符合首发送耗尽总开启窗口；
+配置 transport retries 1、HTTP retries 2 不保证窗口耗尽后继续发送。当前单次发送
+报告隐藏，尝试次数只能据源码推断，不能当成抓包事实。出错请求包含前两次
+write/edit 成功结果，没有上下文丢失或工具重放证据；底层为何超时仍未确定。
+
+真实反馈运行中的 OpenAI inline 案例 `btO6QR` 证实错误反馈存在：模型生成的
+空字符串 named_targets 与中立调用一致；下一次实际请求完整包含原调用、
+is_error true 的严格类型错误和原用户输入。模型识别拒绝后以 EndTurn 回答失败，
+没有新调用、子准入或等待，因此原委派验收仍失败。当前根便捷路径固定注册
+root-final-answer 的 ExecutionCompleted 条件，此处 Task Completed 只证明根
+执行以 FinalAnswer 停止，不证明自然语言目标或实际子工具效果完成。不得把该
+状态当作业务目标验收，也不为取得通过放宽逐子效果断言。此差异须在模块说明中
+明确；宿主业务后置条件仍是当前未接入根便捷路径的能力边界。
