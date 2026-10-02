@@ -10,6 +10,7 @@ use serde_json::Value;
 mod policy_revision;
 pub(crate) mod preparation;
 mod prepared_authority;
+mod provider_mapping;
 mod suspension;
 use preparation::{fixture_key, fixture_policy, fixture_prepare, fixture_validate};
 

@@ -553,6 +553,27 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
 }
 
 impl<P, T: ToolExecutor> TurnExecutor<P, T> {
+    /// Bind the model side while moving every existing execution guard unchanged.
+    /// Rejection returns the original wrapper error and runs no model or tools.
+    /// The wrapper must enforce its own opening contract; this issues no permit.
+    pub fn try_map_model_provider<Q, E>(
+        self,
+        wrap: impl FnOnce(P) -> Result<Q, E>,
+    ) -> Result<TurnExecutor<Q, T>, E> {
+        Ok(TurnExecutor {
+            step_executor: self.step_executor.try_map_provider(wrap)?,
+            tool_executor: self.tool_executor,
+            tool_dispatch: self.tool_dispatch,
+            tool_timeout: self.tool_timeout,
+            policy_engine: self.policy_engine,
+            boundary_control: self.boundary_control,
+            event_recorder: self.event_recorder,
+            execution_key: self.execution_key,
+            agent_snapshot_digest: self.agent_snapshot_digest,
+            absolute_deadline_at_ms: self.absolute_deadline_at_ms,
+        })
+    }
+
     /// Wrap tool execution while retaining the configured model and policy.
     pub fn map_tool_executor<U: ToolExecutor>(
         self,

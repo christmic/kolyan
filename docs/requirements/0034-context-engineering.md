@@ -704,3 +704,22 @@ completed 仍不能跳过 tool effect、取消、预算和 idle 检查。本协�
 新增场景包含 count await 取消、准入后崩溃、timeout/cancel 缺 completion、
 全部工具 NotCommitted 但模型 unknown、可信完成、marker/来源损坏及授权
 竞态；逐行完整事实和错误导出后物理回读，保持旧场景和断言。
+
+### 执行器接线保留契约
+
+主控新增 StepExecutor::try_map_provider 与 TurnExecutor::try_map_model_provider，
+两者消费已有执行器并调用一次 fallible wrapper，成功返回新 Provider 类型
+的执行器。映射仅替换 Provider，原 validator、Step/Turn recorder、tool
+executor、dispatch、timeout、Policy、boundary control、ExecutionKey、
+snapshot digest 和 absolute deadline 必须原样移动，不重新构造默认执行器。
+失败原样返回 wrapper 错误，不默认降级、不调用模型/工具，也不触发重试。
+这些方法本身不发 opening permit；Runtime 下一批必须实际使用它们绑定
+对应 attempt。新增独立测试覆盖字段完整保留、真实 Step 校验/记录仍生效
+和失败零 opening，不能用它们的局部通过替代完整开启准入验收。
+
+主干此接入点及新增四个独立测试的完整 Core lib 回归为 106 passed、
+0 failed、0 ignored，终态 exit0；日志
+`/tmp/kolyan-provider-rebinding-main-module-v2.log`。同一最终测试源码的
+workspace all-targets 严格 Clippy exit0，日志
+`/tmp/kolyan-provider-rebinding-main-strict-v2.log`。这是配置保留与实际 Step
+行为的证据，尚未证明 Runtime 已强制绑定模型开启协议。

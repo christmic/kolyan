@@ -187,6 +187,20 @@ impl<P> StepExecutor<P> {
         self.event_recorder = Some(recorder);
         self
     }
+
+    /// Bind a provider wrapper without replacing validation or observation ports.
+    /// The wrapper runs once; rejection is propagated without opening a model.
+    /// This configuration operation does not itself authorize generation.
+    pub fn try_map_provider<Q, E>(
+        self,
+        wrap: impl FnOnce(P) -> Result<Q, E>,
+    ) -> Result<StepExecutor<Q>, E> {
+        Ok(StepExecutor {
+            provider: wrap(self.provider)?,
+            validator: self.validator,
+            event_recorder: self.event_recorder,
+        })
+    }
 }
 
 impl<P: ModelProvider> StepExecutor<P> {

@@ -8,6 +8,7 @@ use serde_json::Value;
 use std::sync::Mutex;
 
 mod liveness;
+mod provider_mapping;
 
 struct MockProvider {
     fail: bool,
