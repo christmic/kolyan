@@ -1,19 +1,24 @@
+//! One bounded model call, its neutral events, and verified stream completion.
+//! Cancellation/deadline cover opening and consumption without background work.
+
+mod control;
+pub use control::StepControl;
+
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Instant;
+
 use futures_core::Stream;
 use futures_util::StreamExt;
-use futures_util::task::AtomicWaker;
 use kolyan_model::{
     ModelEvent, ModelProvider, ModelRequest, ModelResponse, ProviderError, ProviderMetadata,
     TokenUsage, ToolCall,
 };
 use serde::{Deserialize, Serialize};
-use std::pin::Pin;
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, Ordering},
-};
-use std::task::{Context, Poll};
-use std::time::Instant;
 use thiserror::Error;
+
+use control::{Boundary, Stop};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct StepRequest {
@@ -39,45 +44,11 @@ pub enum StepOutcome {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct StepExecutionOptions {
+    /// One absolute deadline for opening, events, and EOF verification. A future
+    /// deadline requires a Tokio runtime with its time driver enabled.
     pub deadline: Option<Instant>,
     pub context_version: Option<String>,
     pub trace_id: Option<String>,
-}
-
-#[derive(Clone)]
-pub struct StepControl {
-    state: Arc<StepControlState>,
-}
-
-struct StepControlState {
-    cancelled: AtomicBool,
-    waker: AtomicWaker,
-}
-
-impl Default for StepControl {
-    fn default() -> Self {
-        Self {
-            state: Arc::new(StepControlState {
-                cancelled: AtomicBool::new(false),
-                waker: AtomicWaker::new(),
-            }),
-        }
-    }
-}
-
-impl StepControl {
-    pub fn cancel(&self) {
-        self.state.cancelled.store(true, Ordering::Release);
-        self.state.waker.wake();
-    }
-
-    pub fn is_cancelled(&self) -> bool {
-        self.state.cancelled.load(Ordering::Acquire)
-    }
-
-    fn register(&self, waker: &std::task::Waker) {
-        self.state.waker.register(waker);
-    }
 }
 
 pub struct StepExecution {
@@ -219,11 +190,15 @@ impl<P> StepExecutor<P> {
 }
 
 impl<P: ModelProvider> StepExecutor<P> {
+    /// Open one Step. A local stop yields Started followed by its terminal event;
+    /// Provider opening failures remain errors. No retries or background tasks run.
     pub async fn start(&self, request: StepRequest) -> Result<StepExecution, StepError> {
         self.start_with_control(request, StepControl::default())
             .await
     }
 
+    /// Bound Provider opening and consumption with the same control and deadline.
+    /// Dropping this future releases the opening future without remote-stop proof.
     pub async fn start_with_control(
         &self,
         request: StepRequest,
@@ -238,21 +213,33 @@ impl<P: ModelProvider> StepExecutor<P> {
         let step_id = request.step_id;
         let options = request.options;
         let model_request = request.model_request;
-        let stream = self.provider.stream(model_request.clone()).await?;
+        let mut boundary = Boundary::new(control.clone(), options.deadline);
+        let (stream, stopped) = match boundary.current_stop() {
+            Some(stop) => (None, Some(stop)),
+            None => {
+                // The borrowed opening future is dropped before constructing the
+                // lifecycle stream on either outcome. Its budget is never reset.
+                tokio::select! {
+                    biased;
+                    stop = boundary.stopped() => (None, Some(stop)),
+                    result = self.provider.stream(model_request.clone()) => (Some(result?), None),
+                }
+            }
+        };
         let events: StepEventStream = Box::pin(ControlledStepStream {
             inner: stream,
             step_id,
             model_request,
             validator: self.validator.clone(),
-            options,
-            control: control.clone(),
+            boundary: Some(boundary),
+            stopped,
             started: false,
             completed: false,
             terminal: false,
         });
         let events = match &self.event_recorder {
             Some(recorder) => Box::pin(RecordingStepStream {
-                inner: events,
+                inner: Some(events),
                 recorder: recorder.clone(),
                 terminal: false,
             }) as StepEventStream,
@@ -285,7 +272,7 @@ impl<P: ModelProvider> StepExecutor<P> {
 }
 
 struct RecordingStepStream {
-    inner: StepEventStream,
+    inner: Option<StepEventStream>,
     recorder: Arc<dyn StepEventRecorder>,
     terminal: bool,
 }
@@ -297,20 +284,29 @@ impl Stream for RecordingStepStream {
         if self.terminal {
             return Poll::Ready(None);
         }
-        match self.inner.as_mut().poll_next(cx) {
+        match self
+            .inner
+            .as_mut()
+            .expect("active recording stream")
+            .as_mut()
+            .poll_next(cx)
+        {
             Poll::Ready(Some(Ok(event))) => match self.recorder.record(&event) {
                 Ok(()) => Poll::Ready(Some(Ok(event))),
                 Err(error) => {
                     self.terminal = true;
+                    self.inner = None;
                     Poll::Ready(Some(Err(StepError::Recording(error))))
                 }
             },
             Poll::Ready(Some(Err(error))) => {
                 self.terminal = true;
+                self.inner = None;
                 Poll::Ready(Some(Err(error)))
             }
             Poll::Ready(None) => {
                 self.terminal = true;
+                self.inner = None;
                 Poll::Ready(None)
             }
             Poll::Pending => Poll::Pending,
@@ -376,15 +372,37 @@ fn map_model_event(step_id: String, event: ModelEvent) -> StepEvent {
 }
 
 struct ControlledStepStream {
-    inner: kolyan_model::ModelEventStream,
+    inner: Option<kolyan_model::ModelEventStream>,
     step_id: String,
     model_request: ModelRequest,
     validator: Arc<dyn StepValidator>,
-    options: StepExecutionOptions,
-    control: StepControl,
+    boundary: Option<Boundary>,
+    stopped: Option<Stop>,
     started: bool,
     completed: bool,
     terminal: bool,
+}
+
+impl ControlledStepStream {
+    fn release(&mut self) {
+        self.terminal = true;
+        self.inner = None;
+        self.boundary = None;
+    }
+
+    fn stop_event(&mut self, stop: Stop) -> Result<StepEvent, StepError> {
+        self.release();
+        match (stop, self.completed) {
+            (Stop::Cancelled, true) => Err(StepError::Cancelled),
+            (Stop::TimedOut, true) => Err(StepError::TimedOut),
+            (Stop::Cancelled, false) => Ok(StepEvent::Cancelled {
+                step_id: self.step_id.clone(),
+            }),
+            (Stop::TimedOut, false) => Ok(StepEvent::TimedOut {
+                step_id: self.step_id.clone(),
+            }),
+        }
+    }
 }
 
 impl Stream for ControlledStepStream {
@@ -395,8 +413,6 @@ impl Stream for ControlledStepStream {
             return Poll::Ready(None);
         }
 
-        self.control.register(cx.waker());
-
         if !self.started {
             self.started = true;
             return Poll::Ready(Some(Ok(StepEvent::Started {
@@ -404,37 +420,46 @@ impl Stream for ControlledStepStream {
             })));
         }
 
-        if self.control.is_cancelled() {
-            self.terminal = true;
-            return Poll::Ready(Some(Ok(StepEvent::Cancelled {
-                step_id: self.step_id.clone(),
-            })));
-        } else if self.options.deadline.is_some_and(is_expired) {
-            self.terminal = true;
-            return Poll::Ready(Some(Ok(StepEvent::TimedOut {
-                step_id: self.step_id.clone(),
-            })));
+        let stop = self.stopped.or_else(|| {
+            match self
+                .boundary
+                .as_mut()
+                .expect("active Step boundary")
+                .poll_stop(cx)
+            {
+                Poll::Ready(stop) => Some(stop),
+                Poll::Pending => None,
+            }
+        });
+        if let Some(stop) = stop {
+            return Poll::Ready(Some(self.stop_event(stop)));
         }
 
-        match self.inner.as_mut().poll_next(cx) {
+        match self
+            .inner
+            .as_mut()
+            .expect("active Provider stream")
+            .as_mut()
+            .poll_next(cx)
+        {
             Poll::Ready(Some(Ok(event))) => {
+                if self.completed {
+                    self.release();
+                    return Poll::Ready(Some(Err(StepError::Protocol {
+                        message: "event received after completed".into(),
+                    })));
+                }
                 if matches!(event, ModelEvent::Started) {
                     cx.waker().wake_by_ref();
                     return Poll::Pending;
                 }
                 let is_terminal = matches!(event, ModelEvent::Completed(_));
-                if self.completed {
-                    self.terminal = true;
-                    return Poll::Ready(Some(Err(StepError::Protocol {
-                        message: "event received after completed".into(),
-                    })));
-                }
                 let mapped = map_model_event(self.step_id.clone(), event);
                 if is_terminal {
                     if let StepEvent::Completed(result) = &mapped
                         && let Err(error) = self.validator.validate(&self.model_request, result)
                     {
-                        self.terminal = true;
+                        self.release();
                         return Poll::Ready(Some(Err(StepError::Validation(error))));
                     }
                     self.completed = true;
@@ -442,7 +467,7 @@ impl Stream for ControlledStepStream {
                 Poll::Ready(Some(Ok(mapped)))
             }
             Poll::Ready(Some(Err(error))) => {
-                self.terminal = true;
+                self.release();
                 if self.completed {
                     return Poll::Ready(Some(Err(StepError::Protocol {
                         message: "provider error received after completed".into(),
@@ -451,7 +476,7 @@ impl Stream for ControlledStepStream {
                 Poll::Ready(Some(Err(StepError::Provider(error))))
             }
             Poll::Ready(None) => {
-                self.terminal = true;
+                self.release();
                 if self.completed {
                     return Poll::Ready(None);
                 }
@@ -462,10 +487,6 @@ impl Stream for ControlledStepStream {
             Poll::Pending => Poll::Pending,
         }
     }
-}
-
-fn is_expired(deadline: Instant) -> bool {
-    Instant::now() >= deadline
 }
 
 #[cfg(test)]

@@ -72,11 +72,11 @@ pub struct StepExecution {
 }
 ```
 
-`StepControl::cancel()` 是协作式取消。Step 在产生下一个事件前检查取消状态；取消后输出 `Cancelled` 并结束流。丢弃执行句柄或流也必须释放底层 Provider 流，避免继续消耗网络和模型资源。
+`StepControl::cancel()` 是协作式取消，覆盖 Provider 开启及流消费，并唤醒共享控制的全部等待者。尚未 Completed 时输出 `Cancelled` 并结束流；Completed 后的 EOF 验证阶段取消返回 `Err(Cancelled)`，不产生第二个生命周期终止事件。停止或丢弃句柄释放本地 Provider 资源，但不证明远端模型或计费停止。
 
-Step 级 timeout 由 `StepExecutionOptions::deadline` 表达。Provider 自己的 HTTP timeout 只限制网络请求，不等同于整个 Step 的 deadline。到达 deadline 后输出 `TimedOut` 并结束流。
+Step 级 timeout 由 `StepExecutionOptions::deadline` 表达，同一个绝对期限覆盖开启、消费和 EOF 验证。Provider 的 HTTP timeout 不代替此期限。尚未 Completed 时到期输出 `TimedOut`；Completed 后到期返回 `Err(TimedOut)`。聚合器只有验证 EOF 后才能确认成功。
 
-第一版不要求 `kolyan-core` 绑定 Tokio。当前使用通用的 `AtomicWaker` 在取消时唤醒等待中的流；Provider 建连阶段仍由 Provider 自己的 HTTP timeout 负责，Runtime 后续可为建连阶段增加统一 deadline 包装。
+当前实现复用 Core 已有 Tokio 依赖；未来 deadline 要求启用时间驱动的运行时，timer 不依赖 Provider 唤醒。广播控制、开启停止、EOF 验证及资源释放的完整契约与新增验收由 [0032](0032-step-liveness-boundary.md) 维护，不保留开启阶段例外。
 
 ## 错误语义
 

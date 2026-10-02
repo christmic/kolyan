@@ -7,6 +7,8 @@ use kolyan_model::{
 use serde_json::Value;
 use std::sync::Mutex;
 
+mod liveness;
+
 struct MockProvider {
     fail: bool,
 }

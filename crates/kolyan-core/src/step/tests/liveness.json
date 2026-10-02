@@ -1,0 +1,26 @@
+{
+  "watchdog_ms": 200,
+  "deadline_ms": 20,
+  "cases": [
+    {"id":"pre_cancel","mode":"pending","action":"pre_cancel","expected":["started","cancelled","eof"],"calls":0,"opening_drops":0,"stream_drops":0},
+    {"id":"pre_deadline","mode":"pending","action":"pre_deadline","expected":["started","timed_out","eof"],"calls":0,"opening_drops":0,"stream_drops":0},
+    {"id":"opening_cancel","mode":"opening_pending","action":"opening_cancel","expected":["started","cancelled","eof"],"calls":1,"opening_drops":1,"stream_drops":0},
+    {"id":"opening_deadline","mode":"opening_pending","action":"deadline","expected":["started","timed_out","eof"],"calls":1,"opening_drops":1,"stream_drops":0},
+    {"id":"pending_cancel","mode":"pending","action":"cancel","expected":["started","cancelled","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"pending_deadline","mode":"pending","action":"deadline","expected":["started","timed_out","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"completed_pending_cancel","mode":"completed_pending","action":"cancel","expected":["started","completed","error_cancelled","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"completed_pending_deadline","mode":"completed_pending","action":"deadline","expected":["started","completed","error_timed_out","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"cancelled_and_expired","mode":"pending","action":"both","expected":["started","cancelled","eof"],"calls":0,"opening_drops":0,"stream_drops":0},
+    {"id":"recorder_rejects_started","mode":"pending","action":"recording","expected":["error_recording","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"validator_rejects_completed","mode":"normal","action":"validation","expected":["started","error_validation","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"drop_opening","mode":"opening_pending","action":"drop_opening","expected":[],"calls":1,"opening_drops":1,"stream_drops":0},
+    {"id":"drop_stream","mode":"pending","action":"drop_stream","expected":["started"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"normal","mode":"normal","action":"collect","expected":["started","completed","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"opening_error","mode":"opening_error","action":"collect","expected":["error_provider_unavailable_open"],"calls":1,"opening_drops":1,"stream_drops":0},
+    {"id":"stream_error","mode":"stream_error","action":"collect","expected":["started","error_provider_unavailable_stream","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"missing_completed","mode":"empty","action":"collect","expected":["started","error_protocol","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"trailing_event","mode":"trailing","action":"collect","expected":["started","completed","error_protocol","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"trailing_started","mode":"trailing_started","action":"collect","expected":["started","completed","error_protocol","eof"],"calls":1,"opening_drops":1,"stream_drops":1},
+    {"id":"trailing_error","mode":"trailing_error","action":"collect","expected":["started","completed","error_protocol","eof"],"calls":1,"opening_drops":1,"stream_drops":1}
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "watchdog_ms":200,
+  "deadline_ms":20,
+  "broadcast": [
+    {"id":"sticky_before_opening","cancel_at":"before_opening","calls":0,"stream_drops":0,"first_woken":false,"second_woken":false},
+    {"id":"cancel_before_registration","cancel_at":"before_registration","calls":2,"stream_drops":2,"first_woken":false,"second_woken":false},
+    {"id":"cancel_between_registrations","cancel_at":"between_registrations","calls":2,"stream_drops":2,"first_woken":true,"second_woken":false},
+    {"id":"broadcast_after_registration","cancel_at":"after_registration","calls":2,"stream_drops":2,"first_woken":true,"second_woken":true}
+  ],
+  "aggregation": [
+    {"id":"aggregate_pre_cancel","mode":"normal","cancelled":true,"deadline":"none","expected":"error_cancelled","calls":0,"stream_drops":0},
+    {"id":"aggregate_pre_expired","mode":"normal","cancelled":false,"deadline":"expired","expected":"error_timed_out","calls":0,"stream_drops":0},
+    {"id":"aggregate_opening_deadline","mode":"opening_pending","cancelled":false,"deadline":"future","expected":"error_timed_out","calls":1,"stream_drops":0},
+    {"id":"aggregate_pending_deadline","mode":"pending","cancelled":false,"deadline":"future","expected":"error_timed_out","calls":1,"stream_drops":1},
+    {"id":"aggregate_completed_pending_deadline","mode":"completed_pending","cancelled":false,"deadline":"future","expected":"error_timed_out","calls":1,"stream_drops":1},
+    {"id":"aggregate_normal","mode":"normal","cancelled":false,"deadline":"none","expected":"final_answer","calls":1,"stream_drops":1},
+    {"id":"aggregate_trailing_started","mode":"trailing_started","cancelled":false,"deadline":"none","expected":"error_protocol","calls":1,"stream_drops":1},
+    {"id":"aggregate_provider_open_error","mode":"opening_error","cancelled":false,"deadline":"none","expected":"error_provider_unavailable_open","calls":1,"stream_drops":0}
+  ]
+}
