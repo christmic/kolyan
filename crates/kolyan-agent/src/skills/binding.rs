@@ -81,7 +81,7 @@ impl VerifiedSkillBinding {
 
 #[derive(Clone)]
 pub struct SkillRuntime {
-    catalog: SkillCatalog,
+    pub(super) catalog: SkillCatalog,
     policy: SkillAccessPolicy,
 }
 

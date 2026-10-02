@@ -5,11 +5,17 @@
 mod binding;
 mod catalog;
 mod encoding;
+mod executor;
+mod load;
 mod metadata;
 mod policy;
 
 pub use binding::{SkillAdvertisement, SkillRuntime, VerifiedSkillBinding};
 pub use catalog::SkillCatalog;
+pub use executor::SkillExecutor;
+pub use load::{
+    LoadedSkill, SKILL_LOAD_NAME, SkillLoadInput, skill_load_definition, skill_load_manifest,
+};
 pub use metadata::{
     MAX_ADVERTISED_SKILLS, MAX_BODY_BYTES, MAX_CATALOG_VERSIONS, MAX_METADATA_BYTES,
     MAX_TOOL_RESULT_BYTES, RegisteredSkill, SkillDescriptorInput, SkillKey, SkillLimits,

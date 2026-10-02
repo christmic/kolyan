@@ -136,6 +136,21 @@ CAS 场景各运行两个后端，共 78 行。实际观察先写入、flush/syn
 0 failed、66 ignored。包含本机长任务及原有整仓回归，显式 ignored 的
 供应商网络用例未在这次运行，不能据此声称 B/C 或真实 Skills 矩阵通过。
 
+## 正文读取切片主干证据
+
+B 批首先接入实际 SkillLoadInput、只读正文与来源、SkillRead manifest 和
+SkillExecutor，尚未接入 Runner 路由。现有真实 ArtifactStore、SQLite、Core
+policy/prepared grant 校验完整 scope、snapshot、revision、当前 ACL、取消
+及完整 ToolResult 输出限制；prepare 不读取正文，不借用环境工具权限。
+
+主干 Agent 104、Policy 32 passed，0 failed、0 ignored，终态 exit0；日志
+`/tmp/kolyan-skills-load-main-module-v1.log`。新增 13 行执行器数据先同步关闭
+`kolyan-skills-adapter-QOS0zG/actual.jsonl`，物理回读后比较（macOS 临时目录）。
+完整 workspace all-targets 严格 Clippy exit0，日志
+`/tmp/kolyan-skills-load-main-strict-v1.log`；fmt 与 diff 检查通过。这批证明
+实际正文读取和授权执行器，不证明 Runner 下一 Step 或真实供应商加载；
+后者仍由接线与 C 批验证。
+
 ## 验收
 
 数据驱动覆盖幂等、冲突、重建、撤销、容量、未知 schema、损坏内容、外来

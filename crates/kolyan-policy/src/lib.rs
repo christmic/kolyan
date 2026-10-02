@@ -24,6 +24,7 @@ pub enum Capability {
     NetworkConnect,
     SecretUse,
     AgentDelegate,
+    SkillRead,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

@@ -19,7 +19,7 @@ const SUBJECT: &str = "agent.skill";
 #[derive(Clone)]
 pub struct SkillCatalog {
     pub(super) journal: Arc<dyn FactJournal>,
-    artifacts: Arc<ArtifactStore>,
+    pub(super) artifacts: Arc<ArtifactStore>,
     pub(super) namespace: String,
     pub(super) limits: SkillLimits,
     stream: String,

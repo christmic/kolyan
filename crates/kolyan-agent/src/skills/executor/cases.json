@@ -1,0 +1,15 @@
+[
+ {"id":"allowed_exact","mutation":"none","expected":"completed"},
+ {"id":"foreign_execution","mutation":"execution","expected":"denied"},
+ {"id":"foreign_snapshot","mutation":"snapshot","expected":"denied"},
+ {"id":"foreign_grant_scope","mutation":"grant","expected":"denied"},
+ {"id":"changed_policy","mutation":"policy","expected":"denied"},
+ {"id":"small_output_envelope","mutation":"output","expected":"failed"},
+ {"id":"already_cancelled","mutation":"cancel","expected":"cancelled"},
+ {"id":"revoked_before_execute","mutation":"revoke","expected":"denied"},
+ {"id":"revoked_historical_construction","mutation":"historical","expected":"historical"},
+ {"id":"prepare_missing_body_zero_reads","mutation":"missing_body","expected":"prepared"},
+ {"id":"strict_unknown_path","mutation":"path","expected":"failed"},
+ {"id":"strict_unknown_revision","mutation":"revision","expected":"denied"},
+ {"id":"strict_unknown_tool","mutation":"tool","expected":"unavailable"}
+]
