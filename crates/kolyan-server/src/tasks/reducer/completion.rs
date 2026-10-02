@@ -31,6 +31,18 @@ pub(super) fn complete(
             available.extend(evidence.iter());
         }
     }
+    let goals: Vec<_> = state
+        .goal_assessments
+        .iter()
+        .filter(|record| record.assessment.verdict == crate::GoalVerdict::Satisfied)
+        .map(|record| CompletionEvidence::GoalSatisfied {
+            criterion_id: record.assessment.criterion_id.clone(),
+            source: record.assessment.source.clone(),
+            assessment: record.reference.clone(),
+            assessment_digest: record.assessment_digest.clone(),
+        })
+        .collect();
+    available.extend(goals.iter());
     let ids: BTreeSet<_> = evidence
         .iter()
         .map(CompletionEvidence::criterion_id)

@@ -5,11 +5,13 @@
 //! evidence before submitting observations. CAS is the only write boundary.
 
 mod coordinator;
+pub(crate) mod goals;
 mod input;
 mod reducer;
 mod types;
 
 pub use coordinator::TaskCoordinator;
+pub use goals::*;
 pub use input::{
     INVOCATION_INPUT_SOURCE_SUBJECT_KIND, InvocationInputEnvelope, InvocationInputKind,
     InvocationInputScope, InvocationInputSource, VerifiedInvocationInputSource,

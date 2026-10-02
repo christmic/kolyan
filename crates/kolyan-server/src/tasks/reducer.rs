@@ -59,6 +59,7 @@ pub(super) fn apply(
             attempts: Default::default(),
             waiting: Vec::new(),
             success_evidence: Vec::new(),
+            goal_assessments: Vec::new(),
         });
         return Ok(());
     }
@@ -81,6 +82,9 @@ pub(super) fn apply(
         return Err(transition("task is terminal"));
     }
     match event {
+        TaskEvent::GoalAssessed(assessment) => {
+            super::goals::apply_assessment(state, *assessment, record)?
+        }
         TaskEvent::InvocationAdmitted(definition) => admit(state, definition)?,
         TaskEvent::DependencyAdmitted {
             invocation_id,
@@ -166,6 +170,7 @@ fn refresh(state: &mut TaskSnapshot) {
             });
         }
     }
+    super::goals::refresh_goals(state);
     if !state.state.is_terminal() {
         state.state = if state
             .invocations

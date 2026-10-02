@@ -146,6 +146,9 @@ pub(super) fn validate_evidence(
     }
     let mut ids = BTreeSet::new();
     for item in evidence {
+        if matches!(item, CompletionEvidence::GoalSatisfied { .. }) {
+            return Err(invalid("GoalSatisfied is not physical attempt evidence"));
+        }
         validate_source(item.source(), binding)?;
         if !ids.insert(item.criterion_id()) {
             return Err(invalid("duplicate criterion evidence"));

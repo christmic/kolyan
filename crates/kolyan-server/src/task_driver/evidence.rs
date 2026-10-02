@@ -223,7 +223,7 @@ pub(super) fn is_physical_terminal(event: &LedgerEvent) -> Result<bool, TaskErro
     }
 }
 
-fn physical_terminal(events: &[LedgerEvent]) -> Result<Option<&LedgerEvent>, TaskError> {
+pub(super) fn physical_terminal(events: &[LedgerEvent]) -> Result<Option<&LedgerEvent>, TaskError> {
     let mut terminal: Option<&LedgerEvent> = None;
     for event in events {
         if !is_physical_terminal(event)? {
@@ -338,7 +338,7 @@ pub(super) fn source_ref(binding: &AttemptBinding, event: &LedgerEvent) -> Execu
     }
 }
 
-pub(super) fn response_digest(response: &ModelResponse) -> Result<String, TaskError> {
+pub(crate) fn response_digest(response: &ModelResponse) -> Result<String, TaskError> {
     let bytes = serde_json::to_vec(response).map_err(|error| invalid(error.to_string()))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }

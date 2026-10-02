@@ -1,6 +1,10 @@
 //! Host-driven durable task attempts; scheduling and tool authority stay explicit.
 
-mod evidence;
+pub(crate) mod evidence;
+mod goal_source;
+pub use goal_source::{
+    GoalSourceCoverage, GoalSourceError, GoalSourceLimits, GoalSourceReader, VerifiedGoalSource,
+};
 mod historical_context;
 pub use historical_context::{HistoricalContextRequest, VerifiedHistoricalContext};
 mod result;
@@ -358,19 +362,63 @@ where
     }
 
     /// Physically revalidate every bound success proof before committing task success.
+    pub fn assess_goal(
+        &self,
+        task_id: &str,
+        fact_id: &str,
+        criterion_id: &str,
+    ) -> Result<TaskSnapshot, TaskExecutionError> {
+        let prefix = self.coordinator.snapshot(task_id)?;
+        let assessment = self
+            .coordinator
+            .compute_goal_assessment(&prefix, criterion_id)?;
+        Ok(self.coordinator.assess_goal(task_id, fact_id, assessment)?)
+    }
+
+    /// Goal waiting is durable business state, not permission to rerun work.
     pub fn complete(
         &self,
         task_id: &str,
         fact_id: &str,
     ) -> Result<TaskSnapshot, TaskExecutionError> {
         let snapshot = self.coordinator.snapshot(task_id)?;
+        if !snapshot.state.is_terminal()
+            && snapshot.waiting.iter().any(|waiting| {
+                matches!(
+                    waiting,
+                    crate::WaitingReason::GoalAssessment { .. }
+                        | crate::WaitingReason::GoalUnmet { .. }
+                )
+            })
+        {
+            return Ok(snapshot);
+        }
+        let has_goals = snapshot
+            .definition
+            .criteria
+            .iter()
+            .any(|criterion| matches!(criterion, CompletionCriterion::Goal(_)));
         let mut proofs = Vec::new();
-        for attempt in snapshot.attempts.values() {
+        let latest: std::collections::HashSet<_> = snapshot
+            .invocations
+            .values()
+            .filter_map(|invocation| invocation.attempts.last())
+            .collect();
+        for (id, attempt) in &snapshot.attempts {
+            if has_goals && !latest.contains(id) {
+                continue;
+            }
             if let Some(AttemptObservation {
                 outcome: AttemptOutcome::Completed { evidence },
                 ..
             }) = &attempt.observation
             {
+                if has_goals {
+                    // The configured enforcing port revalidates every latest
+                    // physical source through the bounded reader before CAS.
+                    proofs.extend(evidence.iter().cloned());
+                    continue;
+                }
                 let actual = inspect(self.ledger(), &attempt.binding, 0)?;
                 if !matches!(actual.stopped, StoppedOutcome::Completed) {
                     return Err(invalid("completion source is not a final answer").into());
@@ -405,8 +453,46 @@ where
                                 )
                                 .map_err(|error| invalid(error.to_string()))?;
                         }
+                        CompletionEvidence::GoalSatisfied { .. } => {
+                            return Err(
+                                invalid("goal evidence cannot be a physical observation").into()
+                            );
+                        }
                     }
                     proofs.push(proof.clone());
+                }
+            }
+        }
+        for saved in &snapshot.goal_assessments {
+            if saved.assessment.verdict == crate::GoalVerdict::Satisfied {
+                proofs.push(CompletionEvidence::GoalSatisfied {
+                    criterion_id: saved.assessment.criterion_id.clone(),
+                    source: saved.assessment.source.clone(),
+                    assessment: saved.reference.clone(),
+                    assessment_digest: saved.assessment_digest.clone(),
+                });
+            }
+        }
+        if has_goals {
+            self.coordinator
+                .verify_goal_completion(&snapshot, &proofs)?;
+            for proof in &proofs {
+                if let CompletionEvidence::VerifiedArtifact {
+                    sha256, byte_len, ..
+                } = proof
+                {
+                    self.artifacts
+                        .as_ref()
+                        .ok_or_else(|| invalid("artifact verification unavailable"))?
+                        .read(
+                            &ArtifactRef {
+                                digest: sha256.clone(),
+                                byte_length: *byte_len,
+                                retention: Retention::Required,
+                            },
+                            (*byte_len).min(16 * 1024 * 1024),
+                        )
+                        .map_err(|error| invalid(error.to_string()))?;
                 }
             }
         }
@@ -566,6 +652,7 @@ where
                                 byte_len: reference.byte_length,
                             });
                         }
+                        CompletionCriterion::Goal(_) => {}
                     }
                 }
                 AttemptOutcome::Completed { evidence }

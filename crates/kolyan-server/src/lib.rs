@@ -18,8 +18,9 @@ pub use private_context::{
 pub use rpc_execution::ExecutionRpc;
 pub use suspension::{current_suspension as execution_suspension, suspension_view};
 pub use task_driver::{
+    GoalSourceCoverage, GoalSourceError, GoalSourceLimits, GoalSourceReader,
     HistoricalContextRequest, TaskExecutionError, TaskExecutionService, VerifiedConsumedResult,
-    VerifiedHistoricalContext, VerifiedTaskOutcome, VerifiedTaskResult,
+    VerifiedGoalSource, VerifiedHistoricalContext, VerifiedTaskOutcome, VerifiedTaskResult,
 };
 pub use tasks::*;
 

@@ -1,6 +1,8 @@
 //! Journal-backed command admission. Replay and writes share the same reducer.
 
+use super::{GoalAssessment, TaskGoalVerifier};
 use kolyan_ledger::{FactDraft, FactJournal, FactRecord, FactSubject};
+use std::sync::Arc;
 
 use super::reducer::{apply, identity, invalid, reference};
 use super::types::*;
@@ -9,14 +11,60 @@ const PAGE_SIZE: usize = 512;
 const VERSION: u32 = 1;
 
 /// Stateless domain coordinator; durable facts, not this value, own task state.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TaskCoordinator<J> {
     journal: J,
+    pub(super) goal_verifier: Option<Arc<dyn TaskGoalVerifier>>,
 }
 
 impl<J: FactJournal> TaskCoordinator<J> {
     pub fn new(journal: J) -> Self {
-        Self { journal }
+        Self {
+            journal,
+            goal_verifier: None,
+        }
+    }
+
+    /// Mandatory for Goal Tasks; execution-only Tasks retain their explicit contract.
+    pub fn with_goal_verifier(mut self, verifier: Arc<dyn TaskGoalVerifier>) -> Self {
+        self.goal_verifier = Some(verifier);
+        self
+    }
+
+    /// Caller claims are recomputed against the pre-event prefix before CAS/replay.
+    pub fn assess_goal(
+        &self,
+        task_id: &str,
+        fact_id: &str,
+        assessment: GoalAssessment,
+    ) -> Result<TaskSnapshot, TaskError> {
+        self.command(
+            task_id,
+            fact_id,
+            TaskEvent::GoalAssessed(Box::new(assessment)),
+        )
+    }
+
+    pub(crate) fn compute_goal_assessment(
+        &self,
+        prefix: &TaskSnapshot,
+        criterion_id: &str,
+    ) -> Result<GoalAssessment, TaskError> {
+        self.goal_verifier
+            .as_ref()
+            .ok_or_else(|| invalid("goal verifier unavailable"))?
+            .compute_assessment(prefix, criterion_id)
+    }
+
+    pub(crate) fn verify_goal_completion(
+        &self,
+        prefix: &TaskSnapshot,
+        evidence: &[CompletionEvidence],
+    ) -> Result<(), TaskError> {
+        self.goal_verifier
+            .as_ref()
+            .ok_or_else(|| invalid("goal verifier unavailable"))?
+            .verify_completion(prefix, evidence)
     }
 
     pub fn journal(&self) -> &J {
@@ -270,6 +318,16 @@ impl<J: FactJournal> TaskCoordinator<J> {
         identity(fact_id)?;
         let records = self.records(task_id)?;
         let mut snapshot = replay(self, task_id, &records)?;
+        if let TaskEvent::GoalAssessed(assessment) = &event {
+            assessment.digest()?;
+        }
+        if let TaskEvent::Registered(definition) = &event {
+            for criterion in &definition.criteria {
+                if let CompletionCriterion::Goal(goal) = criterion {
+                    goal.validate()?;
+                }
+            }
+        }
         let (kind, subject) = envelope(task_id, &event);
         let payload = serde_json::to_value(&event).map_err(|error| invalid(error.to_string()))?;
         if let Some(existing) = records
@@ -307,6 +365,11 @@ impl<J: FactJournal> TaskCoordinator<J> {
         {
             causes.push(result.terminal_fact.clone());
         }
+        for source in super::goals::goal_causes(snapshot.as_ref(), &event)? {
+            if !causes.contains(&source) {
+                causes.push(source);
+            }
+        }
         let draft = FactDraft {
             fact_id: fact_id.into(),
             subject,
@@ -324,6 +387,12 @@ impl<J: FactJournal> TaskCoordinator<J> {
             position,
             draft: draft.clone(),
         };
+        super::goals::verify_event(
+            self.goal_verifier.as_deref(),
+            snapshot.as_ref(),
+            &event,
+            &candidate,
+        )?;
         apply(&mut snapshot, event.clone(), &candidate)?;
         self.verify_input_event(task_id, &event, &candidate, snapshot.as_ref())?;
         let committed = self.journal.append(task_id, expected, vec![draft])?;
@@ -336,6 +405,11 @@ impl<J: FactJournal> TaskCoordinator<J> {
 
 fn envelope(task_id: &str, event: &TaskEvent) -> (&'static str, FactSubject) {
     let (kind, subject_kind, id) = match event {
+        TaskEvent::GoalAssessed(assessment) => (
+            "task.goal_assessed",
+            "goal",
+            assessment.criterion_id.as_str(),
+        ),
         TaskEvent::Registered(_) => ("task.registered", "task", task_id),
         TaskEvent::InvocationAdmitted(definition) => (
             "task.invocation_admitted",
@@ -400,6 +474,7 @@ fn replay<J: FactJournal>(
         let known = matches!(
             record.draft.kind.as_str(),
             "task.registered"
+                | "task.goal_assessed"
                 | "task.invocation_admitted"
                 | "task.dependency_admitted"
                 | "task.attempt_started"
@@ -437,6 +512,12 @@ fn replay<J: FactJournal>(
             {
                 return Err(invalid("registration belongs to another task stream"));
             }
+            super::goals::verify_event(
+                coordinator.goal_verifier.as_deref(),
+                snapshot.as_ref(),
+                &event,
+                record,
+            )?;
             apply(&mut snapshot, event.clone(), record)?;
             coordinator.verify_input_event(task_id, &event, record, snapshot.as_ref())?;
         }

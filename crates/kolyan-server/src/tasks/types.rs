@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use super::InvocationInputSource;
+use super::{GoalAssessment, GoalAssessmentRecord, GoalCriterion, GoalVerdict};
 use crate::ExecutionRef;
 
 /// Definition revision and instance are distinct from invocation identity.
@@ -34,6 +35,7 @@ pub struct TaskLimits {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum CompletionCriterion {
+    Goal(GoalCriterion),
     ExecutionCompleted {
         id: String,
         invocation_id: String,
@@ -48,12 +50,14 @@ pub enum CompletionCriterion {
 impl CompletionCriterion {
     pub fn id(&self) -> &str {
         match self {
+            Self::Goal(goal) => &goal.id,
             Self::ExecutionCompleted { id, .. } | Self::ArtifactDigest { id, .. } => id,
         }
     }
 
     pub fn invocation_id(&self) -> &str {
         match self {
+            Self::Goal(goal) => &goal.invocation_id,
             Self::ExecutionCompleted { invocation_id, .. }
             | Self::ArtifactDigest { invocation_id, .. } => invocation_id,
         }
@@ -141,6 +145,12 @@ pub struct ExecutionEvidence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum CompletionEvidence {
+    GoalSatisfied {
+        criterion_id: String,
+        source: ExecutionEvidence,
+        assessment: FactRef,
+        assessment_digest: String,
+    },
     ExecutionResult {
         criterion_id: String,
         source: ExecutionEvidence,
@@ -157,6 +167,7 @@ pub enum CompletionEvidence {
 impl CompletionEvidence {
     pub fn criterion_id(&self) -> &str {
         match self {
+            Self::GoalSatisfied { criterion_id, .. } => criterion_id,
             Self::ExecutionResult { criterion_id, .. }
             | Self::VerifiedArtifact { criterion_id, .. } => criterion_id,
         }
@@ -164,6 +175,7 @@ impl CompletionEvidence {
 
     pub fn source(&self) -> &ExecutionEvidence {
         match self {
+            Self::GoalSatisfied { source, .. } => source,
             Self::ExecutionResult { source, .. } | Self::VerifiedArtifact { source, .. } => source,
         }
     }
@@ -172,9 +184,22 @@ impl CompletionEvidence {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub enum WaitingReason {
+    GoalAssessment {
+        criterion_id: String,
+        invocation_id: String,
+    },
+    GoalUnmet {
+        criterion_id: String,
+        verdict: GoalVerdict,
+        reason: String,
+    },
     Suspension(TaskSuspension),
-    ChildResults { invocation_ids: Vec<String> },
-    Recovery { reason: String },
+    ChildResults {
+        invocation_ids: Vec<String>,
+    },
+    Recovery {
+        reason: String,
+    },
 }
 
 /// Coordinates of a Runtime checkpoint, not approval or result authority.
@@ -287,6 +312,7 @@ pub struct InvocationSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskSnapshot {
+    pub goal_assessments: Vec<GoalAssessmentRecord>,
     pub definition: TaskDefinition,
     pub position: u64,
     pub state: TaskState,
@@ -299,6 +325,8 @@ pub struct TaskSnapshot {
 
 #[derive(Debug, Error)]
 pub enum TaskError {
+    #[error("goal source inspection: {0}")]
+    GoalSource(#[from] crate::GoalSourceError),
     #[error("coordination journal: {0}")]
     Journal(#[from] FactError),
     #[error("task contract: {0}")]
@@ -313,6 +341,7 @@ pub enum TaskError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) enum TaskEvent {
+    GoalAssessed(Box<GoalAssessment>),
     Registered(TaskDefinition),
     InvocationAdmitted(InvocationDefinition),
     DependencyAdmitted {

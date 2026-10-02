@@ -27,6 +27,14 @@ pub(super) fn admit(
     let parent = definition.parent_invocation_id.as_ref();
     match definition.role {
         InvocationRole::Root => {
+            if state.definition.criteria.iter().any(|criterion| {
+                matches!(criterion,
+                CompletionCriterion::Goal(goal) if goal.invocation_id != definition.invocation_id)
+            }) {
+                return Err(invalid(
+                    "Goal anchor must be the unique actual root invocation",
+                ));
+            }
             if parent.is_some()
                 || state
                     .invocations

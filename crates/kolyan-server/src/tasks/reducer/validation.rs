@@ -32,6 +32,9 @@ pub(super) fn validate_definition(definition: &TaskDefinition) -> Result<(), Tas
     }
     let mut ids = BTreeSet::new();
     for criterion in &definition.criteria {
+        if let CompletionCriterion::Goal(goal) = criterion {
+            goal.validate()?;
+        }
         identity(criterion.id())?;
         identity(criterion.invocation_id())?;
         if !ids.insert(criterion.id()) {
