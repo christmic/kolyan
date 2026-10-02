@@ -19,4 +19,5 @@ pub use turn::{
     TurnBoundaryKind, TurnCheckpoint, TurnConfig, TurnControl, TurnDeadline, TurnDeadlineError,
     TurnEndReason, TurnError, TurnEvent, TurnEventRecorder, TurnEventStream, TurnExecution,
     TurnExecutor, TurnOutcome, TurnRequest, TurnResult, TurnState, TurnSuspension,
+    reject_pending_approval,
 };

@@ -21,6 +21,7 @@ struct Case {
     child: bool,
     start_ok: bool,
     resume_ok: Option<bool>,
+    deny_ok: Option<bool>,
     calls: usize,
     remaining: u64,
     root_reserved: u32,
@@ -62,6 +63,12 @@ async fn actual_service_budget_caps_rebuilds_and_refuses_expired_work() {
         assert_eq!(
             row["resume_ok"],
             serde_json::json!(case.resume_ok),
+            "{}: {row}",
+            case.id
+        );
+        assert_eq!(
+            row["deny_ok"],
+            serde_json::json!(case.deny_ok),
             "{}: {row}",
             case.id
         );
@@ -127,6 +134,14 @@ async fn actual_service_budget_caps_rebuilds_and_refuses_expired_work() {
                 case.id
             );
             assert_eq!(row["file_before_resume"], Value::Null, "{}", case.id);
+        }
+        if case.mode == "approval_deny_expired" {
+            assert_eq!(
+                row["after"]["attempts"]["attempt-root"]["state"], "Failed",
+                "{row}"
+            );
+            assert_eq!(row["session"]["turns"][0]["status"], "failed", "{row}");
+            assert_eq!(row["requests"].as_array().unwrap().len(), 1);
         }
     }
 }

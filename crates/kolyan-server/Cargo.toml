@@ -11,6 +11,7 @@ workspace = true
 kolyan-core = { path = "../kolyan-core" }
 kolyan-ledger = { path = "../kolyan-ledger" }
 kolyan-model = { path = "../kolyan-model" }
+kolyan-policy = { path = "../kolyan-policy" }
 kolyan-runtime = { path = "../kolyan-runtime" }
 kolyan-storage = { path = "../kolyan-storage" }
 kolyan-trace = { path = "../kolyan-trace" }
@@ -22,5 +23,4 @@ tokio = { version = "1", features = ["macros", "rt", "time"] }
 
 [dev-dependencies]
 futures-util.workspace = true
-kolyan-policy = { path = "../kolyan-policy" }
 tempfile = "3"

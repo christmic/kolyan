@@ -835,14 +835,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             &suspension.checkpoint.scope.execution.turn_id,
             &suspension.checkpoint.scope.step_id,
         )?;
-        validate_approval_transition(&suspension, approval_id, &scope)?;
-        terminal_approval_execution(
-            suspension,
-            TurnOutcome::Rejected {
-                reason: reason.into(),
-            },
-            TurnEndReason::ApprovalRejected,
-        )
+        reject_pending_approval(suspension, approval_id, &scope, reason)
     }
 
     pub fn expire_approval(
@@ -961,6 +954,25 @@ fn validate_request(request: &TurnRequest) -> Result<(), TurnError> {
         });
     }
     Ok(())
+}
+
+/// Reject a saved approval without constructing an executable adapter.
+/// The independently supplied scope is checked against the complete suspension.
+/// This pure transition authorizes no model invocation or tool effect.
+pub fn reject_pending_approval(
+    suspension: TurnSuspension,
+    approval_id: &str,
+    expected_scope: &ToolExecutionScope,
+    reason: impl Into<String>,
+) -> Result<TurnExecution, TurnError> {
+    validate_approval_transition(&suspension, approval_id, expected_scope)?;
+    terminal_approval_execution(
+        suspension,
+        TurnOutcome::Rejected {
+            reason: reason.into(),
+        },
+        TurnEndReason::ApprovalRejected,
+    )
 }
 
 fn validate_approval_transition(

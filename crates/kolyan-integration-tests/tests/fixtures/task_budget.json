@@ -5,5 +5,6 @@
  {"id":"expired_no_model","mode":"expired","total":4,"request_steps":8,"child":false,"start_ok":false,"resume_ok":null,"calls":0,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null},
  {"id":"approval_rebuild_same_reservation","mode":"approval","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":true,"calls":2,"remaining":0,"root_reserved":4,"child_reserved":0,"file":"budget\n"},
  {"id":"approval_expired_same_cutoff","mode":"approval_expired","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":false,"calls":1,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null},
- {"id":"suspended_root_shares_pool_with_self_call","mode":"approval_child","total":6,"request_steps":4,"child":true,"start_ok":true,"resume_ok":true,"calls":3,"remaining":0,"root_reserved":4,"child_reserved":2,"file":"budget\n"}
+ {"id":"suspended_root_shares_pool_with_self_call","mode":"approval_child","total":6,"request_steps":4,"child":true,"start_ok":true,"resume_ok":true,"calls":3,"remaining":0,"root_reserved":4,"child_reserved":2,"file":"budget\n"},
+ {"id":"expired_approval_can_be_denied_after_rebuild","mode":"approval_deny_expired","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":null,"deny_ok":true,"calls":1,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null}
 ]

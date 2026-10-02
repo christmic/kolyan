@@ -1,0 +1,9 @@
+[
+  {"id":"exact","mutation":"none","success":true},
+  {"id":"foreign-session","mutation":"session","success":false},
+  {"id":"foreign-turn","mutation":"turn","success":false},
+  {"id":"foreign-execution","mutation":"execution","success":false},
+  {"id":"foreign-step","mutation":"step","success":false},
+  {"id":"foreign-agent","mutation":"agent","success":false},
+  {"id":"unknown-approval","mutation":"approval","success":false}
+]

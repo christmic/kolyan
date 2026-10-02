@@ -261,7 +261,7 @@ pub(super) async fn run(case: &Case, root: &Path) -> Value {
         .unwrap();
     let deadline = match case.mode.as_str() {
         "expired" => 1,
-        "approval_expired" => now() + 1000,
+        "approval_expired" | "approval_deny_expired" => now() + 1000,
         "answer" | "approval" | "approval_child" => now() + 120000,
         other => panic!("unknown case mode {other}"),
     };
@@ -347,6 +347,8 @@ pub(super) async fn run(case: &Case, root: &Path) -> Value {
     let mut before_resume = Value::Null;
     let mut resume_ok = None;
     let mut resume_error = None;
+    let mut deny_ok = None;
+    let mut deny_error = None;
     let file_before_resume = read_output(&workspace);
     let mut child_ok = None;
     let mut child_error = None;
@@ -398,23 +400,39 @@ pub(super) async fn run(case: &Case, root: &Path) -> Value {
         before_resume =
             serde_json::to_value(current.coordinator().snapshot("task").unwrap()).unwrap();
         drop(current);
-        if case.mode == "approval_expired" {
+        if matches!(
+            case.mode.as_str(),
+            "approval_expired" | "approval_deny_expired"
+        ) {
             tokio::time::sleep(Duration::from_millis(
                 deadline.saturating_add(50).saturating_sub(now()),
             ))
             .await;
         }
         let rebuilt = open(root);
-        let resumed = rebuilt
-            .resume_approval(
-                "task",
-                bindings[0].clone(),
+        if case.mode == "approval_deny_expired" {
+            let denied = rebuilt.sessions().deny_pending(
+                &bindings[0].execution,
+                &saved.checkpoint.scope,
                 &approval_id,
-                executor(&workspace, true, requests.clone()),
-            )
-            .await;
-        resume_ok = Some(resumed.is_ok());
-        resume_error = resumed.as_ref().err().map(ToString::to_string);
+            );
+            deny_ok = Some(denied.is_ok());
+            deny_error = denied.as_ref().err().map(ToString::to_string);
+            if denied.is_ok() {
+                rebuilt.reconcile("task", "attempt-root").unwrap();
+            }
+        } else {
+            let resumed = rebuilt
+                .resume_approval(
+                    "task",
+                    bindings[0].clone(),
+                    &approval_id,
+                    executor(&workspace, true, requests.clone()),
+                )
+                .await;
+            resume_ok = Some(resumed.is_ok());
+            resume_error = resumed.as_ref().err().map(ToString::to_string);
+        }
     } else {
         if case.child {
             let child = admit_successor(&current, &bindings[0], case.request_steps);
@@ -446,9 +464,10 @@ pub(super) async fn run(case: &Case, root: &Path) -> Value {
         .find(|e| e.kind == kolyan_ledger::LedgerEventKind::ExecutionInputAdmitted)
         .map(|e| e.payload.clone());
     task_input_source::export(rebuilt.coordinator(), "task", &root.join("sources.jsonl")).unwrap();
-    json!({"id":case.id,"start_ok":start_ok,"start_error":start_error,"resume_ok":resume_ok,"resume_error":resume_error,"child_ok":child_ok,"child_error":child_error,
+    json!({"id":case.id,"start_ok":start_ok,"start_error":start_error,"resume_ok":resume_ok,"resume_error":resume_error,"deny_ok":deny_ok,"deny_error":deny_error,"child_ok":child_ok,"child_error":child_error,
         "deadline":deadline,"requests":*requests.lock().unwrap(),"remaining":budget.remaining_steps().unwrap(),"root_reserved":budget.reservations.get("attempt-root").map(|s|s.max_steps).unwrap_or(0),"child_reserved":budget.reservations.get("attempt-child").map(|s|s.max_steps).unwrap_or(0),
         "root_admission":admission,"checkpoint":checkpoint,"before_resume":before_resume,"after":after,
         "file_before_resume":file_before_resume,"file":read_output(&workspace),"ledger":events,
-        "child_ledger":ledger.execution_events_after("exec-child",0).unwrap(),"facts":rebuilt.coordinator().journal().read("task",0,100).unwrap()})
+        "child_ledger":ledger.execution_events_after("exec-child",0).unwrap(),"facts":rebuilt.coordinator().journal().read("task",0,100).unwrap(),
+        "session":rebuilt.sessions().sessions().load("session-root").unwrap()})
 }

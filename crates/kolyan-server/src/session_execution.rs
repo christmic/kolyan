@@ -308,6 +308,41 @@ where
         P: ModelProvider,
         T: ToolExecutor,
     {
+        self.deny_validated(execution, approval_id, |suspension| {
+            executor
+                .with_execution_key(suspension.checkpoint.scope.execution.clone())
+                .reject_approval(suspension.clone(), approval_id, "denied by user")
+                .map_err(RuntimeError::from)?;
+            Ok(())
+        })
+    }
+
+    /// Deny without executable adapters or current permission grants. The caller
+    /// supplies the authenticated historical scope, not a newly issued grant.
+    pub fn deny_pending(
+        &self,
+        execution: &ExecutionRef,
+        expected_scope: &kolyan_policy::ToolExecutionScope,
+        approval_id: &str,
+    ) -> Result<(), ServerError> {
+        self.deny_validated(execution, approval_id, |suspension| {
+            kolyan_core::reject_pending_approval(
+                suspension.clone(),
+                approval_id,
+                expected_scope,
+                "denied by user",
+            )
+            .map_err(RuntimeError::from)?;
+            Ok(())
+        })
+    }
+
+    fn deny_validated(
+        &self,
+        execution: &ExecutionRef,
+        approval_id: &str,
+        validate: impl FnOnce(&kolyan_core::TurnSuspension) -> Result<(), ServerError>,
+    ) -> Result<(), ServerError> {
         let session = self.sessions.load(&execution.session_id)?;
         if !session.turns.iter().any(|turn| {
             turn.turn_id == execution.turn_id
@@ -326,10 +361,7 @@ where
         if suspension.checkpoint.scope.execution.turn_id != execution.turn_id {
             return Err(StorageError::Conflict("approval Turn mismatch".into()).into());
         }
-        executor
-            .with_execution_key(suspension.checkpoint.scope.execution.clone())
-            .reject_approval(suspension.clone(), approval_id, "denied by user")
-            .map_err(RuntimeError::from)?;
+        validate(&suspension)?;
         self.execution
             .server
             .coordinator()

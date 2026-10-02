@@ -1,6 +1,7 @@
 mod decision_gap;
 mod denial;
 mod merge_gap;
+mod pending_denial;
 mod preparation;
 
 use super::*;

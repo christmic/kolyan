@@ -746,3 +746,28 @@ completed 与 worker bytes 一致，没有发现 Tools 后丢换行；Anthropic
 0 failed、66 ignored；日志 `/tmp/kolyan-evolution-root-goals-workspace-main-v1.log`。
 此结果包含当前 Root 接线、新数据和已集成截止时间/生成消费者，不包括
 隔离开发中的 Skills 或生产 AgentHost，也不改变上述网络矩阵未全通过结论。
+
+### 无执行适配器的持久拒绝
+
+2026-10-03，Main 首批合入 Core `reject_pending_approval` 与 Session
+`deny_pending`。该路径核验完整历史 scope 和待审批身份，持久记录拒绝及
+Session 失败，不创建 Provider/Tool adapter，不把拒绝替换为 Task 取消。
+原有 Accept 的权限核验和执行路径保持不变。重复拒绝在已终态 Session
+明确报冲突，账本不增写；这不是成功的再次执行。
+
+冻结清单 `/private/tmp/kolyan-agent-host-skills-freeze-v1.json` 的 40 个
+文件摘要均实读匹配。本批只取 Core/Server 的精确 hunks 和新增七行
+scope/审批身份数据测试，不覆盖 Main 的 Task 持久预算实现。
+联合模块门禁 `/tmp/kolyan-pending-denial-main-module-v1.log` 退出 0：
+Core 108、Server 127 passed，均零失败。
+
+额外新增的独立服务数据行验证：真实 SQLite、文件 Session、Runtime 和
+受控模型先产生审批，销毁服务并等到原截止时间之后，再重建并持久拒绝。
+完整八行预算服务矩阵通过，日志
+`/tmp/kolyan-pending-denial-main-budget-service-v1.log`；实际轨迹在
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-task-budget-service-AgRo5t/actual.jsonl`。
+拒绝后原 reservation 与 cutoff 不变，模型请求仍仅一份，没有文件效果，
+Session 与对应 attempt 实际为 Failed。所有原七行预期保留。
+
+本记录是 Core/Server 和持久预算的离线联合验证，不是生产 AgentHost、
+Agent 根/子拒绝或 MiniMax 验收。那些消费者仍待分批集成与 Main 门禁。
