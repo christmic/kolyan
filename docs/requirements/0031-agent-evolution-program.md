@@ -95,6 +95,7 @@ Current mainline specifications:
 - [Context accounting and governed reduction](0034-context-engineering.md).
 - [Goal verification and usable Agent host](0035-goal-verification-and-agent-host.md).
 - [Governed selective Skills loading](0036-governed-skills.md).
+- [Governed MCP integration](0037-governed-mcp.md).
 - [Governed native hooks](0039-governed-hooks.md).
 - [Bounded goal correction and durable execution budgets](0038-bounded-goal-correction.md).
 
