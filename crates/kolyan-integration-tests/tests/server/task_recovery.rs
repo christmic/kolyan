@@ -6,6 +6,7 @@ pub mod trusted_tools;
 
 #[path = "task_recovery/seed.rs"]
 mod seed;
+mod task_input_source;
 
 use std::{
     collections::BTreeSet,
@@ -130,7 +131,7 @@ impl ToolExecutor for FixtureTool {
         assert_eq!(call.id, self.result.call_id);
         self.counters.tools.fetch_add(1, Ordering::SeqCst);
         let result = self.result.clone();
-        Box::pin(async move { Ok(result) })
+        Box::pin(async move { Ok(kolyan_core::ToolOutcome::Completed(result)) })
     }
 }
 struct FixtureInspector {
@@ -163,10 +164,19 @@ impl Context<'_> {
         self.data["definition"]["task_id"].as_str().unwrap()
     }
     fn binding(&self, operation: &Value) -> AttemptBinding {
-        serde_json::from_value(
-            self.data["bindings"][operation["binding"].as_str().unwrap_or("original")].clone(),
-        )
-        .unwrap()
+        let mut binding =
+            self.data["bindings"][operation["binding"].as_str().unwrap_or("original")].clone();
+        let source = self
+            .service()
+            .coordinator()
+            .snapshot(self.task())
+            .unwrap()
+            .invocations[self.data["invocation"]["invocation_id"].as_str().unwrap()]
+        .definition
+        .input_source
+        .clone();
+        binding["input_source"] = serde_json::to_value(source).unwrap();
+        serde_json::from_value(binding).unwrap()
     }
     fn effect_id(&self, binding: &AttemptBinding) -> String {
         self.data["effect_id"]
@@ -224,13 +234,21 @@ async fn fixture_task_recovery_preserves_evidence_and_never_replays_uncertain_ef
                 serde_json::from_value(data["definition"].clone()).unwrap(),
             )
             .unwrap();
+        let mut definition = data["invocation"].clone();
+        let input_source = task_input_source::publish(
+            context.service().coordinator(),
+            context.task(),
+            &definition,
+            serde_json::from_value(data["request"].clone()).unwrap(),
+        );
+        definition["input_source"] = serde_json::to_value(&input_source).unwrap();
         context
             .service()
             .coordinator()
             .admit_invocation(
                 context.task(),
                 "admit-root",
-                serde_json::from_value(data["invocation"].clone()).unwrap(),
+                serde_json::from_value(definition).unwrap(),
             )
             .unwrap();
         for binding in data["bindings"].as_object().unwrap().values() {
@@ -592,6 +610,11 @@ fn durable(root: &Path, task: &str) -> Result<Value, Failure> {
     )
 }
 fn capture(root: &Path, task: &str, counters: &Counters, prefix: &str) -> Result<(), Failure> {
+    task_input_source::export(
+        &TaskCoordinator::new(SqliteFactJournal::open(root.join("ledger.sqlite"))?),
+        task,
+        &root.join(format!("{prefix}.input-sources.jsonl")),
+    )?;
     let actual = durable(root, task)?;
     write_jsonl(
         root.join(format!("{prefix}.task.jsonl")),

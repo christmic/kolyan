@@ -293,9 +293,13 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
         .await
         .unwrap();
     let approval_id = match awaiting {
-        kolyan_runtime::DurableTurnResult::AwaitingApproval { approval, .. } => {
-            approval.approval_id
-        }
+        kolyan_runtime::DurableTurnResult::Suspended { suspension, .. } => suspension
+            .waiting
+            .approvals
+            .first()
+            .unwrap()
+            .approval_id
+            .clone(),
         kolyan_runtime::DurableTurnResult::Completed(_, _) => panic!("approval expected"),
     };
     let suspended = FileSessionStore::new(&session_path)
@@ -314,7 +318,7 @@ async fn session_execution_persists_suspension_and_resumes_after_rebuild() {
         SessionService::new(FileSessionStore::new(&session_path).unwrap()),
     );
     reopened
-        .resume(
+        .resume_approval(
             executor(),
             "approval-session",
             "approval-execution",
@@ -410,7 +414,7 @@ async fn session_execution_marks_failure_and_external_cancel() {
         .unwrap();
     assert!(matches!(
         awaiting,
-        kolyan_runtime::DurableTurnResult::AwaitingApproval { .. }
+        kolyan_runtime::DurableTurnResult::Suspended { .. }
     ));
     service
         .cancel(&ExecutionRef {

@@ -228,7 +228,7 @@ fn scenario(config: &Path, directory: &Path, exact_stream: bool) {
             .join(case["path"].as_str().unwrap())
             .exists()
     );
-    let approval_id = paused["approval"]["approval_id"].clone();
+    let approval_id = contract::pending_approval_id(&paused);
     let prefix = process.rpc("execution.events", first_key.clone());
     let prefix_events = prefix["events"].as_array().unwrap();
     let prefix_stream = prefix_events
@@ -244,10 +244,9 @@ fn scenario(config: &Path, directory: &Path, exact_stream: bool) {
     let resume_cursor = prefix["next_cursor"].clone();
     drop(process); // Kill the actual service process while approval is pending.
     let mut process = Process::start(config, directory);
-    assert_eq!(
-        process.rpc("execution.status", first_key.clone())["state"],
-        "Suspended"
-    );
+    let restored = process.rpc("execution.status", first_key.clone());
+    assert_eq!(restored["state"], "Suspended");
+    assert_eq!(restored["waiting"], paused["waiting"]);
     let mut approve = first_key.clone();
     approve["approval_id"] = approval_id;
     let completed = process.rpc("execution.approve", approve);
@@ -343,7 +342,7 @@ fn repeat_scenario(config: &Path, directory: &Path, exact_stream: bool) {
     for _ in 0..2 {
         assert_eq!(response["result"]["state"], "Suspended", "{response}");
         let mut approve = key.clone();
-        approve["approval_id"] = response["result"]["approval"]["approval_id"].clone();
+        approve["approval_id"] = contract::pending_approval_id(&response["result"]);
         response = process.rpc_response("execution.approve", approve);
     }
     assert!(
@@ -415,7 +414,7 @@ fn cancel_scenario(config: &Path, directory: &Path, exact_stream: bool) {
     assert_eq!(status["state"], "Cancelled");
     assert_eq!(status["execution_stopped"], true);
     let mut resume = key.clone();
-    resume["approval_id"] = suspended["approval"]["approval_id"].clone();
+    resume["approval_id"] = contract::pending_approval_id(&suspended);
     assert!(
         process
             .rpc_response("execution.approve", resume)

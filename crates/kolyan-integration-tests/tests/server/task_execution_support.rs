@@ -1,4 +1,6 @@
 //! Shared fixture-driven service reconstruction, evidence capture and comparison.
+#[path = "task_input_source.rs"]
+mod task_input_source;
 
 use std::{fs, io::Write, path::Path, sync::Arc};
 
@@ -32,6 +34,11 @@ impl Drop for EvidenceCapture<'_> {
 
 fn capture_evidence(root: &Path, data: &Value) -> Result<(), Box<dyn std::error::Error>> {
     let journal = SqliteFactJournal::open(root.join("ledger.sqlite"))?;
+    task_input_source::export(
+        &TaskCoordinator::new(journal.clone()),
+        data["task_id"].as_str().unwrap(),
+        &root.join("actual-input-sources.jsonl"),
+    )?;
     let ledger = SqliteLedger::open(root.join("ledger.sqlite"))?;
     let mut file = fs::File::create(root.join("actual-task.jsonl"))?;
     let mut after = 0;
@@ -82,7 +89,7 @@ fn constraints() -> String {
     "a".repeat(64)
 }
 
-fn binding(case: &Value) -> AttemptBinding {
+fn binding(case: &Value, input_source: InvocationInputSource) -> AttemptBinding {
     AttemptBinding {
         attempt_id: case["attempt_id"].as_str().unwrap().into(),
         invocation_id: case["invocation_id"].as_str().unwrap().into(),
@@ -93,7 +100,40 @@ fn binding(case: &Value) -> AttemptBinding {
         },
         agent: identity(),
         constraints_digest: constraints(),
+        input_source,
     }
+}
+
+fn model_request(
+    data: &Value,
+    case: &Value,
+    family: &str,
+    model: &str,
+    max_output: Option<u32>,
+) -> ModelRequest {
+    serde_json::from_value(json!({"request_id":case["turn_id"],"model":{"provider":family,"model":model},
+        "system":[{"text":data["system"],"cache":false}],"messages":[{"role":"user","content":[{"type":"text","text":case["input"]}]}],
+        "tools":RestrictedFileTool::tool_definitions(),"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,"max_output_tokens":max_output,"extensions":{}})).unwrap()
+}
+
+/// This Server fixture publishes its actual host request, not Agent-owned input.
+fn publish_source(
+    service: &Service,
+    task: &str,
+    inv: &Value,
+    request: ModelRequest,
+) -> InvocationInputSource {
+    let role: InvocationRole = serde_json::from_value(inv["role"].clone()).unwrap();
+    let dependencies = if role == InvocationRole::Continuation {
+        vec![inv["parent"].as_str().unwrap()]
+    } else {
+        vec![]
+    };
+    let definition = json!({
+        "invocation_id":inv["id"],"role":inv["role"],"parent_invocation_id":inv["parent"],
+        "dependencies":dependencies,"agent":identity(),"constraints_digest":constraints(),
+    });
+    task_input_source::publish(service.coordinator(), task, &definition, request)
 }
 
 fn executor<P: ModelProvider>(
@@ -157,6 +197,18 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
             continue;
         }
         let id = inv["id"].as_str().unwrap();
+        let case = data["cases"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|case| case["invocation_id"] == id)
+            .unwrap();
+        let input_source = publish_source(
+            &initial,
+            task,
+            inv,
+            model_request(data, case, family, model, max_output),
+        );
         initial
             .coordinator()
             .admit_invocation(
@@ -169,6 +221,7 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
                     role: serde_json::from_value(inv["role"].clone()).unwrap(),
                     parent_invocation_id: inv["parent"].as_str().map(str::to_owned),
                     dependencies: vec![],
+                    input_source,
                 },
             )
             .unwrap();
@@ -181,8 +234,28 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
     }
     drop(initial);
     for case in data["cases"].as_array().unwrap() {
-        let bound = binding(case);
         let current = service(root);
+        let input_source = if case["admit"] == "after_parent" {
+            let inv = data["invocations"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|inv| inv["id"] == case["invocation_id"])
+                .unwrap();
+            publish_source(
+                &current,
+                task,
+                inv,
+                model_request(data, case, family, model, max_output),
+            )
+        } else {
+            current.coordinator().snapshot(task).unwrap().invocations
+                [case["invocation_id"].as_str().unwrap()]
+            .definition
+            .input_source
+            .clone()
+        };
+        let bound = binding(case, input_source);
         if case["admit"] == "after_parent" {
             let snapshot = current.coordinator().snapshot(task).unwrap();
             let parent = &snapshot.invocations["root"];
@@ -199,6 +272,7 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
                         role: InvocationRole::Continuation,
                         parent_invocation_id: Some("root".into()),
                         dependencies: vec!["root".into()],
+                        input_source: bound.input_source.clone(),
                     },
                 )
                 .unwrap();
@@ -230,9 +304,7 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
                 .create(&bound.execution.session_id)
                 .unwrap();
         }
-        let request:ModelRequest=serde_json::from_value(json!({"request_id":bound.execution.turn_id,"model":{"provider":family,"model":model},
-            "system":[{"text":data["system"],"cache":false}],"messages":[{"role":"user","content":[{"type":"text","text":case["input"]}]}],
-            "tools":RestrictedFileTool::tool_definitions(),"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,"max_output_tokens":max_output,"extensions":{}})).unwrap();
+        let request = model_request(data, case, family, model, max_output);
         let (_, mut result) = current
             .run(
                 task,
@@ -250,9 +322,10 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
             .await
             .unwrap();
         if case["approval"] == true {
-            let DurableTurnResult::AwaitingApproval { approval, .. } = result else {
+            let DurableTurnResult::Suspended { suspension, .. } = result else {
                 panic!("expected task approval");
             };
+            let approval = suspension.waiting.approvals.first().unwrap();
             assert!(
                 !root
                     .join("workspace")
@@ -278,7 +351,7 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
                 }
                 assert!(
                     rebuilt
-                        .resume(
+                        .resume_approval(
                             task,
                             rejected,
                             &rejected_approval,
@@ -298,7 +371,7 @@ pub(super) async fn run_task<P: ModelProvider, F: Fn(&Value) -> P>(
                 );
             }
             let (_, resumed) = rebuilt
-                .resume(
+                .resume_approval(
                     task,
                     bound.clone(),
                     &approval.approval_id,

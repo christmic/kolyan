@@ -9,7 +9,7 @@ use kolyan_storage::{FileSessionStore, SessionStore};
 use reqwest::Method;
 use serde_json::{Value, json};
 
-use super::{Process, common, setup};
+use super::{Process, common, schema, setup};
 
 fn fixture() -> Value {
     serde_json::from_str(include_str!("../../fixtures/server_ledger_live.json")).unwrap()
@@ -149,14 +149,12 @@ async fn live_isolation(directory: &Path, cases: &[Value]) {
             )
             .await;
         if case["approve"] == true {
+            let pending = schema::single_approval(&result);
             assert_eq!(result["state"], "suspended", "{result}");
             assert_eq!(result["execution_stopped"], true);
+            assert_eq!(pending["tool_name"], case["expected"]["tool"]);
             assert_eq!(
-                result["pending_approval"]["tool_name"],
-                case["expected"]["tool"]
-            );
-            assert_eq!(
-                result["pending_approval"]["arguments"],
+                pending["arguments"],
                 json!({"path":case["path"],"content":case["marker"]})
             );
             assert!(
@@ -173,10 +171,7 @@ async fn live_isolation(directory: &Path, cases: &[Value]) {
                         LedgerEventKind::EffectStarted | LedgerEventKind::EffectReceipt
                     ))
             );
-            let approval = result["pending_approval"]["approval_id"]
-                .as_str()
-                .unwrap()
-                .to_owned();
+            let approval = pending["approval_id"].as_str().unwrap().to_owned();
             if case["restart_pending"] == true {
                 drop(process);
                 process = Process::start(directory);
@@ -315,7 +310,9 @@ fn verify_execution(directory: &Path, case: &Value, result: &Value) {
     assert_eq!(result["end_reason"], expected["end_reason"]);
     assert_eq!(result["execution_stopped"], true);
     assert_eq!(result["recovery_required"], false);
-    assert!(result["pending_approval"].is_null());
+    assert_eq!(result["pending_approvals"], json!([]));
+    assert_eq!(result["external_waits"], json!([]));
+    assert!(result["checkpoint_id"].is_null());
     let steps = result["steps"].as_array().unwrap();
     assert!(steps.len() as u64 >= expected["minimum_steps"].as_u64().unwrap());
     let text = steps.last().unwrap()["content"]

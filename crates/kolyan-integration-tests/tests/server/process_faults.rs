@@ -180,11 +180,11 @@ impl ToolExecutor for EffectTool {
                 })?;
             file.write_all(b"once").unwrap();
             file.sync_all().unwrap();
-            Ok(ToolResult {
+            Ok(kolyan_core::ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "once".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }

@@ -3,6 +3,27 @@
 use kolyan_model::{ContentBlock, ModelRequest, ToolResult};
 use serde_json::Value;
 
+#[path = "process_contract/tests.rs"]
+mod tests;
+
+/// These scenarios require one approval; mixed external waits remain visible.
+pub(super) fn pending_approval_id(result: &Value) -> Value {
+    assert_eq!(result["state"], "Suspended");
+    assert!(
+        result.get("approval").is_none(),
+        "no legacy RPC approval field"
+    );
+    let waiting = &result["waiting"];
+    assert!(!waiting["checkpoint_id"].as_str().unwrap().is_empty());
+    assert!(waiting["external_waits"].is_array());
+    let approvals = waiting["pending_approvals"].as_array().unwrap();
+    assert_eq!(approvals.len(), 1, "scenario requires one exact approval");
+    assert!(approvals[0].get("expires_at_ms").is_some());
+    let id = approvals[0]["approval_id"].as_str().unwrap();
+    assert!(!id.is_empty(), "approval ID must not be empty");
+    Value::String(id.to_owned())
+}
+
 pub(super) fn save_ledger(directory: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
     use kolyan_ledger::LedgerStore;
     use std::io::Write;

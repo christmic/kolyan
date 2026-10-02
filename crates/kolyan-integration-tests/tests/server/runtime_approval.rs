@@ -1,4 +1,6 @@
 use futures_util::stream;
+#[path = "../common/approval_decision.rs"]
+mod approval_decision;
 use kolyan_core::{TurnConfig, TurnExecutor, TurnRequest};
 use kolyan_ledger::{FileLedger, LedgerStore};
 use kolyan_model::{
@@ -186,8 +188,8 @@ async fn server_runtime_multi_step_approval_survives_server_rebuild() {
         )
         .await
         .expect("first Runtime attempt should suspend for approval");
-    let approval_id = match awaiting {
-        DurableTurnResult::AwaitingApproval { approval, .. } => approval.approval_id.clone(),
+    let suspension = match awaiting {
+        DurableTurnResult::Suspended { suspension, .. } => suspension,
         DurableTurnResult::Completed(_, _) => panic!("expected an approval checkpoint"),
     };
     assert_eq!(*provider.calls.lock().unwrap(), 1, "first model step only");
@@ -195,11 +197,11 @@ async fn server_runtime_multi_step_approval_survives_server_rebuild() {
         !root.join(&case.path).exists(),
         "approval must precede side effect"
     );
+    first_server.release(&case.execution_id);
     assert_eq!(
         first_server.state(&case.execution_id).unwrap(),
         ExecutionState::Suspended
     );
-    first_server.release(&case.execution_id);
     drop(first_driver);
     drop(first_server);
 
@@ -209,12 +211,22 @@ async fn server_runtime_multi_step_approval_survives_server_rebuild() {
         FileLedger::open(&ledger_path).unwrap(),
         VecTraceSink::default(),
     );
+    let confirmation = approval_decision::confirm(
+        second_driver.ledger(),
+        kolyan_types::ExecutionKey {
+            session_id: case.session_id.clone(),
+            turn_id: case.turn_id.clone(),
+            execution_id: case.execution_id.clone(),
+        },
+        &suspension,
+    );
     let completed = second_driver
         .resume(
             executor(provider.clone(), &root, policy),
             &case.session_id,
             &case.execution_id,
-            &approval_id,
+            &suspension.checkpoint.checkpoint_id,
+            kolyan_core::ResumeInput::ApprovalConfirmed(confirmation),
         )
         .await
         .expect("resumed Runtime attempt should complete");

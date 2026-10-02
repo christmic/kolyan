@@ -5,6 +5,7 @@ mod common;
 #[path = "../common/matrix.rs"]
 #[allow(dead_code)]
 mod matrix;
+mod task_input_source;
 
 use std::{
     collections::BTreeSet,
@@ -139,6 +140,11 @@ struct Capture {
 impl Capture {
     fn save(&self) -> Result<(), Box<dyn std::error::Error>> {
         let journal = SqliteFactJournal::open(self.root.join("ledger.sqlite"))?;
+        task_input_source::export(
+            &TaskCoordinator::new(journal.clone()),
+            &self.task,
+            &self.root.join("actual-input-sources.jsonl"),
+        )?;
         let ledger = SqliteLedger::open(self.root.join("ledger.sqlite"))?;
         let mut out = fs::File::create(self.root.join("actual-task.jsonl"))?;
         let mut after = 0;
@@ -192,14 +198,16 @@ async fn run_case(
     )
     .unwrap();
     let task = data["task_id"].as_str().unwrap();
-    let binding: AttemptBinding = serde_json::from_value(json!({
-        "attempt_id":data["attempt_id"],"invocation_id":"nested-delegate","execution":data["execution"],
-        "agent":data["invocations"][2]["agent"],"constraints_digest":data["constraints_digest"]
+    let execution: ExecutionRef = serde_json::from_value(data["execution"].clone()).unwrap();
+    let request: ModelRequest = serde_json::from_value(json!({
+        "request_id":execution.turn_id,"model":{"provider":family,"model":model},
+        "system":[{"text":data["system"],"cache":false}],"messages":[{"role":"user","content":[{"type":"text","text":data["input"]}]}],
+        "tools":RestrictedFileTool::tool_definitions(),"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,"max_output_tokens":max_output,"extensions":{}
     })).unwrap();
     let capture = Capture {
         root: root.into(),
         task: task.into(),
-        execution: binding.execution.execution_id.clone(),
+        execution: execution.execution_id.clone(),
     };
     fs::write(
         root.join("expected.json"),
@@ -216,7 +224,7 @@ async fn run_case(
                 objective: data["objective"].as_str().unwrap().into(),
                 criteria: vec![CompletionCriterion::ExecutionCompleted {
                     id: "nested-result".into(),
-                    invocation_id: binding.invocation_id.clone(),
+                    invocation_id: "nested-delegate".into(),
                 }],
                 agent: serde_json::from_value(data["agent"].clone()).unwrap(),
                 constraints_digest: data["constraints_digest"].as_str().unwrap().into(),
@@ -228,6 +236,13 @@ async fn run_case(
     for inv in data["invocations"].as_array().unwrap() {
         let mut inv = inv.clone();
         inv["constraints_digest"] = data["constraints_digest"].clone();
+        inv["input_source"] = serde_json::to_value(task_input_source::publish(
+            initial.coordinator(),
+            task,
+            &inv,
+            request.clone(),
+        ))
+        .unwrap();
         initial
             .coordinator()
             .admit_invocation(
@@ -240,13 +255,18 @@ async fn run_case(
     initial
         .sessions()
         .sessions()
-        .create(&binding.execution.session_id)
+        .create(&execution.session_id)
         .unwrap();
-    let request: ModelRequest = serde_json::from_value(json!({
-        "request_id":binding.execution.turn_id,"model":{"provider":family,"model":model},
-        "system":[{"text":data["system"],"cache":false}],"messages":[{"role":"user","content":[{"type":"text","text":data["input"]}]}],
-        "tools":RestrictedFileTool::tool_definitions(),"tool_choice":"auto","output_format":null,"prompt_cache":null,"reasoning":null,"max_output_tokens":max_output,"extensions":{}
-    })).unwrap();
+    let input_source = initial.coordinator().snapshot(task).unwrap().invocations["nested-delegate"]
+        .definition
+        .input_source
+        .clone();
+    let binding: AttemptBinding = serde_json::from_value(json!({
+        "attempt_id":data["attempt_id"],"invocation_id":"nested-delegate","execution":execution,
+        "agent":data["invocations"][2]["agent"],"constraints_digest":data["constraints_digest"],
+        "input_source":input_source
+    }))
+    .unwrap();
     let (_, paused) = initial
         .run(
             task,
@@ -263,9 +283,10 @@ async fn run_case(
         )
         .await
         .unwrap();
-    let DurableTurnResult::AwaitingApproval { approval, .. } = paused else {
+    let DurableTurnResult::Suspended { suspension, .. } = paused else {
         panic!("model must actually request the registered write and suspend for approval");
     };
+    let approval = suspension.waiting.approvals.first().unwrap();
     assert_eq!(approval.tool_name, data["offline_call"]["name"]);
     let before = initial.coordinator().snapshot(task).unwrap();
     assert_eq!(
@@ -289,9 +310,18 @@ async fn run_case(
     let restored = restarted
         .sessions()
         .execution()
-        .load_approval(&binding.execution.execution_id, &approval.approval_id)
+        .load_current_suspension(&binding.execution.execution_id)
         .unwrap();
-    assert_eq!(restored, *approval);
+    assert_eq!(
+        restored
+            .waiting
+            .approvals
+            .iter()
+            .find(|saved| saved.approval_id == approval.approval_id)
+            .unwrap(),
+        approval
+    );
+    assert_eq!(restored, *suspension);
     let cancelled = restarted
         .cancel(task, "cancel-task", data["cancel_reason"].as_str().unwrap())
         .unwrap();
@@ -305,7 +335,7 @@ async fn run_case(
     let reopened = service(root);
     assert_eq!(reopened.coordinator().snapshot(task).unwrap(), cancelled);
     let resume = reopened
-        .resume(
+        .resume_approval(
             task,
             binding.clone(),
             &approval.approval_id,

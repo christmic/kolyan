@@ -1,4 +1,5 @@
 //! Deterministic SQLite service governance, not live Provider evidence.
+mod task_input_source;
 
 use std::{
     fs,
@@ -115,10 +116,19 @@ fn executor(
     .with_policy_engine(policy)
 }
 
-fn binding(data: &Value, inv: &Value) -> AttemptBinding {
+fn binding(root: &Path, data: &Value, inv: &Value) -> AttemptBinding {
+    let input_source = service(root, data)
+        .coordinator()
+        .snapshot(task(data))
+        .unwrap()
+        .invocations[inv["definition"]["invocation_id"].as_str().unwrap()]
+    .definition
+    .input_source
+    .clone();
     serde_json::from_value(json!({
         "attempt_id":inv["attempt_id"],"invocation_id":inv["definition"]["invocation_id"],
-        "execution":inv["execution"],"agent":data["task"]["agent"],"constraints_digest":data["task"]["constraints_digest"]
+        "execution":inv["execution"],"agent":data["task"]["agent"],"constraints_digest":data["task"]["constraints_digest"],
+        "input_source":input_source
     })).unwrap()
 }
 
@@ -170,6 +180,13 @@ fn setup(root: &Path, data: &Value, case: &Value) -> Service {
         let mut definition = inv["definition"].clone();
         definition["agent"] = data["task"]["agent"].clone();
         definition["constraints_digest"] = data["task"]["constraints_digest"].clone();
+        definition["input_source"] = serde_json::to_value(task_input_source::publish(
+            current.coordinator(),
+            task(data),
+            &definition,
+            request(data, inv).model_request,
+        ))
+        .unwrap();
         current
             .coordinator()
             .admit_invocation(
@@ -193,6 +210,12 @@ fn task(data: &Value) -> &str {
 
 fn evidence(root: &Path, data: &Value, label: &str) -> (Value, Value) {
     let journal = SqliteFactJournal::open(root.join("ledger.sqlite")).unwrap();
+    task_input_source::export(
+        &TaskCoordinator::new(journal.clone()),
+        task(data),
+        &root.join(format!("{label}-input-sources.jsonl")),
+    )
+    .unwrap();
     let facts = journal.read(task(data), 0, 1024).unwrap();
     let ledger = SqliteLedger::open(root.join("ledger.sqlite")).unwrap();
     let events = ledger.events_after(0).unwrap();
@@ -254,7 +277,7 @@ async fn approvals(root: &Path, data: &Value, case: &Value) {
         let result = current
             .run(
                 task(data),
-                binding(data, inv),
+                binding(root, data, inv),
                 executor(
                     provider(data, inv, &data["response"]["usage"], Arc::default()),
                     root,
@@ -265,16 +288,17 @@ async fn approvals(root: &Path, data: &Value, case: &Value) {
             .await;
         evidence(root, data, &format!("suspend-{id}"));
         let (_, result) = result.unwrap();
-        let DurableTurnResult::AwaitingApproval { approval, .. } = result else {
+        let DurableTurnResult::Suspended { suspension, .. } = result else {
             panic!("expected approval");
         };
+        let approval = suspension.waiting.approvals.first().unwrap();
         assert!(
             !root
                 .join("workspace")
                 .join(inv["path"].as_str().unwrap())
                 .exists()
         );
-        approvals.insert(id.to_owned(), approval.approval_id);
+        approvals.insert(id.to_owned(), approval.approval_id.clone());
     }
     let saved = current.coordinator().snapshot(task(data)).unwrap();
     drop(current);
@@ -283,7 +307,8 @@ async fn approvals(root: &Path, data: &Value, case: &Value) {
     assert_eq!(rebuilt.coordinator().snapshot(task(data)).unwrap(), saved);
     for guard in case["guards"].as_array().unwrap() {
         let id = guard["invocation"].as_str().unwrap();
-        let mut bound = serde_json::to_value(binding(data, &data["invocations"][id])).unwrap();
+        let mut bound =
+            serde_json::to_value(binding(root, data, &data["invocations"][id])).unwrap();
         for (key, value) in guard["patch"].as_object().unwrap() {
             bound[key] = value.clone();
         }
@@ -293,7 +318,7 @@ async fn approvals(root: &Path, data: &Value, case: &Value) {
             &format!("before-{}", guard["name"].as_str().unwrap()),
         );
         let result = rebuilt
-            .resume(
+            .resume_approval(
                 task(data),
                 serde_json::from_value(bound).unwrap(),
                 &approvals[id],
@@ -340,9 +365,9 @@ async fn approvals(root: &Path, data: &Value, case: &Value) {
         let current = service(root, data);
         let before = evidence(root, data, &format!("before-resume-{id}"));
         let result = current
-            .resume(
+            .resume_approval(
                 task(data),
-                binding(data, inv),
+                binding(root, data, inv),
                 &approvals[id],
                 executor(
                     provider(data, inv, &data["response"]["usage"], Arc::default()),
@@ -430,7 +455,7 @@ async fn artifacts(root: &Path, data: &Value, case: &Value) {
     let result = current
         .run(
             task(data),
-            binding(data, inv),
+            binding(root, data, inv),
             executor(scripted, root, data),
             request(data, inv),
         )
@@ -445,7 +470,7 @@ async fn artifacts(root: &Path, data: &Value, case: &Value) {
         panic!("actual execution did not complete");
     };
     assert!(
-        matches!(&proofs[0], CompletionEvidence::VerifiedArtifact { source, sha256, byte_len, .. } if source.execution == binding(data, inv).execution && sha256 == &reference.digest && *byte_len == bytes.len() as u64)
+        matches!(&proofs[0], CompletionEvidence::VerifiedArtifact { source, sha256, byte_len, .. } if source.execution == binding(root, data, inv).execution && sha256 == &reference.digest && *byte_len == bytes.len() as u64)
     );
     let path = root.join("artifacts").join(&reference.digest);
     match case["mutation"].as_str().unwrap() {
@@ -483,7 +508,7 @@ async fn quotas(root: &Path, data: &Value, case: &Value) {
     let result = current
         .run(
             task(data),
-            binding(data, first),
+            binding(root, data, first),
             executor(
                 provider(data, first, &case["usage"], calls.clone()),
                 root,
@@ -500,7 +525,7 @@ async fn quotas(root: &Path, data: &Value, case: &Value) {
     let result = service(root, data)
         .run(
             task(data),
-            binding(data, blocked),
+            binding(root, data, blocked),
             executor(
                 provider(data, blocked, &case["usage"], calls.clone()),
                 root,

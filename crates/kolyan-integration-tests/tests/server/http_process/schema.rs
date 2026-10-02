@@ -2,6 +2,16 @@
 //! This is not an OpenAPI document validator or a general JSON Schema engine.
 use super::*;
 
+#[path = "schema/tests.rs"]
+mod tests;
+
+pub(super) fn single_approval(value: &Value) -> &Value {
+    let pending = value["pending_approvals"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "scenario requires exactly one approval");
+    assert!(!pending[0]["approval_id"].as_str().unwrap().is_empty());
+    &pending[0]
+}
+
 pub(super) fn response(value: &Value, status: u16, path: &str) {
     let document: Value = serde_json::from_str(include_str!(
         "../../../../../schemas/server-http.openapi.json"

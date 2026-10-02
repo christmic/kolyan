@@ -3,6 +3,8 @@
 //! This is intentionally ignored in ordinary workspace tests. Run it with
 //! `--ignored` after exporting the project-local test credentials.
 
+#[path = "../common/approval_decision.rs"]
+mod approval_decision;
 #[path = "../common/mod.rs"]
 mod common;
 
@@ -120,20 +122,20 @@ where
         )
         .await
         .unwrap_or_else(|error| panic!("[{label}] runtime start failed: {error}"));
-    let approval_id = match awaiting {
-        DurableTurnResult::AwaitingApproval { approval, .. } => approval.approval_id.clone(),
+    let suspension = match awaiting {
+        DurableTurnResult::Suspended { suspension, .. } => suspension,
         DurableTurnResult::Completed(_, _) => panic!("[{label}] expected approval suspension"),
     };
     assert!(
         !safe.join("allowed.txt").exists(),
         "[{label}] approval must precede side effect"
     );
+    first_server.release(&execution_id);
     assert_eq!(
         first_server.state(&execution_id).unwrap(),
         ExecutionState::Suspended,
         "[{label}] server must observe suspension"
     );
-    first_server.release(&execution_id);
     drop(first_driver);
     drop(first_server);
 
@@ -145,18 +147,28 @@ where
         FileLedger::open(&ledger_path).unwrap(),
         VecTraceSink::default(),
     );
+    let confirmation = approval_decision::confirm(
+        second_driver.ledger(),
+        kolyan_types::ExecutionKey {
+            session_id: session_id.clone(),
+            turn_id: execution.turn_id.clone(),
+            execution_id: execution_id.clone(),
+        },
+        &suspension,
+    );
     let completed = second_driver
         .resume(
             live_executor(provider.clone(), &root, policy),
             &session_id,
             &execution_id,
-            &approval_id,
+            &suspension.checkpoint.checkpoint_id,
+            kolyan_core::ResumeInput::ApprovalConfirmed(confirmation),
         )
         .await
         .unwrap_or_else(|error| panic!("[{label}] runtime resume failed: {error}"));
     let execution_result = match completed {
         DurableTurnResult::Completed(execution, _) => *execution,
-        DurableTurnResult::AwaitingApproval { .. } => {
+        DurableTurnResult::Suspended { .. } => {
             panic!("[{label}] expected completion after approval")
         }
     };
