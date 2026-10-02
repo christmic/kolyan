@@ -2,7 +2,9 @@
 //! content artifacts. None of these diagnostics grants execution authority.
 
 mod artifacts;
-pub use artifacts::{ArtifactError, ArtifactRef, ArtifactStore, Retention};
+pub use artifacts::{
+    ArtifactError, ArtifactRange, ArtifactRangeLimits, ArtifactRef, ArtifactStore, Retention,
+};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

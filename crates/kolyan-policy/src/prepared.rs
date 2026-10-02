@@ -10,6 +10,7 @@ use thiserror::Error;
 use crate::{ExecutionConstraints, InvocationClaim, PolicyDecision, PolicyDecisionKind};
 
 mod canonical;
+mod fingerprint;
 
 /// Trusted execution coordinates, independent of reusable model tool-call IDs.
 /// Agent snapshots are optional only for non-Agent executions; scope is mandatory.
@@ -218,6 +219,16 @@ impl PreparedCall {
 }
 
 impl PreparedGrant {
+    /// Bounded, versioned content fingerprint of every serialized grant field.
+    /// This does not validate or issue authority. Callers must independently
+    /// verify issuance, scope, current policy and execution provenance.
+    /// `max_bytes` includes the fingerprint domain and canonical JSON and must
+    /// be 1..=1,048,576. String preflight precedes JSON allocation; the bound is
+    /// encoded content size, not an exact allocator-memory limit.
+    pub fn fingerprint(&self, max_bytes: usize) -> Result<String, PreparedError> {
+        fingerprint::compute(self, max_bytes)
+    }
+
     /// Issue after Allow or exact approval evidence verified by the trusted host.
     pub fn issue(
         prepared: &PreparedCall,

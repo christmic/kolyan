@@ -200,3 +200,29 @@ reuse bounded caches, serialize gates sharing a target, measure disk use, and
 clean only confirmed inactive build artifacts. Keep source and experiment proof
 outside disposable caches. This is part of the development workflow, not a
 replacement for any E0–E5 implementation or actual-model acceptance requirement.
+
+## Integrated regression and MiniMax checkpoint
+
+On 2026-10-03, the joint integration tree passed the full offline workspace:
+937 tests passed, zero failed and 69 were ignored. All-target warning-denied
+Clippy, formatting and diff checks also passed. Ignored tests were not silently
+counted as acceptance. Evidence is retained in
+`/tmp/kolyan-opening-main-workspace-tests-v3.log` and
+`/tmp/kolyan-opening-main-strict-v7.log`; failed earlier receipts remain intact.
+
+The separately authorized MiniMax-M3 live gate then passed eight scenario rows:
+OpenAI-compatible and Anthropic-compatible protocols, each with named and inline
+roots, for ordinary execution and approval reconstruction. Each approval row
+executed two independent Turns and four actual suspension/Host-rebuild/resume
+cycles. The four physical approval traces were independently reread against the
+ordered dataset and exact actual-request/Ledger pairing. Each scenario had one
+attempt; no scenario retry replaced a failure. The process completed with two
+test functions passed and zero failures in 203.05 seconds.
+The live log is `/tmp/kolyan-opening-main-minimax-root-restart-v1.log`.
+
+This checkpoint verifies the existing Agent Runner, SDK providers and native
+tool/approval reconstruction paths in the acceptance harness. It does not prove
+the pending CLI product, all configured model deployments, complete MCP/Hook
+host integration, output publication/ACL, memory or E4 coordination increments.
+Nor is it an experimental self-edit result. Those requirements retain their
+own implementation and real-consumer gates; the full program remains open.

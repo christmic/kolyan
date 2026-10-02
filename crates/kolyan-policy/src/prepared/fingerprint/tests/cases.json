@@ -1,0 +1,206 @@
+{
+  "base": {
+    "scope": {
+      "execution": {
+        "session_id": "session",
+        "turn_id": "turn",
+        "execution_id": "execution"
+      },
+      "step_id": "step",
+      "agent_snapshot_digest": null
+    },
+    "call_id": "native/调用",
+    "tool_name": "shell",
+    "tool_revision": "adapter/v1",
+    "prepared_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "policy_revision": "policy/v1",
+    "constraints": {
+      "max_output_bytes": 4096,
+      "timeout_ms": 30000
+    },
+    "approval_evidence_id": null
+  },
+  "golden": {
+    "canonical": "{\"approval_evidence_id\":null,\"call_id\":\"native/调用\",\"constraints\":{\"max_output_bytes\":4096,\"timeout_ms\":30000},\"policy_revision\":\"policy/v1\",\"prepared_digest\":\"dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\",\"scope\":{\"agent_snapshot_digest\":null,\"execution\":{\"execution_id\":\"execution\",\"session_id\":\"session\",\"turn_id\":\"turn\"},\"step_id\":\"step\"},\"tool_name\":\"shell\",\"tool_revision\":\"adapter/v1\"}",
+    "hash": "3fb9d3e1198dcd16499e826df2f336dcbd00ea8b61da4bc9824fe8c3988e361c",
+    "bytes": 452
+  },
+  "rows": [
+    {
+      "id": "golden",
+      "max_bytes": 452,
+      "expect": "golden"
+    },
+    {
+      "id": "exact_minus_one",
+      "max_bytes": 451,
+      "expect": "error",
+      "message": "byte limit"
+    },
+    {
+      "id": "zero_bound",
+      "max_bytes": 0,
+      "expect": "error",
+      "message": "1..=1048576"
+    },
+    {
+      "id": "above_hard_cap",
+      "max_bytes": 1048577,
+      "expect": "error",
+      "message": "1..=1048576"
+    },
+    {
+      "id": "domain_too_small",
+      "max_bytes": 1,
+      "expect": "error",
+      "message": "domain"
+    },
+    {
+      "id": "raw_preflight",
+      "max_bytes": 100,
+      "expect": "error",
+      "message": "string preflight"
+    },
+    {
+      "id": "mutate_6",
+      "path": "/scope/execution/session_id",
+      "value": "session2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_7",
+      "path": "/scope/execution/turn_id",
+      "value": "turn2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_8",
+      "path": "/scope/execution/execution_id",
+      "value": "execution2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_9",
+      "path": "/scope/step_id",
+      "value": "step2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_10",
+      "path": "/scope/agent_snapshot_digest",
+      "value": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_11",
+      "path": "/call_id",
+      "value": "native/別",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_12",
+      "path": "/tool_name",
+      "value": "file.read",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_13",
+      "path": "/tool_revision",
+      "value": "adapter/v2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_14",
+      "path": "/prepared_digest",
+      "value": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_15",
+      "path": "/policy_revision",
+      "value": "policy/v2",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_16",
+      "path": "/constraints/max_output_bytes",
+      "value": 4097,
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_17",
+      "path": "/constraints/timeout_ms",
+      "value": 30001,
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_18",
+      "path": "/constraints/max_output_bytes",
+      "value": null,
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_19",
+      "path": "/constraints/timeout_ms",
+      "value": null,
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_20",
+      "path": "/approval_evidence_id",
+      "value": "approval/exact",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_21",
+      "path": "/approval_evidence_id",
+      "value": "approval/第二",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "mutate_22",
+      "path": "/call_id",
+      "value": "中🦀\n\"\\\u0000",
+      "max_bytes": 1048576,
+      "expect": "changed"
+    },
+    {
+      "id": "escaped_bound",
+      "path": "/call_id",
+      "value": "\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000",
+      "max_bytes": 452,
+      "expect": "error",
+      "message": "byte limit"
+    },
+    {
+      "id": "oversized_multibyte_preflight",
+      "path": "/policy_revision",
+      "repeat": "中",
+      "count": 400000,
+      "max_bytes": 1048576,
+      "expect": "error",
+      "message": "string preflight"
+    },
+    {
+      "id": "upper_bound_allowed",
+      "max_bytes": 1048576,
+      "expect": "golden"
+    }
+  ]
+}

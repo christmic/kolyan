@@ -2,13 +2,13 @@
 
 ## Status, scope and implementation gate
 
-Reviewed E2 design for requirement 0031. Trace-only bounded verified range
-implementation is released; Tools/Policy/Host interfaces require the additional
-contract freeze below before their implementation. No feature acceptance is
-claimed by this specification.
+Reviewed E2 design for requirement 0031. Trace range and grant fingerprint source
+batches are integrated in the joint development tree. The logical resource and
+Agent permission batch is released by its frozen contract below. Capture ceilings
+and Tools/Host output consumers remain separate implementation gates. No complete
+Shell output feature acceptance is claimed by this specification.
 Read-only source baseline: main `dfb0aebd2b9b17963b5b2d58e8762a126725897a`.
-Main owns canonical requirements, Policy/Agent permission changes and Host
-assembly. This independent candidate does not modify 0031 or any frozen source.
+Main owns canonical requirements, shared-interface review and Host assembly.
 Main must approve the permission, resource ceilings, provenance reader and ACL
 interfaces below before Trace/Tools implementation starts.
 
@@ -356,3 +356,92 @@ values, UTF-8/escaping and exact byte boundaries. Future capture constraints nee
 their own added cases when that separate field contract lands. Logical Artifact
 resources, capture-grant migration and Host consumers remain separate reviewed
 batches, not implicitly released by this fingerprint method.
+
+## Frozen logical resource and Agent permission contract
+
+This batch replaces the path-only ResourceClaim shape without a compatibility
+decoder. It adds `Capability::ArtifactRead` and keeps the existing `Effect::Read`.
+The strict internally tagged resource enum has exactly three variants:
+
+```rust
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ResourceClaim {
+    None,
+    Path { path: String },
+    Artifact { namespace: String, publication_id: String },
+}
+```
+
+Namespace and publication identity are 1 through 256 ASCII identifier bytes,
+using the existing execution-coordinate alphabet: letters, digits, `.`, `_`,
+`:` and `-`. They are host-resolved logical identities, not filesystem paths,
+digests, model handles or reader principals. Unknown variants, unknown fields
+and malformed Artifact coordinates reject. Path retains its existing adapter
+normalization and scope behavior; this change does not invent new file rights.
+
+Prepared validation requires an Artifact resource to have exactly ArtifactRead
+capability and Read effect. ArtifactRead with Path/None or any extra write/execute
+capability or effect rejects. Validation establishes framing only, not trusted
+lookup, independent grant issuance, completed output provenance or current ACL.
+The prepared digest schema advances from 2 to 3 for the new resource encoding.
+Existing grant fingerprints continue to cover the complete grant serialization;
+the logical resource is bound through its exact prepared digest.
+
+PolicyEngine keeps an initially empty set of allowed artifact namespaces. Its
+trusted configuration API is:
+
+```rust
+pub fn allow_artifact_namespace(&mut self, namespace: String)
+    -> Result<(), PolicyError>;
+pub fn revoke_artifact_namespace(&mut self, namespace: &str)
+    -> Result<bool, PolicyError>;
+```
+
+Both methods validate the same framing. Revoke returns whether an existing entry
+was removed. Invalid configuration fails without changing rules. Namespace set
+ordering must not affect the revision hash; allow/revoke of an effective rule
+changes the revision and makes grants for the previous revision unusable.
+The rule algorithm advances from `kolyan-policy-v3` to `kolyan-policy-v4`.
+Prepared artifact decisions still require a registered trusted manifest, matching
+capability/effect ceilings, remaining budget and existing deny/approval checks.
+The namespace gate is additional, not an ACL replacement. Path gates apply only
+to Path. A model ToolCall named artifact.read cannot obtain permission through
+raw-name inference: the raw decision path explicitly denies artifact.read.
+
+Agent adds `EnvironmentTool::ArtifactRead` with the exact wire name artifact.read.
+It participates in the existing static permission intersection and subset checks
+and in the real agent.invoke JSON schema. Definitions and inventories that list
+only the original four tools stay unchanged; no default permission is added.
+Delegation remains independent. Static artifact permission alone does not
+advertise an unavailable tool or authorize a particular publication.
+
+Batch conflict evaluation exhaustively matches resource kinds. Two read-only
+claims retain their existing parallel eligibility. Path writes retain existing
+same-path and ancestor conflicts. Artifact/None cannot prove disjointness from an
+unknown write footprint; such mixed cases conflict conservatively. Different
+publication IDs cannot be used to declare two Shell writes independent.
+EffectRecord.path remains file diagnostic data and is not converted to authority.
+
+### Migration and acceptance for the resource batch
+
+Sagan owns the isolated Policy implementation, Agent permission/schema changes,
+their separate tests and data, plus explicitly enumerated resource-shape caller
+migrations. Main reviews shared-file patches against the current joint tree and
+owns integration. This release does not authorize capture fields, output modes,
+ACL/publication code or a competing Tools fingerprint implementation.
+
+Migration must cover all Rust constructors, serialized preparation fixtures and
+actual adapters, not only new tests. Existing scenarios and effect assertions
+remain intact; no old-format alias, missing-field default or silent allow branch.
+New data-driven tests must prove strict parsing, every mixed-resource refusal,
+default namespace denial, explicit allow, revocation and stale grant rejection,
+stable configuration ordering, raw-call refusal, budget/deny/approval precedence,
+path boundary preservation and conservative mixed batch ordering. Agent tests
+must cover permission intersection, forbidden expansion, wire round trip and
+the actual invocation schema. Export and physically reread new case results.
+
+Acceptance requires the Policy/Agent modules, actual migrated Tools/Runtime/Server
+callers, unchanged old scenarios and whole-workspace strict checks. Private worker
+gates are review evidence, not mainline acceptance. Artifact publication, current
+ACL enforcement, targeted reads and the next ModelRequest remain mandatory later
+consumers; this resource batch alone does not complete E2.
