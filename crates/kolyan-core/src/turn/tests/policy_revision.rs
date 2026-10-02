@@ -58,13 +58,12 @@ async fn rule_change_rejects_old_approval_even_when_decision_kind_is_unchanged()
         .await
         .unwrap()
     {
-        ResumableTurn::AwaitingApproval(approval) => *approval,
+        ResumableTurn::Suspended(approval) => *approval,
         other => panic!("expected approval: {other:?}"),
     };
-    let approval_id = approval.approval_id.clone();
-    let error = executor
-        .with_policy_engine(Arc::new(changed))
-        .resume_approval(approval, &approval_id)
+    let approval_id = approval.waiting.approvals[0].approval_id.clone();
+    let executor = executor.with_policy_engine(Arc::new(changed));
+    let error = resume_confirmed(&executor, approval, &approval_id)
         .await
         .unwrap_err();
     assert!(matches!(error, TurnError::InvalidRequest {message} if message.contains("stale")));

@@ -82,56 +82,113 @@ fn state() -> RunState {
             },
         });
     }
-    state.pending = Some(PendingTools {
-        prepared: vec![super::super::tests::preparation::fixture_prepare(call.clone()).unwrap()],
-        preparation_errors: Vec::new(),
-        scope: Some(ToolExecutionScope {
-            execution: super::super::tests::preparation::fixture_key("checkpoint"),
-            step_id: "checkpoint-step-2".into(),
-            agent_snapshot_digest: None,
-        }),
-        batch: ToolCallBatch::try_from(vec![call]).unwrap(),
-        assistant_content: content,
-        approved: vec![],
-    });
+    for step in &state.steps[..2] {
+        append_tool_context(
+            &mut state.model_request.messages,
+            &step.response.content,
+            vec![ToolResult {
+                call_id: call.id.clone(),
+                content: "historical result".into(),
+                is_error: false,
+            }],
+        );
+    }
     state.tool_calls_used = 2;
+    let scope = ToolExecutionScope {
+        execution: super::super::tests::preparation::fixture_key("checkpoint"),
+        step_id: "checkpoint-step-2".into(),
+        agent_snapshot_digest: None,
+    };
+    let prepared = super::super::tests::preparation::fixture_prepare(call.clone()).unwrap();
+    state.pending = Some(
+        TurnCheckpoint::reconstruct(
+            CheckpointReconstruction {
+                scope: scope.clone(),
+                model_request: state.model_request.clone(),
+                input_message_count: 0,
+                steps: state.steps.clone(),
+                calls: vec![CheckpointCall {
+                    call,
+                    prepared: Some(prepared),
+                    charged: false,
+                    state: CheckpointCallState::Ready,
+                }],
+                stages: vec![vec!["reused-id".into()]],
+                stage_index: 0,
+                approvals: vec![],
+                budget: CheckpointBudget {
+                    max_steps: 4,
+                    max_tool_calls: Some(8),
+                    deadline_at_ms: state.deadline_at_ms,
+                    tool_timeout_ms: Some(1000),
+                    prior_tool_calls_used: 2,
+                    tool_calls_used: 2,
+                },
+                dispatch: state.dispatch,
+            },
+            &scope,
+        )
+        .unwrap(),
+    );
     state
 }
 
-fn checkpoint(state: &RunState) -> ApprovalRequest {
-    state.checkpoint(
-        &state.pending.as_ref().unwrap().batch.calls()[0],
-        "approve".into(),
-        "v1".into(),
-    )
+fn checkpoint(state: &RunState) -> TurnSuspension {
+    let mut checkpoint = state.pending.clone().unwrap();
+    checkpoint.scope.step_id = state.step_id();
+    checkpoint.steps = state.steps.clone();
+    checkpoint.next_step_index = state.steps.len();
+    checkpoint.model_request = state.model_request.clone();
+    checkpoint.budget.deadline_at_ms = state.deadline_at_ms;
+    checkpoint.budget.prior_tool_calls_used = state.tool_calls_used;
+    checkpoint.budget.tool_calls_used = state.tool_calls_used;
+    let prepared = checkpoint.calls[0].prepared.clone().unwrap();
+    checkpoint.approvals.push(CheckpointApproval {
+        approval_id: super::super::checkpoint::host_identity(
+            "approval",
+            &(&checkpoint.scope, prepared.digest()),
+        ),
+        reason: "approve".into(),
+        prepared,
+        scope: checkpoint.scope.clone(),
+        policy_revision: "v1".into(),
+        evidence_id: None,
+        expires_at_ms: None,
+    });
+    let scope = checkpoint.scope.clone();
+    TurnSuspension::from_checkpoint(checkpoint, &scope).unwrap()
 }
 
 #[test]
 fn checkpoint_preserves_original_deadline_indices_and_dispatch() {
     let state = state();
     let approval = checkpoint(&state);
-    let restored = RunState::restore(&approval).unwrap();
-    assert_eq!(approval.continuation.next_step_index, 3);
+    let restored = RunState::restore(&approval.checkpoint, &approval.checkpoint.scope).unwrap();
+    assert_eq!(approval.checkpoint.next_step_index, 3);
     assert_eq!(restored.deadline_at_ms, state.deadline_at_ms);
     assert_eq!(restored.dispatch, state.dispatch);
     assert_eq!(restored.tool_timeout, state.tool_timeout);
     assert_eq!(restored.tool_calls_used, 2);
     assert_eq!(
-        restored.pending.as_ref().unwrap().prepared,
-        state.pending.as_ref().unwrap().prepared
+        restored.pending.as_ref().unwrap().calls[0].prepared,
+        state.pending.as_ref().unwrap().calls[0].prepared
     );
     assert_eq!(
         restored.pending.as_ref().unwrap().scope,
         state.pending.as_ref().unwrap().scope
     );
-    assert!(approval.approval_id.contains("step-2"));
+    assert_eq!(approval.checkpoint.scope.step_id, "checkpoint-step-2");
 }
 
 #[test]
 fn checkpoint_does_not_replenish_elapsed_time() {
     let mut state = state();
     state.deadline_at_ms = Some(now_ms().saturating_sub(1));
-    let restored = RunState::restore(&checkpoint(&state)).unwrap();
+    let restored = RunState::restore(
+        &checkpoint(&state).checkpoint,
+        &checkpoint(&state).checkpoint.scope,
+    )
+    .unwrap();
     assert_eq!(restored.deadline_at_ms, state.deadline_at_ms);
     assert!(matches!(
         restored.check(&TurnControl::default()),
@@ -145,13 +202,16 @@ fn inconsistent_checkpoint_fields_are_rejected() {
     for mutation in 0..5 {
         let mut altered = approval.clone();
         match mutation {
-            0 => altered.continuation.next_step_index = 1,
-            1 => altered.continuation.max_steps = 2,
-            2 => altered.continuation.pending_calls[0].arguments = json!({"path":"other"}),
-            3 => altered.continuation.approved_call_ids = vec!["unknown".into()],
-            _ => altered.turn_id = "different-turn".into(),
+            0 => altered.checkpoint.next_step_index = 1,
+            1 => altered.checkpoint.budget.max_steps = 2,
+            2 => altered.checkpoint.calls[0].call.arguments = json!({"path":"other"}),
+            3 => altered.checkpoint.approvals[0].approval_id = "unknown".into(),
+            _ => altered.checkpoint.scope.execution.turn_id = "different-turn".into(),
         }
-        assert!(RunState::restore(&altered).is_err(), "mutation {mutation}");
+        assert!(
+            altered.validate(&approval.checkpoint.scope).is_err(),
+            "mutation {mutation}"
+        );
     }
 }
 
@@ -160,7 +220,12 @@ fn reused_model_call_ids_have_distinct_step_scoped_approvals() {
     let mut state = state();
     let later = checkpoint(&state);
     state.steps.pop();
-    assert_ne!(checkpoint(&state).approval_id, later.approval_id);
+    state.model_request.messages.truncate(2);
+    state.tool_calls_used = 1;
+    assert_ne!(
+        checkpoint(&state).waiting.approvals[0].approval_id,
+        later.waiting.approvals[0].approval_id
+    );
 }
 
 #[tokio::test]

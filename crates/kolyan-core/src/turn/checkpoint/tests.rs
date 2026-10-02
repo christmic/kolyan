@@ -428,6 +428,7 @@ fn stale_approval_is_not_accepted_for_new_preparation() {
     let mut checkpoint = fixture(false);
     checkpoint.approvals.push(CheckpointApproval {
         approval_id: "approval-b".into(),
+        reason: "approve fixture".into(),
         prepared: prepared("b"),
         scope: scope(),
         policy_revision: "policy-v1".into(),
@@ -447,6 +448,7 @@ fn duplicate_approval_for_one_call_and_invalid_host_authority_ids_are_rejected()
     let mut checkpoint = fixture(false);
     let approval = CheckpointApproval {
         approval_id: "approval-b".into(),
+        reason: "approve fixture".into(),
         prepared: prepared("b"),
         scope: scope(),
         policy_revision: "policy-v1".into(),

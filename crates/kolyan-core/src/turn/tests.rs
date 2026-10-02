@@ -10,7 +10,40 @@ use serde_json::Value;
 mod policy_revision;
 pub(crate) mod preparation;
 mod prepared_authority;
+mod suspension;
 use preparation::{fixture_key, fixture_policy, fixture_prepare, fixture_validate};
+
+async fn resume_confirmed<P: ModelProvider, T: ToolExecutor>(
+    executor: &TurnExecutor<P, T>,
+    suspension: TurnSuspension,
+    approval_id: &str,
+) -> Result<ResumableTurn, TurnError> {
+    let saved = suspension
+        .checkpoint
+        .approvals
+        .iter()
+        .find(|saved| saved.approval_id == approval_id)
+        .ok_or_else(|| TurnError::InvalidRequest {
+            message: "unknown fixture approval".into(),
+        })?;
+    let confirmation = ApprovalConfirmation {
+        approval_id: approval_id.into(),
+        prepared_digest: saved.prepared.digest().into(),
+        policy_revision: saved.policy_revision.clone(),
+        scope: saved.scope.clone(),
+        evidence_id: approval_id.into(),
+    };
+    let scope = saved.scope.clone();
+    let checkpoint = executor.merge_resume_with_control(
+        suspension,
+        ResumeInput::ApprovalConfirmed(confirmation),
+        scope.clone(),
+        TurnControl::default(),
+    )?;
+    executor
+        .resume_checkpoint_with_control(checkpoint, scope, TurnControl::default())
+        .await
+}
 
 #[tokio::test]
 async fn no_progress_stops_repeated_tool_results_before_max_steps() {
@@ -588,11 +621,11 @@ impl ToolExecutor for MockTool {
     fn execute_invocation(&self, invocation: ToolInvocation) -> ToolFuture<'_> {
         Box::pin(async move {
             let call = fixture_validate(&invocation)?;
-            Ok(ToolResult {
+            Ok(ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "count=1".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
@@ -885,20 +918,22 @@ async fn durable_approval_resumes_without_replaying_the_first_model_step() {
         .await
         .expect("start should return a durable boundary");
     let approval = match awaiting {
-        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => panic!("expected approval"),
     };
     assert_eq!(model_calls.load(std::sync::atomic::Ordering::SeqCst), 1);
     let persisted = serde_json::to_vec(&approval).expect("checkpoint serializes");
-    let restored: ApprovalRequest =
-        serde_json::from_slice(&persisted).expect("checkpoint restores");
-    let completed = executor
-        .resume_approval(restored, &approval.approval_id)
-        .await
-        .expect("resume should complete");
+    let restored: TurnSuspension = serde_json::from_slice(&persisted).expect("checkpoint restores");
+    let completed = resume_confirmed(
+        &executor,
+        restored,
+        &approval.waiting.approvals[0].approval_id,
+    )
+    .await
+    .expect("resume should complete");
     let execution = match completed {
         ResumableTurn::Completed(value) => *value,
-        ResumableTurn::AwaitingApproval(_) => panic!("expected final answer"),
+        ResumableTurn::Suspended(_) => panic!("expected final answer"),
     };
     assert_eq!(model_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 1);
@@ -949,33 +984,30 @@ async fn durable_batch_waits_for_all_approvals_before_executing_tools() {
         .await
         .expect("multi-approval start should succeed");
     let first = match first {
-        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => panic!("expected first approval"),
     };
-    assert_eq!(first.call_id, "call-approval-a");
+    assert_eq!(first.waiting.approvals[0].call_id, "call-approval-a");
     assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 
-    let second = executor
-        .resume_approval(first, "turn-multi-approval-step-0-approval-call-approval-a")
+    let id = first.waiting.approvals[0].approval_id.clone();
+    let second = resume_confirmed(&executor, first, &id)
         .await
         .expect("first approval should expose the second boundary");
     let second = match second {
-        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => panic!("expected second approval"),
     };
-    assert_eq!(second.call_id, "call-approval-b");
+    assert_eq!(second.waiting.approvals[0].call_id, "call-approval-b");
     assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 0);
 
-    let completed = executor
-        .resume_approval(
-            second,
-            "turn-multi-approval-step-0-approval-call-approval-b",
-        )
+    let id = second.waiting.approvals[0].approval_id.clone();
+    let completed = resume_confirmed(&executor, second, &id)
         .await
         .expect("second approval should execute the batch");
     let execution = match completed {
         ResumableTurn::Completed(value) => *value,
-        ResumableTurn::AwaitingApproval(_) => panic!("all approvals were granted"),
+        ResumableTurn::Suspended(_) => panic!("all approvals were granted"),
     };
     assert_eq!(executed.load(std::sync::atomic::Ordering::SeqCst), 2);
     assert_eq!(model_calls.load(std::sync::atomic::Ordering::SeqCst), 2);
@@ -1109,13 +1141,13 @@ async fn durable_approval_rejects_a_tampered_checkpoint() {
         .await
         .expect("start should return a durable boundary");
     let mut approval = match awaiting {
-        ResumableTurn::AwaitingApproval(value) => *value,
+        ResumableTurn::Suspended(value) => *value,
         ResumableTurn::Completed(_) => panic!("expected approval"),
     };
-    approval.continuation.pending_calls[0].arguments =
+    let id = approval.waiting.approvals[0].approval_id.clone();
+    approval.checkpoint.calls[0].call.arguments =
         serde_json::json!({"command": "delete_everything"});
-    let error = executor
-        .resume_approval(approval, "turn-tampered-step-0-approval-call-tampered")
+    let error = resume_confirmed(&executor, approval, &id)
         .await
         .expect_err("tampered checkpoint must fail closed");
     assert!(matches!(error, TurnError::InvalidRequest { .. }));
@@ -1135,11 +1167,11 @@ impl ToolExecutor for CountingTool {
             let call = fixture_validate(&invocation)?;
             self.executed
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(ToolResult {
+            Ok(ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "unexpected execution".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }

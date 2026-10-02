@@ -9,13 +9,14 @@ pub use step::{
     StepResult, StepValidationError, StepValidator, aggregate_step_stream,
 };
 pub use turn::{
-    ApprovalRequest, ApprovalState, CheckpointApproval, CheckpointBudget, CheckpointCall,
-    CheckpointCallState, CheckpointError, ExternalResolution, ExternalWait, IssuedToolAuthority,
-    MAX_EXTERNAL_BINDING_BYTES, MAX_TURN_CHECKPOINT_BYTES, NoopToolExecutor, ResumableTurn,
+    ApprovalConfirmation, ApprovalRequest, CheckpointApproval, CheckpointBudget, CheckpointCall,
+    CheckpointCallState, CheckpointError, CheckpointReconstruction, ExternalResolution,
+    ExternalWait, IssuedToolAuthority, MAX_EXTERNAL_BINDING_BYTES, MAX_TURN_CHECKPOINT_BYTES,
+    NoopToolExecutor, PendingExternalWait, ResumableTurn, ResumeInput, SuspensionSummary,
     TURN_CHECKPOINT_SCHEMA, ToolCallBatch, ToolDispatchMode, ToolDispatchPolicy,
     ToolDispatchResult, ToolError, ToolErrorPolicy, ToolExecutor, ToolFuture, ToolInvocation,
     ToolOutcome, ToolPreparationFuture, TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture,
-    TurnBoundaryKind, TurnCheckpoint, TurnConfig, TurnContinuation, TurnControl, TurnEndReason,
-    TurnError, TurnEvent, TurnEventRecorder, TurnEventStream, TurnExecution, TurnExecutor,
-    TurnOutcome, TurnRequest, TurnResult, TurnState,
+    TurnBoundaryKind, TurnCheckpoint, TurnConfig, TurnControl, TurnEndReason, TurnError, TurnEvent,
+    TurnEventRecorder, TurnEventStream, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
+    TurnResult, TurnState, TurnSuspension,
 };

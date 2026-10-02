@@ -96,6 +96,7 @@ fn approval_revision_is_opaque_and_roundtrips_with_external_merge() {
     let revision = format!("策略/审批/{}", "x".repeat(2048));
     checkpoint.approvals.push(CheckpointApproval {
         approval_id: "host-approval-b".into(),
+        reason: "approve opaque revision".into(),
         prepared: prepared("b"),
         scope: scope(),
         policy_revision: revision.clone(),

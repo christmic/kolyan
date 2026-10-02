@@ -112,6 +112,7 @@ pub struct CheckpointCall {
 #[serde(deny_unknown_fields)]
 pub struct CheckpointApproval {
     pub approval_id: String,
+    pub reason: String,
     #[serde(deserialize_with = "exact")]
     pub prepared: PreparedCall,
     #[serde(deserialize_with = "exact")]
@@ -160,7 +161,45 @@ pub struct TurnCheckpoint {
     pub dispatch: ToolDispatchPolicy,
 }
 
+/// Trusted host reconstruction input after a completed Step. Receipts and waits
+/// must already be independently verified; this port does not recover effects.
+#[derive(Debug, Clone, PartialEq)]
+pub struct CheckpointReconstruction {
+    pub scope: ToolExecutionScope,
+    pub model_request: ModelRequest,
+    pub input_message_count: usize,
+    pub steps: Vec<StepResult>,
+    pub calls: Vec<CheckpointCall>,
+    pub stages: Vec<Vec<String>>,
+    pub stage_index: usize,
+    pub approvals: Vec<CheckpointApproval>,
+    pub budget: CheckpointBudget,
+    pub dispatch: ToolDispatchPolicy,
+}
+
 impl TurnCheckpoint {
+    pub fn reconstruct(
+        input: CheckpointReconstruction,
+        expected_scope: &ToolExecutionScope,
+    ) -> Result<Self, CheckpointError> {
+        let checkpoint = Self {
+            schema_version: TURN_CHECKPOINT_SCHEMA,
+            checkpoint_id: host_identity("checkpoint", &input.scope),
+            scope: input.scope,
+            model_request: input.model_request,
+            input_message_count: input.input_message_count,
+            next_step_index: input.steps.len(),
+            steps: input.steps,
+            calls: input.calls,
+            stages: input.stages,
+            stage_index: input.stage_index,
+            approvals: input.approvals,
+            budget: input.budget,
+            dispatch: input.dispatch,
+        };
+        checkpoint.validate(expected_scope)?;
+        Ok(checkpoint)
+    }
     /// Bounded decoding followed by structural validation. The bytes must come
     /// from trusted persistence: scope equality and accounting consistency do
     /// not authenticate original budgets or approval decisions.
@@ -358,6 +397,15 @@ impl TurnCheckpoint {
                 .budget
                 .max_tool_calls
                 .is_some_and(|max| self.budget.tool_calls_used > max)
+            || self
+                .budget
+                .prior_tool_calls_used
+                .checked_add(self.calls.len())
+                .is_none_or(|requested| {
+                    self.budget
+                        .max_tool_calls
+                        .is_some_and(|max| requested > max)
+                })
         {
             return invalid("charged usage differs from budget");
         }
@@ -445,6 +493,13 @@ impl TurnCheckpoint {
     }
 }
 
+pub(super) fn host_identity<T: Serialize>(kind: &str, binding: &T) -> String {
+    use sha2::{Digest, Sha256};
+    let bytes = serde_json::to_vec(&("kolyan.core.coordinate.v1", kind, binding))
+        .expect("typed JSON binding");
+    format!("{kind}-{:x}", Sha256::digest(bytes))
+}
+
 // Count streamed serialization without allocating a second complete history.
 struct EncodedLimit(usize);
 
@@ -481,7 +536,7 @@ fn invalid<T>(message: &str) -> Result<T, CheckpointError> {
 }
 
 // A field deserializer disables serde's missing-Option shortcut.
-fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+pub(super) fn required_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: Deserializer<'de>,
     T: DeserializeOwned + Serialize,

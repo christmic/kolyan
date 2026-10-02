@@ -11,11 +11,29 @@ pub struct TurnBoundary {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TurnBoundaryKind {
-    Step { step_id: String },
-    Tool { step_id: String, call_id: String },
-    AwaitingApproval { approval_id: String },
-    ResumeApproval { approval_id: String },
-    Terminal { reason: TurnEndReason },
+    Step {
+        step_id: String,
+    },
+    Tool {
+        step_id: String,
+        call_id: String,
+    },
+    AwaitingApproval {
+        approval_id: String,
+    },
+    ResumeApproval {
+        approval_id: String,
+    },
+    AwaitingExternal {
+        checkpoint_id: String,
+        wait_ids: Vec<String>,
+    },
+    ResumeCheckpoint {
+        checkpoint_id: String,
+    },
+    Terminal {
+        reason: TurnEndReason,
+    },
 }
 
 pub type TurnBoundaryFuture<'a> = Pin<Box<dyn Future<Output = Result<(), TurnError>> + Send + 'a>>;

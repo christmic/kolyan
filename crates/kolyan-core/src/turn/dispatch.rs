@@ -1,212 +1,153 @@
+//! Bounded short tool invocations and collection of the current independent
+//! stage. Uncertainty is fatal even under ordinary error-feedback policy.
 use super::engine::RunState;
 use super::*;
 use kolyan_policy::BatchExecutionPlan;
-use std::collections::HashMap;
 
+struct DispatchObservation {
+    call: ToolCall,
+    issued: IssuedToolAuthority,
+    outcome: Result<ToolOutcome, ToolError>,
+}
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
-    pub(super) async fn dispatch_pending(
+    pub(super) async fn dispatch_current_stage(
         &self,
-        state: &RunState,
+        state: &mut RunState,
         control: &TurnControl,
         plan: &BatchExecutionPlan,
         events: &EventEmitter,
-    ) -> Result<Vec<ToolResult>, TurnError> {
-        let pending = state.pending.as_ref().expect("pending batch");
-        let mut grants = HashMap::new();
-        let mut results = pending.preparation_errors.clone();
-        for failure in &results {
-            let call = pending
-                .batch
-                .call(&failure.call_id)
-                .expect("failed preparation call");
-            events.emit(TurnEvent::ToolCallRequested {
-                turn_id: state.turn_id.clone(),
-                call: call.clone(),
-            })?;
-        }
-        let stages = {
-            for item in &plan.decisions {
-                let call = pending.batch.call(&item.call_id).expect("planned call");
-                if item.decision.kind == PolicyDecisionKind::Deny {
-                    events.emit(TurnEvent::ToolCallRequested {
-                        turn_id: state.turn_id.clone(),
-                        call: call.clone(),
-                    })?;
-                    let error = ToolError::PolicyDenied {
-                        message: item.decision.reason.clone(),
-                    };
-                    results.push(ToolDispatchResult {
-                        call_id: call.id.clone(),
-                        result: Err(error),
-                    });
-                } else {
-                    let prepared = pending
-                        .prepared
-                        .iter()
-                        .find(|input| input.call().id == call.id)
-                        .expect("planned prepared call");
-                    let scope = pending.scope.clone().expect("prepared scope");
-                    let evidence = if item.decision.kind == PolicyDecisionKind::RequireApproval {
-                        if !pending.approved.contains(&call.id) {
-                            return Err(TurnError::InvalidRequest {
-                                message: "missing invocation approval".into(),
-                            });
-                        }
-                        ApprovalEvidence::Confirmed {
-                            prepared_digest: prepared.digest().into(),
-                            policy_revision: item.decision.policy_version.clone(),
-                            evidence_id: format!("{}-approval-{}", scope.step_id, call.id),
-                            scope: scope.clone(),
-                        }
-                    } else {
-                        ApprovalEvidence::NotConfirmed
-                    };
-                    let grant =
-                        PreparedGrant::issue(prepared, item.decision.clone(), evidence, scope);
-                    grants.insert(
-                        call.id.clone(),
-                        grant.map_err(|error| TurnError::InvalidRequest {
-                            message: error.to_string(),
-                        })?,
-                    );
-                }
-            }
-            plan.stages_with_approvals(&pending.approved)
+    ) -> Result<bool, TurnError> {
+        let checkpoint = state.pending.as_ref().expect("checkpoint");
+        let Some(stage) = checkpoint.stages.get(checkpoint.stage_index) else {
+            return Ok(true);
         };
-        for stage in stages {
-            let calls = stage
+        let pending_approval = checkpoint
+            .approvals
+            .iter()
+            .any(|approval| approval.evidence_id.is_none());
+        let mut invocations = Vec::new();
+        for id in stage {
+            let item = checkpoint
+                .calls
                 .iter()
-                .map(|id| pending.batch.call(id).expect("scheduled call"));
-            let mut stage_results = Vec::new();
-            match state.dispatch.mode {
-                ToolDispatchMode::Serial => {
-                    for call in calls {
-                        let dispatch = self
-                            .dispatch_call(
-                                state,
-                                control,
-                                call,
-                                grants.get(&call.id).expect("admitted grant").clone(),
-                                events,
-                            )
-                            .await;
-                        let dispatch = match dispatch {
-                            Ok(dispatch) => dispatch,
-                            Err(error) => {
-                                for result in &stage_results {
-                                    emit_dispatch_result(state, result, events)?;
-                                }
-                                return Err(error);
-                            }
-                        };
-                        if state.dispatch.on_error == ToolErrorPolicy::FailTurn
-                            && let Err(error) = &dispatch.result
-                        {
-                            for result in &stage_results {
-                                emit_dispatch_result(state, result, events)?;
-                            }
-                            emit_dispatch_result(state, &dispatch, events)?;
-                            return Err(error.clone().into());
-                        }
-                        stage_results.push(dispatch);
-                    }
-                }
-                ToolDispatchMode::Parallel => {
-                    let futures = calls.map(|call| {
-                        self.dispatch_call(
-                            state,
-                            control,
-                            call,
-                            grants.get(&call.id).expect("admitted grant").clone(),
-                            events,
-                        )
+                .find(|item| &item.call.id == id)
+                .expect("stage member");
+            if !matches!(item.state, CheckpointCallState::Ready) {
+                continue;
+            }
+            let planned = plan
+                .decisions
+                .iter()
+                .find(|decision| &decision.call_id == id)
+                .expect("Ready decision");
+            if planned.decision.kind == PolicyDecisionKind::RequireApproval && pending_approval {
+                // Preserve batch-wide approval semantics: one confirmation does
+                // not start required effects while another approval is pending.
+                continue;
+            }
+            let evidence = if planned.decision.kind == PolicyDecisionKind::RequireApproval {
+                let saved = checkpoint
+                    .approvals
+                    .iter()
+                    .find(|approval| approval.prepared.call().id == *id)
+                    .expect("required approval");
+                if saved.expires_at_ms.is_some_and(|expiry| expiry <= now_ms()) {
+                    return Err(TurnError::InvalidRequest {
+                        message: "approval has expired".into(),
                     });
-                    let mut admission_error = None;
-                    for result in join_all(futures).await {
-                        match result {
-                            Ok(result) => stage_results.push(result),
-                            Err(error) => {
-                                admission_error.get_or_insert(error);
-                            }
-                        }
-                    }
-                    if let Some(error) = admission_error {
-                        for result in &stage_results {
-                            emit_dispatch_result(state, result, events)?;
-                        }
-                        return Err(error);
-                    }
-                    if state.dispatch.on_error == ToolErrorPolicy::FailTurn
-                        && let Some(error) = stage_results
-                            .iter()
-                            .find_map(|result| result.result.as_ref().err())
-                    {
-                        for result in &stage_results {
-                            emit_dispatch_result(state, result, events)?;
-                        }
-                        return Err(error.clone().into());
-                    }
                 }
-            }
-            for result in &stage_results {
-                emit_dispatch_result(state, result, events)?;
-            }
-            results.extend(stage_results);
-        }
-        pending.batch.validate_results(&results)?;
-        let mut ordered = Vec::with_capacity(results.len());
-        for call in pending.batch.calls() {
-            let dispatch = results
-                .iter()
-                .find(|result| result.call_id == call.id)
-                .expect("validated result");
-            let result = match &dispatch.result {
-                Ok(result) => result.clone(),
-                Err(error) => {
-                    // Denied calls never entered the dispatch boundary.
-                    if pending
-                        .preparation_errors
-                        .iter()
-                        .any(|item| item.call_id == call.id)
-                        || {
-                            plan.decisions.iter().any(|item| {
-                                item.call_id == call.id
-                                    && item.decision.kind == PolicyDecisionKind::Deny
-                            })
-                        }
-                    {
-                        events.emit(TurnEvent::ToolExecutionFailed {
-                            turn_id: state.turn_id.clone(),
-                            call_id: call.id.clone(),
-                            name: call.name.clone(),
-                            error: error.clone(),
-                        })?;
-                    }
-                    let result = ToolResult {
-                        call_id: call.id.clone(),
-                        content: error.to_string(),
-                        is_error: true,
-                    };
-                    events.emit(TurnEvent::ToolResult {
-                        turn_id: state.turn_id.clone(),
-                        result: result.clone(),
-                    })?;
-                    result
+                ApprovalEvidence::Confirmed {
+                    scope: checkpoint.scope.clone(),
+                    prepared_digest: saved.prepared.digest().into(),
+                    policy_revision: saved.policy_revision.clone(),
+                    evidence_id: saved.evidence_id.clone().expect("confirmed approval"),
                 }
+            } else {
+                ApprovalEvidence::NotConfirmed
             };
-            ordered.push(result);
+            let prepared = item.prepared.clone().expect("Ready preparation");
+            let grant = PreparedGrant::issue(
+                &prepared,
+                planned.decision.clone(),
+                evidence,
+                checkpoint.scope.clone(),
+            )
+            .map_err(|error| TurnError::InvalidRequest {
+                message: error.to_string(),
+            })?;
+            let issued = IssuedToolAuthority {
+                prepared,
+                grant,
+                scope: checkpoint.scope.clone(),
+                policy_revision: planned.decision.policy_version.clone(),
+            };
+            issued
+                .validate(&checkpoint.scope)
+                .map_err(checkpoint_error)?;
+            invocations.push((item.call.clone(), issued));
         }
-        Ok(ordered)
+        if invocations.is_empty() {
+            return Ok(false);
+        }
+        match state.dispatch.mode {
+            ToolDispatchMode::Serial => {
+                for (call, issued) in invocations {
+                    let observation = self
+                        .dispatch_call(state, control, call, issued, events)
+                        .await?;
+                    let waiting =
+                        matches!(observation.outcome, Ok(ToolOutcome::AwaitingExternal(_)));
+                    self.apply_observation(state, observation, events)?;
+                    state.check(control)?;
+                    if waiting {
+                        break;
+                    }
+                }
+            }
+            ToolDispatchMode::Parallel => {
+                let futures = invocations
+                    .into_iter()
+                    .map(|(call, issued)| self.dispatch_call(state, control, call, issued, events));
+                let observations = join_all(futures).await;
+                let mut fatal = None;
+                // Drain every already admitted short invocation before halting.
+                // Their independent Runtime receipts are never discarded/replayed.
+                for observation in observations {
+                    let result = match observation {
+                        Ok(observation) => self.apply_observation(state, observation, events),
+                        Err(error) => Err(error),
+                    };
+                    if let Err(error) = result {
+                        if matches!(error, TurnError::Tool(ToolError::Uncertain { .. })) {
+                            fatal = Some(error);
+                        } else {
+                            fatal.get_or_insert(error);
+                        }
+                    }
+                }
+                if let Some(error) = fatal {
+                    return Err(error);
+                }
+                state.check(control)?;
+            }
+        }
+        let checkpoint = state.pending.as_mut().expect("checkpoint");
+        checkpoint.budget.tool_calls_used = checkpoint.budget.prior_tool_calls_used
+            + checkpoint.calls.iter().filter(|item| item.charged).count();
+        checkpoint
+            .validate(&checkpoint.scope)
+            .map_err(checkpoint_error)?;
+        Ok(true)
     }
 
     async fn dispatch_call(
         &self,
         state: &RunState,
         control: &TurnControl,
-        call: &ToolCall,
-        grant: PreparedGrant,
+        call: ToolCall,
+        issued: IssuedToolAuthority,
         events: &EventEmitter,
-    ) -> Result<ToolDispatchResult, TurnError> {
+    ) -> Result<DispatchObservation, TurnError> {
         self.admit(
             state,
             control,
@@ -217,13 +158,14 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         )
         .await?;
         state.check(control)?;
-        if !state
+        let announced = state
             .pending
             .as_ref()
-            .expect("pending batch")
-            .approved
-            .contains(&call.id)
-        {
+            .expect("checkpoint")
+            .approvals
+            .iter()
+            .any(|approval| approval.prepared.call().id == call.id);
+        if !announced {
             events.emit(TurnEvent::ToolCallRequested {
                 turn_id: state.turn_id.clone(),
                 call: call.clone(),
@@ -234,96 +176,158 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             call_id: call.id.clone(),
             name: call.name.clone(),
         })?;
-        let execute = async {
-            let pending = state.pending.as_ref().expect("pending tools");
-            let prepared = pending
-                .prepared
-                .iter()
-                .find(|input| input.call().id == call.id)
-                .expect("admitted preparation")
-                .clone();
-            let scope = pending.scope.clone().expect("admitted scope");
-            let revision = self
-                .policy_engine
-                .as_ref()
-                .expect("admitted policy")
-                .revision();
-            grant
-                .validate(&prepared, &revision, &scope)
-                .map_err(|error| ToolError::PolicyDenied {
-                    message: error.to_string(),
+        let grant_timeout =
+            issued
+                .grant
+                .constraints()
+                .timeout_ms
+                .ok_or_else(|| TurnError::InvalidRequest {
+                    message: "issued timeout is missing".into(),
                 })?;
-            self.tool_executor
-                .execute_invocation(ToolInvocation {
-                    prepared,
-                    grant,
-                    scope,
-                    policy_revision: revision,
-                    control: control.clone(),
-                })
-                .await
-        };
-        let tool_limit = state.tool_timeout.map(|timeout| Instant::now() + timeout);
-        let deadline = match (state.deadline, tool_limit) {
-            (Some(turn), Some(tool)) => Some(turn.min(tool)),
-            (turn, tool) => turn.or(tool),
-        };
-        let result = tokio::select! {
+        let deadline = [
+            state.deadline,
+            state.tool_timeout.map(|timeout| Instant::now() + timeout),
+            Some(Instant::now() + Duration::from_millis(grant_timeout)),
+        ]
+        .into_iter()
+        .flatten()
+        .min()
+        .expect("mandatory grant timeout");
+        let future = self.tool_executor.execute_invocation(ToolInvocation {
+            prepared: issued.prepared.clone(),
+            grant: issued.grant.clone(),
+            scope: issued.scope.clone(),
+            policy_revision: issued.policy_revision.clone(),
+            control: control.clone(),
+        });
+        let outcome = tokio::select! {
             biased;
             _ = control.wait_cancelled() => Err(ToolError::Cancelled),
-            result = async {
-                match deadline {
-                    Some(limit) => tokio::time::timeout_at(limit.into(), execute).await.unwrap_or(Err(ToolError::TimedOut)),
-                    None => execute.await,
-                }
-            } => result,
+            result = tokio::time::timeout_at(deadline.into(), future) => result.unwrap_or(Err(ToolError::TimedOut)),
         };
-        match &result {
-            Ok(result) if result.call_id != call.id => {
-                return Err(ToolError::InvalidBatch {
-                    message: format!(
-                        "tool result call id mismatch: expected {}, got {}",
-                        call.id, result.call_id
-                    ),
-                }
-                .into());
-            }
-            _ => {}
-        }
-        let dispatch = ToolDispatchResult {
-            call_id: call.id.clone(),
-            result,
-        };
-        if let Err(error) = state.check(control) {
-            emit_dispatch_result(state, &dispatch, events)?;
-            return Err(error);
-        }
-        Ok(dispatch)
+        Ok(DispatchObservation {
+            call,
+            issued,
+            outcome,
+        })
     }
-}
 
-fn emit_dispatch_result(
-    state: &RunState,
-    result: &ToolDispatchResult,
-    events: &EventEmitter,
-) -> Result<(), TurnError> {
-    let call = state
-        .pending
-        .as_ref()
-        .expect("pending tools")
-        .batch
-        .call(&result.call_id)
-        .expect("dispatched call");
-    match &result.result {
-        Ok(result) => events.emit(TurnEvent::ToolResult {
-            turn_id: state.turn_id.clone(),
-            result: result.clone(),
-        }),
-        Err(error) => events.emit(TurnEvent::ToolExecutionFailed {
-            turn_id: state.turn_id.clone(),
-            call_id: call.id.clone(),
-            name: call.name.clone(),
-            error: error.clone(),
-        }),
+    fn apply_observation(
+        &self,
+        state: &mut RunState,
+        observation: DispatchObservation,
+        events: &EventEmitter,
+    ) -> Result<(), TurnError> {
+        let DispatchObservation {
+            call,
+            issued,
+            outcome,
+        } = observation;
+        let completed = match outcome {
+            Ok(ToolOutcome::Completed(result)) => {
+                issued.validate_result(&result).map_err(|error| {
+                    TurnError::Tool(ToolError::InvalidBatch {
+                        message: error.to_string(),
+                    })
+                })?;
+                events.emit(TurnEvent::ToolResult {
+                    turn_id: state.turn_id.clone(),
+                    result: result.clone(),
+                })?;
+                CheckpointCallState::Completed {
+                    result,
+                    issued: Some(issued),
+                }
+            }
+            Ok(ToolOutcome::AwaitingExternal(wait)) => {
+                if let Err(error) = wait.validate() {
+                    let error = ToolError::Uncertain {
+                        message: format!(
+                            "executor returned invalid external wait after admission: {error}"
+                        ),
+                    };
+                    let recording = events.emit(TurnEvent::ToolExecutionFailed {
+                        turn_id: state.turn_id.clone(),
+                        call_id: call.id,
+                        name: call.name,
+                        error: error.clone(),
+                    });
+                    if let Err(recording) = recording {
+                        return Err(ToolError::Uncertain {
+                            message: format!("{error}; failure recording also failed: {recording}"),
+                        }
+                        .into());
+                    }
+                    return Err(error.into());
+                }
+                events.emit(TurnEvent::ToolAwaitingExternal {
+                    turn_id: state.turn_id.clone(),
+                    call_id: call.id.clone(),
+                    wait: wait.clone(),
+                })?;
+                CheckpointCallState::AwaitingExternal { wait, issued }
+            }
+            Err(error) => {
+                let recording = events.emit(TurnEvent::ToolExecutionFailed {
+                    turn_id: state.turn_id.clone(),
+                    call_id: call.id.clone(),
+                    name: call.name,
+                    error: error.clone(),
+                });
+                if matches!(error, ToolError::Uncertain { .. }) {
+                    if let Err(recording) = recording {
+                        return Err(ToolError::Uncertain {
+                            message: format!("{error}; failure recording also failed: {recording}"),
+                        }
+                        .into());
+                    }
+                    return Err(error.into());
+                }
+                recording?;
+                if matches!(error, ToolError::Cancelled) {
+                    return Err(TurnError::Cancelled);
+                }
+                if state.dispatch.on_error == ToolErrorPolicy::FailTurn
+                    || matches!(
+                        error,
+                        ToolError::Uncertain { .. }
+                            | ToolError::Cancelled
+                            | ToolError::TimedOut
+                            | ToolError::InvalidBatch { .. }
+                    )
+                {
+                    return Err(error.into());
+                }
+                let result = ToolResult {
+                    call_id: call.id.clone(),
+                    content: error.to_string(),
+                    is_error: true,
+                };
+                issued.validate_result(&result).map_err(|error| {
+                    TurnError::Tool(ToolError::InvalidBatch {
+                        message: error.to_string(),
+                    })
+                })?;
+                events.emit(TurnEvent::ToolResult {
+                    turn_id: state.turn_id.clone(),
+                    result: result.clone(),
+                })?;
+                CheckpointCallState::Completed {
+                    result,
+                    issued: Some(issued),
+                }
+            }
+        };
+        let item = state
+            .pending
+            .as_mut()
+            .expect("checkpoint")
+            .calls
+            .iter_mut()
+            .find(|item| item.call.id == call.id)
+            .expect("observed call");
+        item.state = completed;
+        item.charged = true;
+        Ok(())
     }
 }

@@ -18,7 +18,7 @@ pub const MAX_EXTERNAL_BINDING_BYTES: usize = 64 * 1024;
     deny_unknown_fields
 )]
 pub enum ToolOutcome {
-    Completed(ToolResult),
+    Completed(#[serde(deserialize_with = "super::checkpoint::exact")] ToolResult),
     AwaitingExternal(ExternalWait),
 }
 

@@ -1,18 +1,10 @@
+//! Model-loop advancement over a portable checkpoint; no suspended tool future.
 use super::*;
-
-pub(super) struct PendingTools {
-    pub batch: ToolCallBatch,
-    pub assistant_content: Vec<ContentBlock>,
-    pub approved: Vec<String>,
-    pub prepared: Vec<PreparedCall>,
-    pub preparation_errors: Vec<ToolDispatchResult>,
-    pub scope: Option<ToolExecutionScope>,
-}
 
 pub(super) struct RunState {
     pub turn_id: String,
     pub model_request: ModelRequest,
-    input_message_count: usize,
+    pub input_message_count: usize,
     pub steps: Vec<StepResult>,
     pub config: TurnConfig,
     pub deadline: Option<Instant>,
@@ -20,11 +12,10 @@ pub(super) struct RunState {
     pub tool_calls_used: usize,
     pub dispatch: ToolDispatchPolicy,
     pub tool_timeout: Option<Duration>,
-    pub pending: Option<PendingTools>,
+    pub pending: Option<TurnCheckpoint>,
     resumed: bool,
     resume_boundary: Option<String>,
 }
-
 impl RunState {
     pub fn new(
         request: TurnRequest,
@@ -51,110 +42,31 @@ impl RunState {
             resume_boundary: None,
         })
     }
-
-    pub fn restore(approval: &ApprovalRequest) -> Result<Self, TurnError> {
-        let c = &approval.continuation;
-        let invalid = || TurnError::InvalidRequest {
-            message: "inconsistent approval checkpoint".into(),
-        };
-        if approval
-            .expires_at_ms
-            .is_some_and(|limit| limit <= now_ms())
-        {
-            return Err(TurnError::InvalidRequest {
-                message: "approval checkpoint has expired".into(),
-            });
-        }
-        let last = c.steps.last().ok_or_else(invalid)?;
-        let batch = ToolCallBatch::try_from(c.pending_calls.clone())?;
-        let call = batch.call(&c.call_id).ok_or_else(invalid)?;
-        c.execution_scope.validate().map_err(|_| invalid())?;
-        let mut accounted = HashSet::new();
-        for prepared in &c.prepared_calls {
-            prepared.validate().map_err(|_| invalid())?;
-            if batch.call(&prepared.call().id) != Some(prepared.call())
-                || !accounted.insert(prepared.call().id.as_str())
-            {
-                return Err(invalid());
-            }
-        }
-        for failure in &c.preparation_errors {
-            if failure.result.is_ok()
-                || batch.call(&failure.call_id).is_none()
-                || !accounted.insert(failure.call_id.as_str())
-            {
-                return Err(invalid());
-            }
-        }
-        let step_id = format!("{}-step-{}", c.turn_id, c.steps.len() - 1);
-        if approval.turn_id != c.turn_id
-            || approval.call_id != c.call_id
-            || approval.tool_name != c.tool_name
-            || c.tool_name != call.name
-            || c.next_step_index != c.steps.len()
-            || c.max_steps < c.steps.len()
-            || c.max_steps == 0
-            || last.step_id != step_id
-            || c.steps
-                .iter()
-                .enumerate()
-                .any(|(index, step)| step.step_id != format!("{}-step-{index}", c.turn_id))
-            || last.outcome != StepOutcome::ToolCalls
-            || c.assistant_content != last.response.content
-            || c.pending_calls != tool_calls(&last.response.content)
-            || c.args_fingerprint != serde_json::to_string(&call.arguments).expect("JSON arguments")
-            || approval.approval_id != format!("{step_id}-approval-{}", call.id)
-            || c.continuation_id != format!("continuation-{}", approval.approval_id)
-            || c.approved_call_ids.contains(&call.id)
-            || c.approved_call_ids.iter().collect::<HashSet<_>>().len() != c.approved_call_ids.len()
-            || c.approved_call_ids.iter().any(|id| {
-                !c.prepared_calls
-                    .iter()
-                    .any(|prepared| &prepared.call().id == id)
-            })
-            || accounted.len() != batch.len()
-            || !c
-                .prepared_calls
-                .iter()
-                .any(|prepared| prepared.call().id == c.call_id)
-            || c.execution_scope.execution.turn_id != c.turn_id
-            || c.execution_scope.step_id != step_id
-        {
-            return Err(invalid());
-        }
+    pub fn restore(
+        checkpoint: &TurnCheckpoint,
+        scope: &ToolExecutionScope,
+    ) -> Result<Self, TurnError> {
+        checkpoint.validate(scope).map_err(checkpoint_error)?;
         Ok(Self {
-            turn_id: c.turn_id.clone(),
-            input_message_count: c.model_request.messages.len().saturating_sub(
-                c.steps[..c.steps.len() - 1]
-                    .iter()
-                    .map(|step| 1 + tool_calls(&step.response.content).len())
-                    .sum::<usize>(),
-            ),
-            model_request: c.model_request.clone(),
-            steps: c.steps.clone(),
+            turn_id: scope.execution.turn_id.clone(),
+            model_request: checkpoint.model_request.clone(),
+            input_message_count: checkpoint.input_message_count,
+            steps: checkpoint.steps.clone(),
             config: TurnConfig {
-                max_steps: c.max_steps,
-                max_tool_calls: c.max_tool_calls,
+                max_steps: checkpoint.budget.max_steps,
+                max_tool_calls: checkpoint.budget.max_tool_calls,
                 deadline: None,
             },
-            deadline: deadline_instant(c.deadline_at_ms),
-            deadline_at_ms: c.deadline_at_ms,
-            tool_calls_used: c.tool_calls_used,
-            dispatch: c.tool_dispatch,
-            tool_timeout: c.tool_timeout_ms.map(Duration::from_millis),
-            pending: Some(PendingTools {
-                batch,
-                assistant_content: c.assistant_content.clone(),
-                approved: c.approved_call_ids.clone(),
-                prepared: c.prepared_calls.clone(),
-                preparation_errors: c.preparation_errors.clone(),
-                scope: Some(c.execution_scope.clone()),
-            }),
+            deadline: deadline_instant(checkpoint.budget.deadline_at_ms),
+            deadline_at_ms: checkpoint.budget.deadline_at_ms,
+            tool_calls_used: checkpoint.budget.prior_tool_calls_used,
+            dispatch: checkpoint.dispatch,
+            tool_timeout: checkpoint.budget.tool_timeout_ms.map(Duration::from_millis),
+            pending: Some(checkpoint.clone()),
             resumed: true,
-            resume_boundary: Some(approval.approval_id.clone()),
+            resume_boundary: Some(checkpoint.checkpoint_id.clone()),
         })
     }
-
     pub fn step_id(&self) -> String {
         format!(
             "{}-step-{}",
@@ -162,7 +74,6 @@ impl RunState {
             self.steps.len().saturating_sub(1)
         )
     }
-
     pub fn check(&self, control: &TurnControl) -> Result<(), TurnError> {
         if control.is_cancelled() {
             return Err(TurnError::Cancelled);
@@ -172,52 +83,58 @@ impl RunState {
         }
         Ok(())
     }
-
-    fn checkpoint(
-        &self,
-        call: &ToolCall,
-        reason: String,
-        policy_version: String,
-    ) -> ApprovalRequest {
-        let pending = self.pending.as_ref().expect("pending approval batch");
-        let approval_id = format!("{}-approval-{}", self.step_id(), call.id);
-        ApprovalRequest {
-            approval_id: approval_id.clone(),
-            turn_id: self.turn_id.clone(),
-            call_id: call.id.clone(),
-            tool_name: call.name.clone(),
-            reason,
-            state: ApprovalState::Pending,
-            expires_at_ms: None,
-            continuation: TurnContinuation {
-                continuation_id: format!("continuation-{approval_id}"),
-                approval_id,
-                turn_id: self.turn_id.clone(),
-                model_request: self.model_request.clone(),
-                assistant_content: pending.assistant_content.clone(),
-                pending_calls: pending.batch.calls().to_vec(),
-                steps: self.steps.clone(),
-                max_steps: self.config.max_steps,
-                next_step_index: self.steps.len(),
-                call_id: call.id.clone(),
-                tool_name: call.name.clone(),
-                args_fingerprint: serde_json::to_string(&call.arguments).expect("JSON arguments"),
-                policy_version,
-                prepared_calls: pending.prepared.clone(),
-                preparation_errors: pending.preparation_errors.clone(),
-                execution_scope: pending.scope.clone().expect("prepared invocation scope"),
-                approved_call_ids: pending.approved.clone(),
-                max_tool_calls: self.config.max_tool_calls,
-                tool_calls_used: self.tool_calls_used,
-                deadline_at_ms: self.deadline_at_ms,
-                tool_dispatch: self.dispatch,
-                tool_timeout_ms: self.tool_timeout.map(|limit| limit.as_millis() as u64),
-            },
-        }
-    }
 }
-
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
+    pub(super) fn new_run_state(&self, request: TurnRequest) -> Result<RunState, TurnError> {
+        let mut state = RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
+        if let Some(host) = self.absolute_deadline_at_ms {
+            state.deadline_at_ms = Some(state.deadline_at_ms.map_or(host, |saved| saved.min(host)));
+            let host_instant = deadline_instant(Some(host)).expect("absolute deadline");
+            state.deadline = Some(
+                state
+                    .deadline
+                    .map_or(host_instant, |saved| saved.min(host_instant)),
+            );
+        }
+        Ok(state)
+    }
+    pub(super) fn validate_resume_scope(
+        &self,
+        expected: &ToolExecutionScope,
+    ) -> Result<(), TurnError> {
+        if self.tool_scope(&expected.execution.turn_id, &expected.step_id)? != *expected {
+            return Err(TurnError::InvalidRequest {
+                message: "checkpoint belongs to another admitted execution scope".into(),
+            });
+        }
+        Ok(())
+    }
+    pub(super) fn tool_scope(
+        &self,
+        turn_id: &str,
+        step_id: &str,
+    ) -> Result<ToolExecutionScope, TurnError> {
+        let key = self
+            .execution_key
+            .clone()
+            .ok_or_else(|| TurnError::InvalidRequest {
+                message: "tool execution requires an admitted execution key".into(),
+            })?;
+        if key.turn_id != turn_id {
+            return Err(TurnError::InvalidRequest {
+                message: "execution key belongs to another Turn".into(),
+            });
+        }
+        let scope = ToolExecutionScope {
+            execution: key,
+            step_id: step_id.into(),
+            agent_snapshot_digest: self.agent_snapshot_digest.clone(),
+        };
+        scope.validate().map_err(|e| TurnError::InvalidRequest {
+            message: e.to_string(),
+        })?;
+        Ok(scope)
+    }
     pub(super) async fn admit(
         &self,
         state: &RunState,
@@ -243,102 +160,6 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         }
         Ok(())
     }
-
-    pub(super) async fn validate_approval_policy(
-        &self,
-        approval: &ApprovalRequest,
-        control: &TurnControl,
-    ) -> Result<(), TurnError> {
-        let policy = self
-            .policy_engine
-            .as_ref()
-            .ok_or_else(|| TurnError::InvalidRequest {
-                message: "approval resume requires a policy engine".into(),
-            })?;
-        let c = &approval.continuation;
-        let scope = self.tool_scope(&c.turn_id, &c.execution_scope.step_id)?;
-        if scope != c.execution_scope {
-            return Err(TurnError::InvalidRequest {
-                message: "approval belongs to another execution scope".into(),
-            });
-        }
-        for saved in &c.prepared_calls {
-            let call = saved.call();
-            let preparation = self.tool_executor.prepare(call.clone());
-            let deadline = deadline_instant(c.deadline_at_ms);
-            let timeout = c
-                .tool_timeout_ms
-                .map(|millis| Instant::now() + Duration::from_millis(millis));
-            let limit = match (deadline, timeout) {
-                (Some(left), Some(right)) => Some(left.min(right)),
-                (left, right) => left.or(right),
-            };
-            let current = tokio::select! {
-                biased;
-                _ = control.wait_cancelled() => return Err(TurnError::Cancelled),
-                result = async {
-                    match limit {
-                        Some(limit) => tokio::time::timeout_at(limit.into(), preparation).await.map_err(|_| {
-                            if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
-                                TurnError::TimedOut
-                            } else {
-                                TurnError::Tool(ToolError::TimedOut)
-                            }
-                        })?.map_err(TurnError::from),
-                        None => preparation.await.map_err(TurnError::from),
-                    }
-                } => result?,
-            };
-            if current != *saved {
-                return Err(TurnError::InvalidRequest {
-                    message: "approval preparation has changed".into(),
-                });
-            }
-            if call.id == c.call_id || c.approved_call_ids.contains(&call.id) {
-                let decision = policy.decide_prepared(
-                    &current,
-                    &PolicyContext {
-                        turn_id: Some(c.turn_id.clone()),
-                        ..Default::default()
-                    },
-                );
-                if decision.kind != PolicyDecisionKind::RequireApproval
-                    || decision.policy_version != c.policy_version
-                {
-                    return Err(TurnError::InvalidRequest {
-                        message: "approval is stale under the current policy".into(),
-                    });
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn tool_scope(&self, turn_id: &str, step_id: &str) -> Result<ToolExecutionScope, TurnError> {
-        let key = self
-            .execution_key
-            .clone()
-            .ok_or_else(|| TurnError::InvalidRequest {
-                message: "tool execution requires an admitted execution key".into(),
-            })?;
-        if key.turn_id != turn_id {
-            return Err(TurnError::InvalidRequest {
-                message: "execution key belongs to another Turn".into(),
-            });
-        }
-        let scope = ToolExecutionScope {
-            execution: key,
-            step_id: step_id.into(),
-            agent_snapshot_digest: self.agent_snapshot_digest.clone(),
-        };
-        scope
-            .validate()
-            .map_err(|error| TurnError::InvalidRequest {
-                message: error.to_string(),
-            })?;
-        Ok(scope)
-    }
-
     pub(super) async fn run(
         &self,
         mut state: RunState,
@@ -353,7 +174,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             })?;
         }
         match self.drive(&mut state, &control, suspend, &events).await {
-            Ok(DriveExit::Suspended(approval)) => Ok(ResumableTurn::AwaitingApproval(approval)),
+            Ok(DriveExit::Suspended(suspension)) => Ok(ResumableTurn::Suspended(suspension)),
             Ok(DriveExit::Completed(result)) => {
                 Ok(ResumableTurn::Completed(Box::new(TurnExecution {
                     result: *result,
@@ -361,14 +182,23 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 })))
             }
             Err(error) => {
-                // Do not wait on the control adapter again after cancellation,
-                // timeout or adapter failure. Runtime commits this terminal result.
-                events.emit(terminal_event(&state.turn_id, &error))?;
+                // No readmission after cancellation or fatal uncertainty. Runtime
+                // owns recovery evidence, never a fabricated completion receipt.
+                if let Err(recording) = events.emit(terminal_event(&state.turn_id, &error)) {
+                    if matches!(error, TurnError::Tool(ToolError::Uncertain { .. })) {
+                        return Err(ToolError::Uncertain {
+                            message: format!(
+                                "{error}; terminal recording also failed: {recording}"
+                            ),
+                        }
+                        .into());
+                    }
+                    return Err(recording);
+                }
                 Err(error)
             }
         }
     }
-
     async fn drive(
         &self,
         state: &mut RunState,
@@ -376,20 +206,20 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         suspend: bool,
         events: &EventEmitter,
     ) -> Result<DriveExit, TurnError> {
-        if let Some(approval_id) = state.resume_boundary.take() {
+        if let Some(checkpoint_id) = state.resume_boundary.take() {
             self.admit(
                 state,
                 control,
-                TurnBoundaryKind::ResumeApproval { approval_id },
+                TurnBoundaryKind::ResumeCheckpoint { checkpoint_id },
             )
             .await?;
         }
         loop {
             state.check(control)?;
             if state.pending.is_some()
-                && let Some(approval) = self.handle_pending(state, control, suspend, events).await?
+                && let Some(waiting) = self.handle_pending(state, control, suspend, events).await?
             {
-                return Ok(DriveExit::Suspended(Box::new(approval)));
+                return Ok(DriveExit::Suspended(Box::new(waiting)));
             }
             if state.steps.len() >= state.config.max_steps {
                 return self
@@ -416,11 +246,11 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 turn_id: state.turn_id.clone(),
                 step_id: step_id.clone(),
             })?;
-            let step_control = StepControl::default();
             if let Some(recorder) = &self.event_recorder {
                 recorder.record_request(&state.model_request)?;
             }
-            let step_future = self.step_executor.execute_with_control(
+            let step_control = StepControl::default();
+            let future = self.step_executor.execute_with_control(
                 StepRequest {
                     step_id,
                     model_request: state.model_request.clone(),
@@ -436,8 +266,8 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 _ = control.wait_cancelled() => { step_control.cancel(); return Err(TurnError::Cancelled); },
                 result = async {
                     match state.deadline {
-                        Some(limit) => tokio::time::timeout_at(limit.into(), step_future).await.map_err(|_| TurnError::TimedOut)?.map_err(map_step_error),
-                        None => step_future.await.map_err(map_step_error),
+                        Some(limit) => tokio::time::timeout_at(limit.into(), future).await.map_err(|_| TurnError::TimedOut)?.map_err(map_step_error),
+                        None => future.await.map_err(map_step_error),
                     }
                 } => result?,
             };
@@ -450,18 +280,9 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                 let (outcome, reason) = outcome_from_step(&step);
                 return self.complete(state, control, events, outcome, reason).await;
             }
-            let batch = ToolCallBatch::try_from(tool_calls(&step.response.content))?;
-            state.pending = Some(PendingTools {
-                batch,
-                assistant_content: step.response.content,
-                approved: Vec::new(),
-                prepared: Vec::new(),
-                preparation_errors: Vec::new(),
-                scope: None,
-            });
+            self.initialize_pending(state, control, events).await?;
         }
     }
-
     async fn complete(
         &self,
         state: &RunState,
@@ -483,124 +304,96 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             steps: state.steps.clone(),
         })))
     }
-
     async fn handle_pending(
         &self,
         state: &mut RunState,
         control: &TurnControl,
         suspend: bool,
         events: &EventEmitter,
-    ) -> Result<Option<ApprovalRequest>, TurnError> {
-        self.prepare_pending(state, control, events).await?;
-        let pending = state.pending.as_ref().expect("pending tools");
-        if let Some(policy) = &self.policy_engine
-            && let Some(call) = pending.batch.calls().iter().find(|call| {
-                policy.has_no_progress(
-                    call,
-                    &state.model_request.messages[state.input_message_count..],
-                )
-            })
-        {
-            return Err(TurnError::NoProgress {
-                tool_name: call.name.clone(),
-            });
-        }
-        if state
-            .config
-            .max_tool_calls
-            .is_some_and(|limit| pending.batch.len() > limit.saturating_sub(state.tool_calls_used))
-        {
-            return Err(TurnError::ToolBudgetExceeded);
-        }
-        let policy = self
-            .policy_engine
-            .as_ref()
-            .ok_or_else(|| TurnError::InvalidRequest {
-                message: "tool execution requires a trusted policy engine".into(),
-            })?;
-        let plan = policy
-            .resolve_prepared_batch(
-                &PolicyContext {
-                    turn_id: Some(state.turn_id.clone()),
-                    remaining_tool_calls: state
-                        .config
-                        .max_tool_calls
-                        .map(|limit| limit.saturating_sub(state.tool_calls_used)),
-                    ..Default::default()
-                },
-                &pending.prepared,
-            )
-            .map_err(|error| TurnError::InvalidRequest {
-                message: error.to_string(),
-            })?;
-        {
-            if state.dispatch.on_error == ToolErrorPolicy::FailTurn
-                && let Some(denied) = plan
-                    .decisions
-                    .iter()
-                    .find(|item| item.decision.kind == PolicyDecisionKind::Deny)
+    ) -> Result<Option<TurnSuspension>, TurnError> {
+        loop {
+            state.check(control)?;
+            let checkpoint = state.pending.as_ref().expect("pending checkpoint");
+            if checkpoint
+                .calls
+                .iter()
+                .any(|item| matches!(item.state, CheckpointCallState::AwaitingExternal { .. }))
             {
-                let call = pending.batch.call(&denied.call_id).expect("planned call");
-                let error = ToolError::PolicyDenied {
-                    message: denied.decision.reason.clone(),
-                };
-                events.emit(TurnEvent::ToolCallRequested {
-                    turn_id: state.turn_id.clone(),
-                    call: call.clone(),
-                })?;
-                events.emit(TurnEvent::ToolExecutionFailed {
-                    turn_id: state.turn_id.clone(),
-                    call_id: call.id.clone(),
-                    name: call.name.clone(),
-                    error: error.clone(),
-                })?;
-                return Err(error.into());
+                return self.suspend_pending(state, control).await.map(Some);
             }
-            for item in &plan.decisions {
-                let pending = state.pending.as_ref().expect("pending tools");
-                if item.decision.kind != PolicyDecisionKind::RequireApproval
-                    || pending.approved.contains(&item.call_id)
-                {
-                    continue;
-                }
-                let call = pending
-                    .batch
-                    .call(&item.call_id)
-                    .expect("planned call")
+            if checkpoint
+                .calls
+                .iter()
+                .all(|item| matches!(item.state, CheckpointCallState::Completed { .. }))
+            {
+                let checkpoint = state.pending.take().expect("complete batch");
+                let batch = ToolCallBatch::try_from(
+                    checkpoint
+                        .calls
+                        .iter()
+                        .map(|item| item.call.clone())
+                        .collect::<Vec<_>>(),
+                )?;
+                let paired: Vec<_> = checkpoint
+                    .calls
+                    .iter()
+                    .map(|item| {
+                        let CheckpointCallState::Completed { result, .. } = &item.state else {
+                            unreachable!("checked complete")
+                        };
+                        ToolDispatchResult {
+                            call_id: item.call.id.clone(),
+                            result: Ok(result.clone()),
+                        }
+                    })
+                    .collect();
+                batch.validate_results(&paired)?;
+                state.tool_calls_used = checkpoint.budget.tool_calls_used;
+                let content = checkpoint
+                    .steps
+                    .last()
+                    .expect("completed Step")
+                    .response
+                    .content
                     .clone();
-                let checkpoint = state.checkpoint(
-                    &call,
-                    item.decision.reason.clone(),
-                    item.decision.policy_version.clone(),
-                );
+                let results = checkpoint
+                    .calls
+                    .into_iter()
+                    .map(|item| {
+                        if let CheckpointCallState::Completed { result, .. } = item.state {
+                            result
+                        } else {
+                            unreachable!("checked complete")
+                        }
+                    })
+                    .collect();
+                append_tool_context(&mut state.model_request.messages, &content, results);
+                return Ok(None);
+            }
+            let plan = self.refresh_ready(state, control, events).await?;
+            let summary = {
+                let checkpoint = state.pending.as_ref().expect("refreshed checkpoint");
+                checkpoint
+                    .suspension_summary(&checkpoint.scope)
+                    .map_err(checkpoint_error)?
+            };
+            if !suspend && let Some(approval) = summary.approvals.first() {
                 self.admit(
                     state,
                     control,
                     TurnBoundaryKind::AwaitingApproval {
-                        approval_id: checkpoint.approval_id.clone(),
+                        approval_id: approval.approval_id.clone(),
                     },
                 )
                 .await?;
-                events.emit(TurnEvent::ToolCallRequested {
-                    turn_id: state.turn_id.clone(),
-                    call: call.clone(),
-                })?;
-                events.emit(TurnEvent::ApprovalRequested {
-                    turn_id: state.turn_id.clone(),
-                    call_id: call.id.clone(),
-                    name: call.name.clone(),
-                })?;
-                if suspend {
-                    return Ok(Some(checkpoint));
-                }
+                let wait = control.wait_for_tool_approval(&approval.tool_name);
                 tokio::select! {
                     biased;
                     _ = control.wait_cancelled() => return Err(TurnError::Cancelled),
                     result = async {
-                        let approval = control.wait_for_tool_approval(&call.name);
                         match state.deadline {
-                            Some(limit) => tokio::time::timeout_at(limit.into(), approval).await.map_err(|_| TurnError::TimedOut),
-                            None => { approval.await; Ok(()) },
+                            Some(limit) => tokio::time::timeout_at(limit.into(), wait).await.map_err(|_| TurnError::TimedOut),
+                            None => { wait.await; Ok(()) },
                         }
                     } => result?,
                 }
@@ -608,115 +401,72 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
                     state,
                     control,
                     TurnBoundaryKind::ResumeApproval {
-                        approval_id: checkpoint.approval_id,
+                        approval_id: approval.approval_id.clone(),
                     },
                 )
                 .await?;
-                state
-                    .pending
-                    .as_mut()
-                    .expect("pending tools")
-                    .approved
-                    .push(call.id);
+                let checkpoint = state.pending.as_mut().expect("approval checkpoint");
+                let saved = checkpoint
+                    .approvals
+                    .iter_mut()
+                    .find(|saved| saved.approval_id == approval.approval_id)
+                    .expect("derived approval");
+                saved.evidence_id = Some(approval.approval_id.clone());
+                continue;
+            }
+            let progressed = self
+                .dispatch_current_stage(state, control, &plan, events)
+                .await?;
+            if !progressed {
+                return self.suspend_pending(state, control).await.map(Some);
             }
         }
-        let results = self.dispatch_pending(state, control, &plan, events).await?;
-        state.check(control)?;
-        let pending = state.pending.take().expect("pending tools");
-        state.tool_calls_used += pending.batch.len();
-        append_tool_context(
-            &mut state.model_request.messages,
-            &pending.assistant_content,
-            results,
-        );
-        Ok(None)
     }
-
-    async fn prepare_pending(
+    async fn suspend_pending(
         &self,
-        state: &mut RunState,
+        state: &RunState,
         control: &TurnControl,
-        events: &EventEmitter,
-    ) -> Result<(), TurnError> {
-        if self.policy_engine.is_none() {
+    ) -> Result<TurnSuspension, TurnError> {
+        let checkpoint = state.pending.as_ref().expect("waiting checkpoint");
+        let suspension = TurnSuspension::from_checkpoint(checkpoint.clone(), &checkpoint.scope)
+            .map_err(checkpoint_error)?;
+        if suspension.waiting.approvals.is_empty() && suspension.waiting.external_waits.is_empty() {
             return Err(TurnError::InvalidRequest {
-                message: "tool execution requires a trusted policy engine".into(),
+                message: "tool stage has no runnable call or waiting reason".into(),
             });
         }
-        let pending = state.pending.as_ref().expect("pending tools");
-        if pending.scope.is_some() {
-            return Ok(());
+        for approval in &suspension.waiting.approvals {
+            self.admit(
+                state,
+                control,
+                TurnBoundaryKind::AwaitingApproval {
+                    approval_id: approval.approval_id.clone(),
+                },
+            )
+            .await?;
         }
-        let scope = self.tool_scope(&state.turn_id, &state.step_id())?;
-        let calls = pending.batch.calls().to_vec();
-        let mut prepared = Vec::new();
-        let mut failures = Vec::new();
-        for call in calls {
-            state.check(control)?;
-            let preparation = self.tool_executor.prepare(call.clone());
-            let limit = match (
-                state.deadline,
-                state.tool_timeout.map(|duration| Instant::now() + duration),
-            ) {
-                (Some(left), Some(right)) => Some(left.min(right)),
-                (left, right) => left.or(right),
-            };
-            let result = tokio::select! {
-                biased;
-                _ = control.wait_cancelled() => return Err(TurnError::Cancelled),
-                result = async {
-                    match limit {
-                        Some(limit) => tokio::time::timeout_at(limit.into(), preparation).await.unwrap_or(Err(ToolError::TimedOut)),
-                        None => preparation.await,
-                    }
-                } => result,
-            };
-            match result {
-                Ok(input) => {
-                    input
-                        .validate()
-                        .map_err(|error| TurnError::InvalidRequest {
-                            message: error.to_string(),
-                        })?;
-                    if input.call() != &call {
-                        return Err(TurnError::InvalidRequest {
-                            message: "tool preparation changed the model call".into(),
-                        });
-                    }
-                    prepared.push(input);
-                }
-                Err(error) if state.dispatch.on_error == ToolErrorPolicy::FailTurn => {
-                    events.emit(TurnEvent::ToolCallRequested {
-                        turn_id: state.turn_id.clone(),
-                        call: call.clone(),
-                    })?;
-                    events.emit(TurnEvent::ToolExecutionFailed {
-                        turn_id: state.turn_id.clone(),
-                        call_id: call.id,
-                        name: call.name,
-                        error: error.clone(),
-                    })?;
-                    return Err(error.into());
-                }
-                Err(error) => failures.push(ToolDispatchResult {
-                    call_id: call.id,
-                    result: Err(error),
-                }),
-            }
+        if !suspension.waiting.external_waits.is_empty() {
+            self.admit(
+                state,
+                control,
+                TurnBoundaryKind::AwaitingExternal {
+                    checkpoint_id: checkpoint.checkpoint_id.clone(),
+                    wait_ids: suspension
+                        .waiting
+                        .external_waits
+                        .iter()
+                        .map(|item| item.wait.wait_id.clone())
+                        .collect(),
+                },
+            )
+            .await?;
         }
-        state.check(control)?;
-        let pending = state.pending.as_mut().expect("pending tools");
-        pending.prepared = prepared;
-        pending.preparation_errors = failures;
-        pending.scope = Some(scope);
-        Ok(())
+        Ok(suspension)
     }
 }
-
 enum DriveExit {
-    Suspended(Box<ApprovalRequest>),
+    Suspended(Box<TurnSuspension>),
     Completed(Box<TurnResult>),
 }
-
 #[cfg(test)]
 mod tests;

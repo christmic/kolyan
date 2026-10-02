@@ -27,76 +27,25 @@ mod control;
 mod dispatch;
 mod engine;
 mod outcome;
+mod planning;
+mod suspension;
 pub use boundary::{TurnBoundary, TurnBoundaryControl, TurnBoundaryFuture, TurnBoundaryKind};
 pub use checkpoint::{
     CheckpointApproval, CheckpointBudget, CheckpointCall, CheckpointCallState, CheckpointError,
-    IssuedToolAuthority, MAX_TURN_CHECKPOINT_BYTES, TURN_CHECKPOINT_SCHEMA, TurnCheckpoint,
+    CheckpointReconstruction, IssuedToolAuthority, MAX_TURN_CHECKPOINT_BYTES,
+    TURN_CHECKPOINT_SCHEMA, TurnCheckpoint,
 };
 pub use control::TurnControl;
 pub use outcome::{ExternalResolution, ExternalWait, MAX_EXTERNAL_BINDING_BYTES, ToolOutcome};
-
-/// Durable checkpoint for a turn paused at an approval boundary.
-///
-/// This contains the exact pending call and the model context that led to it,
-/// so resuming does not call the model again for the completed step.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct TurnContinuation {
-    pub continuation_id: String,
-    pub approval_id: String,
-    pub turn_id: String,
-    pub model_request: ModelRequest,
-    pub assistant_content: Vec<ContentBlock>,
-    pub pending_calls: Vec<ToolCall>,
-    pub steps: Vec<StepResult>,
-    pub max_steps: usize,
-    pub next_step_index: usize,
-    pub call_id: String,
-    pub tool_name: String,
-    pub args_fingerprint: String,
-    pub policy_version: String,
-    pub prepared_calls: Vec<PreparedCall>,
-    pub preparation_errors: Vec<ToolDispatchResult>,
-    pub execution_scope: ToolExecutionScope,
-    #[serde(default)]
-    pub approved_call_ids: Vec<String>,
-    #[serde(default)]
-    pub max_tool_calls: Option<usize>,
-    #[serde(default)]
-    pub tool_calls_used: usize,
-    #[serde(default)]
-    pub deadline_at_ms: Option<u64>,
-    pub tool_dispatch: ToolDispatchPolicy,
-    pub tool_timeout_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ApprovalRequest {
-    pub approval_id: String,
-    pub turn_id: String,
-    pub call_id: String,
-    pub tool_name: String,
-    pub reason: String,
-    #[serde(default)]
-    pub state: ApprovalState,
-    #[serde(default)]
-    pub expires_at_ms: Option<u64>,
-    pub continuation: TurnContinuation,
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ApprovalState {
-    #[default]
-    Pending,
-    Approved,
-    Rejected,
-    Expired,
-}
+pub use suspension::{
+    ApprovalConfirmation, ApprovalRequest, PendingExternalWait, ResumeInput, SuspensionSummary,
+    TurnSuspension,
+};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ResumableTurn {
     Completed(Box<TurnExecution>),
-    AwaitingApproval(Box<ApprovalRequest>),
+    Suspended(Box<TurnSuspension>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -136,6 +85,7 @@ pub enum ToolErrorPolicy {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ToolDispatchPolicy {
     pub mode: ToolDispatchMode,
     pub on_error: ToolErrorPolicy,
@@ -361,6 +311,11 @@ pub enum TurnEvent {
         call_id: String,
         name: String,
     },
+    ToolAwaitingExternal {
+        turn_id: String,
+        call_id: String,
+        wait: ExternalWait,
+    },
     Failed {
         turn_id: String,
         error: String,
@@ -390,6 +345,14 @@ pub trait TurnEventRecorder: Send + Sync {
     /// Capture the actual Step input before invoking the model. Credentials are
     /// owned by Provider configuration and are not part of this request.
     fn record_request(&self, _request: &ModelRequest) -> Result<(), TurnError> {
+        Ok(())
+    }
+
+    /// Publish the validated loop state after fresh preparation and planning,
+    /// before any effect in the next stage is admitted. Failure blocks effects.
+    /// The default means Core provides no persistence; durable hosts must
+    /// implement this barrier and bind the snapshot to trusted input admission.
+    fn record_checkpoint(&self, _checkpoint: &TurnCheckpoint) -> Result<(), TurnError> {
         Ok(())
     }
 }
@@ -498,7 +461,10 @@ impl TurnError {
 }
 
 #[derive(Debug, Error, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum ToolError {
+    #[error("tool outcome is uncertain and requires trusted recovery: {message}")]
+    Uncertain { message: String },
     #[error("invalid tool call batch: {message}")]
     InvalidBatch { message: String },
     #[error("tool is unavailable: {name}")]
@@ -513,7 +479,7 @@ pub enum ToolError {
     PolicyDenied { message: String },
 }
 
-pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolResult, ToolError>> + Send + 'a>>;
+pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolOutcome, ToolError>> + Send + 'a>>;
 pub type ToolPreparationFuture<'a> =
     Pin<Box<dyn Future<Output = Result<PreparedCall, ToolError>> + Send + 'a>>;
 
@@ -561,6 +527,7 @@ pub struct TurnExecutor<P, T = NoopToolExecutor> {
     event_recorder: Option<Arc<dyn TurnEventRecorder>>,
     execution_key: Option<ExecutionKey>,
     agent_snapshot_digest: Option<String>,
+    absolute_deadline_at_ms: Option<u64>,
 }
 
 impl<P> TurnExecutor<P, NoopToolExecutor> {
@@ -575,6 +542,7 @@ impl<P> TurnExecutor<P, NoopToolExecutor> {
             event_recorder: None,
             execution_key: None,
             agent_snapshot_digest: None,
+            absolute_deadline_at_ms: None,
         }
     }
 }
@@ -595,6 +563,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             event_recorder: self.event_recorder,
             execution_key: self.execution_key,
             agent_snapshot_digest: self.agent_snapshot_digest,
+            absolute_deadline_at_ms: self.absolute_deadline_at_ms,
         }
     }
 
@@ -609,6 +578,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             event_recorder: None,
             execution_key: None,
             agent_snapshot_digest: None,
+            absolute_deadline_at_ms: None,
         }
     }
 
@@ -623,6 +593,7 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
             event_recorder: None,
             execution_key: None,
             agent_snapshot_digest: None,
+            absolute_deadline_at_ms: None,
         }
     }
 
@@ -665,10 +636,33 @@ impl<P, T: ToolExecutor> TurnExecutor<P, T> {
         self.agent_snapshot_digest = Some(digest);
         self
     }
+
+    /// Inspect configured source facts; these getters do not issue authority.
+    pub fn agent_snapshot_digest(&self) -> Option<&str> {
+        self.agent_snapshot_digest.as_deref()
+    }
+
+    pub fn tool_dispatch_policy(&self) -> &ToolDispatchPolicy {
+        &self.tool_dispatch
+    }
+
+    pub fn tool_timeout(&self) -> Option<Duration> {
+        self.tool_timeout
+    }
+
+    /// Tighten the Turn's duration-based deadline with an admitted absolute
+    /// deadline. Repeated configuration cannot enlarge an existing ceiling.
+    pub fn with_absolute_deadline_at_ms(mut self, deadline: u64) -> Self {
+        self.absolute_deadline_at_ms = Some(
+            self.absolute_deadline_at_ms
+                .map_or(deadline, |saved| saved.min(deadline)),
+        );
+        self
+    }
 }
 
 impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
-    /// Run until completion or a serializable approval boundary.
+    /// Run until completion or a serializable mixed waiting boundary.
     pub async fn start_resumable(&self, request: TurnRequest) -> Result<ResumableTurn, TurnError> {
         self.start_resumable_with_control(request, TurnControl::default())
             .await
@@ -679,46 +673,71 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         request: TurnRequest,
         control: TurnControl,
     ) -> Result<ResumableTurn, TurnError> {
-        let state = engine::RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
+        let state = self.new_run_state(request)?;
         self.run(state, control, true, None).await
     }
 
-    pub async fn resume_approval(
+    /// Merge verified host input without preparing, executing or calling a model.
+    /// Persist the returned checkpoint before driving it. Expected scope must
+    /// come from independently verified admission, not the supplied envelope.
+    pub fn merge_resume_with_control(
         &self,
-        approval: ApprovalRequest,
-        approved_approval_id: &str,
-    ) -> Result<ResumableTurn, TurnError> {
-        self.resume_approval_with_control(approval, approved_approval_id, TurnControl::default())
-            .await
+        suspension: TurnSuspension,
+        input: ResumeInput,
+        expected_scope: ToolExecutionScope,
+        control: TurnControl,
+    ) -> Result<TurnCheckpoint, TurnError> {
+        self.validate_resume_scope(&expected_scope)?;
+        suspension
+            .validate(&expected_scope)
+            .map_err(checkpoint_error)?;
+        engine::RunState::restore(&suspension.checkpoint, &expected_scope)?.check(&control)?;
+        match input {
+            ResumeInput::ApprovalConfirmed(confirmation) => suspension
+                .checkpoint
+                .merge_approval(&confirmation, &expected_scope, now_ms())
+                .map_err(checkpoint_error),
+            ResumeInput::ExternalResolved(resolutions) => suspension
+                .checkpoint
+                .merge_external(&resolutions, &expected_scope)
+                .map_err(checkpoint_error),
+        }
     }
 
-    pub async fn resume_approval_with_control(
+    pub async fn resume_checkpoint_with_control(
         &self,
-        approval: ApprovalRequest,
-        approved_approval_id: &str,
+        checkpoint: TurnCheckpoint,
+        expected_scope: ToolExecutionScope,
         control: TurnControl,
     ) -> Result<ResumableTurn, TurnError> {
-        validate_approval_transition(&approval, approved_approval_id)?;
-        let mut state = engine::RunState::restore(&approval)?;
-        self.validate_approval_policy(&approval, &control).await?;
-        state
-            .pending
-            .as_mut()
-            .expect("validated pending batch")
-            .approved
-            .push(approval.call_id);
+        self.validate_resume_scope(&expected_scope)?;
+        if self.absolute_deadline_at_ms.is_some_and(|limit| {
+            checkpoint
+                .budget
+                .deadline_at_ms
+                .is_none_or(|saved| saved > limit)
+        }) {
+            return Err(TurnError::InvalidRequest {
+                message: "checkpoint exceeds admitted absolute deadline".into(),
+            });
+        }
+        let state = engine::RunState::restore(&checkpoint, &expected_scope)?;
         self.run(state, control, true, None).await
     }
 
     pub fn reject_approval(
         &self,
-        approval: ApprovalRequest,
+        suspension: TurnSuspension,
         approval_id: &str,
         reason: impl Into<String>,
     ) -> Result<TurnExecution, TurnError> {
-        validate_approval_transition(&approval, approval_id)?;
+        let scope = self.tool_scope(
+            &suspension.checkpoint.scope.execution.turn_id,
+            &suspension.checkpoint.scope.step_id,
+        )?;
+        validate_approval_transition(&suspension, approval_id, &scope)?;
         terminal_approval_execution(
-            approval,
+            suspension,
             TurnOutcome::Rejected {
                 reason: reason.into(),
             },
@@ -728,12 +747,16 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
 
     pub fn expire_approval(
         &self,
-        approval: ApprovalRequest,
+        suspension: TurnSuspension,
         approval_id: &str,
     ) -> Result<TurnExecution, TurnError> {
-        validate_approval_transition(&approval, approval_id)?;
+        let scope = self.tool_scope(
+            &suspension.checkpoint.scope.execution.turn_id,
+            &suspension.checkpoint.scope.step_id,
+        )?;
+        validate_approval_transition(&suspension, approval_id, &scope)?;
         terminal_approval_execution(
-            approval,
+            suspension,
             TurnOutcome::Expired {
                 reason: "approval expired".into(),
             },
@@ -770,10 +793,12 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
         control: TurnControl,
         queue: Option<EventQueue>,
     ) -> Result<TurnExecution, TurnError> {
-        let state = engine::RunState::new(request, self.tool_dispatch, self.tool_timeout)?;
+        let state = self.new_run_state(request)?;
         match self.run(state, control, false, queue).await? {
             ResumableTurn::Completed(execution) => Ok(*execution),
-            ResumableTurn::AwaitingApproval(_) => unreachable!("inline approval does not suspend"),
+            ResumableTurn::Suspended(_) => Err(TurnError::InvalidRequest {
+                message: "external waits require the resumable Turn API".into(),
+            }),
         }
     }
 
@@ -839,30 +864,30 @@ fn validate_request(request: &TurnRequest) -> Result<(), TurnError> {
 }
 
 fn validate_approval_transition(
-    approval: &ApprovalRequest,
+    suspension: &TurnSuspension,
     approval_id: &str,
+    scope: &ToolExecutionScope,
 ) -> Result<(), TurnError> {
-    if approval.approval_id != approval_id
-        || approval.continuation.approval_id != approval.approval_id
+    suspension.validate(scope).map_err(checkpoint_error)?;
+    if !suspension
+        .waiting
+        .approvals
+        .iter()
+        .any(|approval| approval.approval_id == approval_id)
     {
         return Err(TurnError::InvalidRequest {
-            message: "approval id does not match checkpoint".into(),
-        });
-    }
-    if approval.state != ApprovalState::Pending {
-        return Err(TurnError::InvalidRequest {
-            message: "approval checkpoint is already resolved".into(),
+            message: "approval id does not match a pending checkpoint approval".into(),
         });
     }
     Ok(())
 }
 
 fn terminal_approval_execution(
-    approval: ApprovalRequest,
+    suspension: TurnSuspension,
     outcome: TurnOutcome,
     end_reason: TurnEndReason,
 ) -> Result<TurnExecution, TurnError> {
-    let turn_id = approval.turn_id;
+    let turn_id = suspension.checkpoint.scope.execution.turn_id;
     let events = vec![TurnEvent::Completed {
         turn_id: turn_id.clone(),
         outcome: outcome.clone(),
@@ -872,10 +897,16 @@ fn terminal_approval_execution(
             turn_id,
             outcome,
             end_reason,
-            steps: approval.continuation.steps,
+            steps: suspension.checkpoint.steps,
         },
         events,
     })
+}
+
+fn checkpoint_error(error: CheckpointError) -> TurnError {
+    TurnError::InvalidRequest {
+        message: error.to_string(),
+    }
 }
 
 fn now_ms() -> u64 {
