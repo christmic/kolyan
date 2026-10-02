@@ -71,5 +71,8 @@ pub(super) fn invocation_in_scope(call: ToolCall, scope: ToolExecutionScope) -> 
         scope,
         policy_revision,
         control: TurnControl::default(),
+        window: kolyan_core::ToolExecutionWindow::at_deadline(
+            std::time::Instant::now() + std::time::Duration::from_secs(30),
+        ),
     }
 }

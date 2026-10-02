@@ -147,6 +147,9 @@ mod macos {
                     scope,
                     policy_revision: "fixture-v1".into(),
                     control: TurnControl::default(),
+                    window: kolyan_core::ToolExecutionWindow::at_deadline(
+                        std::time::Instant::now() + std::time::Duration::from_secs(30),
+                    ),
                 })
                 .await
                 .unwrap();

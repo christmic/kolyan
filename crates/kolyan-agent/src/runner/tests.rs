@@ -292,6 +292,9 @@ async fn valid_grant_for_foreign_scope_cannot_cross_the_host_execution_gate() {
                 scope: foreign,
                 policy_revision: set.policy.revision(),
                 control: kolyan_core::TurnControl::default(),
+                window: kolyan_core::ToolExecutionWindow::at_deadline(
+                    std::time::Instant::now() + std::time::Duration::from_secs(30),
+                ),
             })
             .await
             .unwrap_err();
@@ -315,6 +318,9 @@ async fn valid_grant_for_foreign_scope_cannot_cross_the_host_execution_gate() {
             scope: base,
             policy_revision: set.policy.revision(),
             control: kolyan_core::TurnControl::default(),
+            window: kolyan_core::ToolExecutionWindow::at_deadline(
+                std::time::Instant::now() + std::time::Duration::from_secs(30),
+            ),
         })
         .await
         .unwrap();

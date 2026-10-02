@@ -96,7 +96,7 @@ async fn observe(case: &Case, installation: &tools::worker::WorkerRun) -> Value 
             let scope = ToolExecutionScope {execution:key.clone(),step_id:format!("byte-{}",call.id),agent_snapshot_digest:None};
             let grant = PreparedGrant::issue(&prepared,decision.clone(),ApprovalEvidence::NotConfirmed,scope.clone()).map_err(|e|e.to_string())?;
             evidence.append(json!({"event":"prepared_authority","call":call,"prepared":prepared,"decision":decision,"grant":grant,"scope":scope,"policy_revision":revision}))?;
-            let invocation = ToolInvocation {prepared,grant,scope,policy_revision:revision,control:TurnControl::default()};
+            let invocation = ToolInvocation {prepared,grant,scope,policy_revision:revision,control:TurnControl::default(),window:kolyan_core::ToolExecutionWindow::at_deadline(std::time::Instant::now()+std::time::Duration::from_secs(30))};
             let port = bridge::Bridge::new(tools.clone(), invocation, evidence.clone())?;
             let request = port.request.clone();
             let key = key.clone();

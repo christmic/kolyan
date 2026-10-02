@@ -163,6 +163,9 @@ async fn scenario(case: &LifecycleCase, fixture: &Fixture, row: &mut Value) -> R
                     scope: root.owner.scope.clone(),
                     policy_revision: policy.revision(),
                     control: kolyan_core::TurnControl::default(),
+                    window: kolyan_core::ToolExecutionWindow::at_deadline(
+                        std::time::Instant::now() + std::time::Duration::from_secs(30),
+                    ),
                 },
                 restored
                     .delegation

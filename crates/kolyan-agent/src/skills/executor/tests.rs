@@ -226,6 +226,9 @@ async fn run(case: &Case, root: &std::path::Path) -> Value {
                                 scope,
                                 policy_revision,
                                 control,
+                                window: kolyan_core::ToolExecutionWindow::at_deadline(
+                                    std::time::Instant::now() + std::time::Duration::from_secs(30),
+                                ),
                             })
                             .await,
                     )

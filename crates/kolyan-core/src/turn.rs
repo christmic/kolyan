@@ -488,6 +488,32 @@ pub type ToolFuture<'a> = Pin<Box<dyn Future<Output = Result<ToolOutcome, ToolEr
 pub type ToolPreparationFuture<'a> =
     Pin<Box<dyn Future<Output = Result<PreparedCall, ToolError>> + Send + 'a>>;
 
+/// One monotonic cutoff shared by the outer dispatcher and inner executor.
+///
+/// This live value is not authority or checkpoint data. Forwarding adapters
+/// must retain it rather than reconstructing a timeout from grant constraints.
+#[derive(Debug, Clone, Copy)]
+pub struct ToolExecutionWindow {
+    deadline: Instant,
+}
+
+impl ToolExecutionWindow {
+    /// Bind an explicit host cutoff without renewing or interpreting a grant.
+    pub fn at_deadline(deadline: Instant) -> Self {
+        Self { deadline }
+    }
+
+    /// The identical cutoff used by Core's outer execution timeout.
+    pub fn deadline(&self) -> Instant {
+        self.deadline
+    }
+
+    /// Remaining live budget; an expired cutoff is zero, never unlimited.
+    pub fn remaining(&self) -> Duration {
+        self.deadline.saturating_duration_since(Instant::now())
+    }
+}
+
 /// Exact host-admitted authority and cooperative control for one external effect.
 /// The expected scope is independent of serialized grant data. Adapters must
 /// revalidate preparation and enforce every granted requirement before effects.
@@ -497,6 +523,7 @@ pub struct ToolInvocation {
     pub scope: ToolExecutionScope,
     pub policy_revision: String,
     pub control: TurnControl,
+    pub window: ToolExecutionWindow,
 }
 
 pub trait ToolExecutor: Send + Sync {

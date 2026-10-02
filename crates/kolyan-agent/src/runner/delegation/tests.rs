@@ -361,6 +361,9 @@ async fn admission_and_actual_child_drive_export_then_compare() {
                     scope: effect_scope,
                     policy_revision: policy.revision(),
                     control,
+                    window: kolyan_core::ToolExecutionWindow::at_deadline(
+                        std::time::Instant::now() + std::time::Duration::from_secs(30),
+                    ),
                 },
                 limits,
                 policy,

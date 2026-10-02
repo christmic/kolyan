@@ -199,6 +199,7 @@ impl<P: ModelProvider, T: ToolExecutor> TurnExecutor<P, T> {
             scope: issued.scope.clone(),
             policy_revision: issued.policy_revision.clone(),
             control: control.clone(),
+            window: ToolExecutionWindow::at_deadline(deadline),
         });
         let outcome = tokio::select! {
             biased;

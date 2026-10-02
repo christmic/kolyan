@@ -161,6 +161,9 @@ fn invocation(call: ToolCall, snapshot: &str) -> ToolInvocation {
         scope,
         policy_revision,
         control: Default::default(),
+        window: kolyan_core::ToolExecutionWindow::at_deadline(
+            std::time::Instant::now() + std::time::Duration::from_secs(30),
+        ),
     }
 }
 
