@@ -4217,3 +4217,20 @@ ToolError::Failed。主控读取首个 actual.jsonl 的 Provider Completed metad
 另行启动精确选择的十六行 host-feedback 矩阵，验证真实错误回填与新调用纠正。
 日志 `/tmp/kolyan-evolution-minimax-host-feedback-v1.log`；未取得终态前不记为通过。
 它不覆盖本次九个失败，也不代替 goal/host/context 的新主线验收。
+
+该次精确选择的 host-feedback 运行已终态：退出 101，耗时 437.14 秒；Rust
+函数 0 passed、1 failed，十六个数据行 6 passed、10 failed。真实 MiniMax-M3
+两协议运行；现有输入及断言保持不变，无人工合成模型调用替代失败。
+
+| 矩阵 | 数据结果 | 实际 report 临时目录 |
+| --- | --- | --- |
+| named/inline/self 委派与 parent-result 重建 | 3/8 | `kolyan-r1-matrix-8sxOQt` |
+| 两子并行/串行策略 | 2/4 | `kolyan-r1-matrix-dBiiIu` |
+| 两层自调用与双子审批重建 | 1/4 | `kolyan-r1-matrix-zafsVq` |
+
+上述同一临时父目录下 report.json 已逐行读取。失败不是静默跳过：四行未出现
+预期 child admission 暂停，两行未出现双子等待，一行 parent-result 缺效果收据，
+一行深度自调用只有两个而非三个实例，两行分别审批后的子效果收据缺失。
+这些是实际断言结果，不是最终根因。新错误分类及 ContinueBatch 错误回填并未
+使本矩阵全通过；须精确关联每行 actual.jsonl 并检查每次请求、模型产物、授权
+及恢复过程，不能仅凭缺收据统一归因于模型，也不能调低数量或改旧断言。

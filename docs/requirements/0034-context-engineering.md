@@ -195,10 +195,49 @@ schema；模型不能提升这些上限。允许配置更小值，增大硬上�
 source/plan/provenance → 原子登记本 Turn 的不可变选定输入 → Runtime admission
 → Core 和 Provider 消费同一选定输入。任何必要证据写入失败都阻止执行。
 
-现有 `TurnPreparationHook` 不是可变请求端口；需要审查一个实际准备消费者及返回
+现有 `TurnPreparationHook` 不是可变请求端口；本批将其迁移为下述异步准备返回
 契约，并完整迁移调用方。不得以 optional compatibility/fallback 绕过必需来源。
 Session 的 original current input 和 full trajectory 保留，选定上下文另有明确引用。
 不能在 Storage 中用 selected messages 覆盖原完整历史。
+
+### 已冻结的 Server 准备返回接口
+
+```rust,ignore
+pub type TurnPreparationFuture<'a> = Pin<Box<dyn Future<
+    Output = Result<ModelRequest, ServerError>> + Send + 'a>>;
+pub trait TurnPreparationHook: Send + Sync {
+    fn prepare<'a>(&'a self, execution: &'a ExecutionRef,
+        session_version: u64, request: &'a TurnRequest)
+        -> TurnPreparationFuture<'a>;
+}
+```
+
+这是可信宿主准备端口，不接受客户端或模型提供的任意替换请求。它只在新 Turn
+合并历史后执行；resume、approval resume 和 recovery 消费已保存的选定输入，
+不重新调用。hook 返回前须成功保存完整 source 和选择/计量来源；保存错误必须
+传播。接口本身不提供 recorder 或证明已实现持久化，由实际 Agent 消费者完成。
+
+Server 在开始 Session Turn 之前独立检查：除 messages 外 ModelRequest 全部字段
+相同；选定消息是原始完整消息的保序子序列；原 current input 的完整尾部原样
+保留。只允许省略历史，不允许新增、修改、重排消息或改变 system、模型、工具、
+输出上限和扩展。更强的原始配对闭包与首目标保护由实际 Agent 的 project_context
+验证，不能仅依赖 Server 的保序检查。Turn ID 与 max_steps/max_tool_calls 不交给
+hook 修改。以后摘要生成或 Turn 内缩减必须另行扩展契约。
+
+Server 对 prepare future 施加硬上限 30 秒，并取请求剩余 deadline 的更小值；
+零剩余时间不调用 hook。等待消耗从有 deadline 的 Turn 剩余时间中扣除，不能
+把计量时间加在执行窗口之外。超时、丢弃或拒绝不开始 Session Turn、Runtime、
+Provider 或工具效果。丢弃 future 不证明远端 count 已停止；可能已保存的准备
+artifact 保持未准入状态。并发 Session version 冲突在 begin_turn 时拒绝，不能
+重新加载历史、再次计量后静默重试。调用方明确不配置 hook 的普通执行不是兼容
+分支，但必须准备的 Agent host 不得选择无 hook 路径。
+
+此切片新增独立数据矩阵：原样/删旧组，完整 source 与实际模型输入一致，原始
+历史未被覆盖；错误修改字段、插入/重排/修改消息、删除当前尾部，保存拒绝、
+计量 future pending 超时、零 deadline、并发 version 冲突，以及审批重建后
+hook 调用次数不增加。全部实际请求、Session/ledger 和错误先导出后回读比较。
+旧 preparation 拒绝用例只迁移 trait 签名，保留原场景和断言。Server seam 通过
+不算实际 selector/count/provenance 宿主闭环完成。
 
 必需来源内容：schema/policy revision、逻辑/物理 owner、Session base version、
 完整 source artifact/digest、selected request digest、保留/省略范围、计数证据及
@@ -355,6 +394,15 @@ projection.rs 的内部配对 helper。保留全部旧测试输入与断言。�
 十组八候选的 2/3/4/5/7/8/9/10 删除前缀、零候选、非法限制和完整 opaque 内容。
 完整源、policy、候选、投影和错误先导出后比较。宿主接入属于主控写集；
 这个切片通过不能被记作 E2 完成。
+
+纯候选切片已集成为 Main `937c003`。主控独立运行 Agent 回归得到 98 passed、
+0 failed、0 ignored；严格 Clippy、fmt、source-layout 与 diff 检查通过。新增
+20 个数据场景产生 36 个候选，完整源、policy、plan、projection 与错误先导出
+再物理回读比较。主控实际文件：
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-context-selection-i8C7tp/actual.jsonl`。
+日志 `/tmp/kolyan-context-selection-main-v1.log` 与
+`/tmp/kolyan-context-selection-main-strict-v1.log`。这证明纯候选算法和现有
+Agent 回归，不证明计量适配器、来源持久化或实际 host 已完成。
 
 本 design owner 的下一有界写集拟为 Agent 新 `context/selection.rs`、独立
 `context/selection/tests.rs` 与 JSON fixtures、所属模块声明，以及本规格。
