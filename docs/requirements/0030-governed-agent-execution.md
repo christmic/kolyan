@@ -4234,3 +4234,37 @@ ToolError::Failed。主控读取首个 actual.jsonl 的 Provider Completed metad
 这些是实际断言结果，不是最终根因。新错误分类及 ContinueBatch 错误回填并未
 使本矩阵全通过；须精确关联每行 actual.jsonl 并检查每次请求、模型产物、授权
 及恢复过程，不能仅凭缺收据统一归因于模型，也不能调低数量或改旧断言。
+
+逐行原始轨迹核对得到：七行在委派参数纠正阶段失败，其中还出现越权权限
+或修改相同 revision 的 inline 定义；三行因子模型拒绝已提供的读取工具而缺
+效果收据。本次没有发现这十行在中立请求中丢失工具结果或恢复后丢失子结果。
+这不是对全部协议 wire 的一致性证明，也不是对该模型所有任务的泛化结论。
+主控独立检查 `3PHlWY/actual.jsonl` 第 21 行原始 Provider arguments 已含
+`named_targets:""`，第 26 行下一请求保留相同 call ID 的 is_error 结果；
+`wTpjpV` 第 82 行实际子请求提供 file.read；`aSGNjo` 第 135 行实际子请求
+要求“先审批再调用读取”，而工具只有 file.read，没有独立审批工具。
+上述目录分别带 `kolyan-agent-delegation-` 或 `kolyan-agent-topology-` 前缀。
+
+### 明确任务契约的新增真实矩阵
+
+批准新增 `explicit-contract-v1` 数据矩阵，沿用原八种委派、并行和拓扑业务
+场景，两协议十六行。它验证明确合法的模型可见任务契约，而非替代原失败验收。
+每行记录 baseline scope/case ID、原数据摘要、新输入摘要、contract revision、
+完整输入和允许修改字段；只允许新 case ID 与任务文字变化，效果数、实例数、
+审批、重建、结果消费和并发断言保持原强度。原 fixture、测试函数体及失败
+记录不改。模型仍自行生成全部调用和子输入；不替换 arguments 或硬编码调用。
+
+输入明确：调用 file.read 本身触发宿主审批；没有独立申请审批工具。无委派
+权限用 `named_targets:[]`，不是空字符串或包含空字符串的数组；callee 与它
+未来可委派的目标不是同一概念。inline 使用宿主实际附上的完整不可变定义，
+修复参数不修改同 revision 的定义。深度自调用中间子保留允许 self 的权限但
+按任务委派读取，叶子只读取一次；两审批子各自读取一次、分别暂停与确认恢复，
+不能用一子的重复效果代替另一子。
+
+新增 `tests/fixtures/agent/explicit_contract.json` 和独立 delegation 子模块及
+parallel/topology wrapper；父模块只新增声明。wrapper 在原 case 副本上应用
+声明允许的任务文字，复用既有 runner/比较器，不扩大生产可见性。新增离线
+测试验证八行覆盖及输入外全部字段一致，保存完整 baseline/new plan 后比较；
+再跑真实 OS worker 场景。实际 MiniMax 两协议单次逐行运行，完整实际请求、
+模型事件、审批、恢复、收据及消费轨迹先落盘再比较。结果单独登记为新输入
+验收；新矩阵通过不能把旧矩阵的失败改成通过。

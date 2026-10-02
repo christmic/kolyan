@@ -341,6 +341,52 @@ target inode and display-path aliases. It compares both prepared write content
 and definitive result; a forged result hash, is_error flag, unrelated effect,
 uncertain receipt or physically non-successful attempt cannot satisfy it.
 
+#### 冻结的 Agent 文件目标 checker
+
+`FileWriteCommittedPredicateV1` 为 deny_unknown_fields 的独立 typed predicate：
+`schema_version` 固定 1，`tool_revision` 为受信任的精确适配器 revision，
+`workspace/parent` 复用 Tools 的 ExactDirectoryBinding，另含 `leaf`、
+`expected_bytes: u64` 与小写 `expected_sha256`。目标由可信宿主在准入前定义；
+不能从模型已经生成的写入内容反推目标，使任何实际写入自动满足它。
+目录 path 必须按 native physical 规则规范化、绝对、无 NUL、最多 128 components；
+identity chain 长度等于 components 数，并验证 workspace 是 parent path 与
+chain 的前缀。leaf 是单个普通 UTF-8 文件名，不额外套用通用 256 字节 ID 上限。
+复用 Tools schema，不新造 worker request；历史 assessment 不 stat/open 文件。
+
+`FileWriteCommittedChecker::new(trusted_tool_revisions: BTreeSet<String>)`
+返回 `Result<Self, TaskError>`，只由 host 配置受信任的真实适配器版本。集合非空、
+至多 128 项，revision 遵循 PreparedCall 的原界限；不能按 file.write 名字或
+`file-worker-v2/` 前缀授予信任。registry key 的 kind 为 `file_write_committed`，
+revision 为 domain-separated SHA-256，绑定 checker schema/实现版本及有序
+信任集合。重建必须加载同一受信任配置；改变信任集合改变 key，不能在同 key
+下悄悄接受不同适配器。predicate 的 tool_revision 必须在该集合内。
+
+直接实现已冻结的 Server GoalChecker 接口，仅消费 VerifiedGoalSource。完整
+source 上寻找匹配的 Completed、非 is_error receipt；严格解析真实 FileOperation
+及直接保存的 ExactFileBinding，核对 scope execution/snapshot、工具名、精确
+revision、FilesystemWrite / Create+Update / NonIdempotent 和 sandbox requirement。
+物理 resource 必须等于 bound parent+leaf。prepared content 的 UTF-8 byte/hash
+与目标一致，ToolResult call ID 与 prepared 相同；strict FileOperationResult
+显示 path 与 prepared arguments.path 一致，但身份来自目录链/leaf。result
+content 必须为空、byte/hash 同时等于目标与 prepared content，不比较旧 target
+inode。不可用 edit/read 或错误结果冒充 write。
+
+匹配存在只证明历史受管写入提交，不证明最后一次写入、当前文件内容或断电
+持久性。多份匹配按 receipt cursor、event ID 确定性选一；Satisfied proof 严格
+带版本、六个 effect source 坐标、prepared digest、完整 ToolResult digest 和
+byte/hash。完整 source 无匹配是 Unsatisfied，proof 带扫描终点、检查数量及
+失败/不匹配分类计数；不完整 source 是 Indeterminate，不能证明缺失。损坏的
+绑定/result/claim/source 返回操作性 TaskError，不保存可纠正的假 miss。
+
+Server verifier 公共端口另增加 `compute_assessment(&TaskSnapshot, criterion_id)`，
+供 Service 自己计算再提交；Submitted assessment、append/replay/completion
+仍全部独立重算。已冻结 VerifiedGoalSource getters 为 binding、terminal、
+response、coverage、effects、through；均只读，没有 Deserialize 或 caller
+constructor。第一 checker 及新数据测试归 Agent goals 模块；Server 不依赖
+Tools，Agent 可依赖 Tools 的 schema。新增合法/错误/不确定/超限、物理绑定与
+alias、旧 inode变化、版本变化、多 witness、Memory/SQLite 重建数据矩阵，
+再接实际 Root Runner 和 MiniMax 工具写入目标；纯 checker 通过不是宿主完成。
+
 The first Task integration dataset includes missing checker, unknown revision,
 malformed/digest-mismatched predicate, forged Satisfied input, missing/foreign
 proof, wrong terminal, definitive failure, exact success, duplicate/conflicting
