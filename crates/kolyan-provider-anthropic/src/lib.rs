@@ -73,40 +73,9 @@ impl AnthropicProvider {
 
 impl ModelProvider for AnthropicProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
-        let client = self.client.clone();
         Box::pin(async move {
-            let (plan, wire, _prepared) = self.plan_wire(&request)?;
-            let request = plan.request;
-            let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
-            let response = client
-                .stream_message_with_extensions(&wire, &plan.wire_extensions)
-                .await
-                .map_err(anthropic_error)?;
-            let retry_report = response.retry_report().clone();
-            let model = request.model.clone();
-            let structured = request.output_format.is_some();
-            let stream = map_stream(
-                response.map(|event| event.map_err(anthropic_error)),
-                model,
-                structured,
-                validator,
-            );
-            let audit = plan.decisions;
-            let mut metadata = Vec::new();
-            if !audit.is_empty() {
-                metadata.push(Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: request.model.provider.clone(),
-                    raw: Some(json!({"kind":"request_planning","decisions":audit})),
-                })));
-            }
-            if retry_report.was_retried() {
-                metadata.push(Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: request.model.provider,
-                    raw: Some(json!({"kind":"local_http_opening_retry","report":retry_report})),
-                })));
-            }
-            let prefix = futures_util::stream::iter(metadata);
-            Ok(Box::pin(prefix.chain(stream)) as _)
+            let prepared = self.prepare_generation(&request)?;
+            self.stream_prepared(prepared).await
         })
     }
 }
@@ -473,5 +442,7 @@ fn parse_json(text: &str) -> Option<Value> {
 mod tests;
 
 mod accounting;
+mod generation;
+pub use generation::PreparedAnthropicGeneration;
 #[cfg(test)]
 mod opening_diagnostic_tests;

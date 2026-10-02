@@ -78,8 +78,22 @@ impl AnthropicClient {
         body.as_object_mut()
             .expect("typed request serializes as an object")
             .extend(extensions.clone());
-        dump_request("anthropic", &body);
-        let opened = self.open(serde_json::to_vec(&body)?).await?;
+        self.stream_message_body(&body).await
+    }
+
+    /// Send the exact compact JSON body supplied by the production prepared-wire mapper.
+    /// No remapping/default insertion; opening retries and SSE behavior remain shared.
+    pub async fn stream_message_body(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<MessageStream, AnthropicError> {
+        if !body.is_object() || body.get("stream") != Some(&serde_json::Value::Bool(true)) {
+            return Err(AnthropicError::Configuration(
+                "generation body must be an object with stream=true".into(),
+            ));
+        }
+        dump_request("anthropic", body);
+        let opened = self.open(generation::encode_body(body)?).await?;
         Ok(MessageStream::new(opened.response, self.config.diagnostics)
             .with_retry_report(opened.retry_report))
     }
@@ -369,5 +383,6 @@ mod tests;
 mod opening_tests;
 
 mod counting;
+mod generation;
 #[cfg(test)]
 mod opening_diagnostic_tests;

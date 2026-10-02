@@ -60,56 +60,9 @@ impl OpenAiProvider {
 
 impl ModelProvider for OpenAiProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
-        let client = self.client.clone();
         Box::pin(async move {
-            let (plan, wire, _prepared) = self.plan_wire(&request)?;
-            let request = plan.request;
-            let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
-            let response = client
-                .stream_response_with_extensions(&wire, &plan.wire_extensions)
-                .await
-                .map_err(openai_error)?;
-            let retry_metadata = response.retry_report().was_retried().then(|| {
-                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: request.model.provider.clone(),
-                    raw: Some(
-                        json!({"kind":"local_http_opening_retry","report":response.retry_report()}),
-                    ),
-                }))
-            });
-            let model = request.model.clone();
-            let model_for_map = model.clone();
-            let mut call_ids = BTreeMap::new();
-            let mut finalized = BTreeMap::new();
-            let mapped = response.map(move |event| {
-                event.map_err(openai_error).and_then(|mut event| {
-                    recover_finalized_output(&mut event, &mut finalized)?;
-                    map_stream_event(event, &model_for_map, &mut call_ids)
-                })
-            });
-            let mapped =
-                mapped.flat_map(|event| futures_util::stream::iter(finalized_call_events(event)));
-            let stream = require_terminal(mapped);
-            let stream = stream.map(move |event| {
-                event.and_then(|event| {
-                    if let ModelEvent::Completed(response) = &event {
-                        validator.validate(response)?;
-                    }
-                    Ok(event)
-                })
-            });
-            let audit = plan.decisions;
-            let prefix = futures_util::stream::iter((!audit.is_empty()).then(|| {
-                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
-                    provider: request.model.provider,
-                    raw: Some(json!({"kind":"request_planning","decisions":audit})),
-                }))
-            }));
-            Ok(Box::pin(
-                prefix
-                    .chain(futures_util::stream::iter(retry_metadata))
-                    .chain(stream),
-            ) as _)
+            let prepared = self.prepare_generation(&request)?;
+            self.stream_prepared(prepared).await
         })
     }
 }
@@ -713,5 +666,7 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
 mod tests;
 
 mod accounting;
+mod generation;
+pub use generation::PreparedOpenAiGeneration;
 #[cfg(test)]
 mod opening_diagnostic_tests;

@@ -77,8 +77,22 @@ impl OpenAiClient {
         body.as_object_mut()
             .expect("typed request serializes as an object")
             .extend(extensions.clone());
-        dump_request("openai", &body);
-        let opened = self.open(serde_json::to_vec(&body)?).await?;
+        self.stream_response_body(&body).await
+    }
+
+    /// Send the exact compact JSON body supplied by the production prepared-wire mapper.
+    /// No remapping/default insertion; opening retries and SSE behavior remain shared.
+    pub async fn stream_response_body(
+        &self,
+        body: &serde_json::Value,
+    ) -> Result<ResponseStream, OpenAiError> {
+        if !body.is_object() || body.get("stream") != Some(&serde_json::Value::Bool(true)) {
+            return Err(OpenAiError::Configuration(
+                "generation body must be an object with stream=true".into(),
+            ));
+        }
+        dump_request("openai", body);
+        let opened = self.open(generation::encode_body(body)?).await?;
         Ok(
             ResponseStream::new(opened.response, self.config.diagnostics)
                 .with_retry_report(opened.retry_report),
@@ -357,6 +371,7 @@ mod opening_tests;
 mod diagnostic_tests;
 
 mod counting;
+mod generation;
 #[cfg(test)]
 #[path = "client/opening_diagnostic_http_tests.rs"]
 mod opening_diagnostic_http_tests;

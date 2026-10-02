@@ -44,7 +44,7 @@ impl AnthropicProvider {
             .map_err(crate::anthropic_error)?;
         prepared.reported_count(response.input_tokens)
     }
-    fn mapping_identity(
+    pub(crate) fn mapping_identity(
         &self,
         model: kolyan_model::ModelRef,
     ) -> Result<MappingIdentity, ProviderError> {
@@ -211,7 +211,7 @@ fn content_nodes(root: &Value) -> bool {
     true
 }
 
-fn count_error(message: &str) -> ProviderError {
+pub(crate) fn count_error(message: &str) -> ProviderError {
     ProviderError::new(
         ProviderErrorKind::Unsupported,
         ProviderErrorPhase::Validate,

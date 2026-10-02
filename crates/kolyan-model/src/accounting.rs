@@ -199,8 +199,9 @@ impl PreparedContextWire {
     pub fn coverage(&self) -> &CountCoverage {
         &self.coverage
     }
-    /// Checks instance, endpoint/model/revisions, current profile and count coverage before I/O.
-    pub fn verify_for(
+    /// Validate generation binding without requiring count support or coverage.
+    /// Unsupported profiles can still generate; changing a profile invalidates preparation.
+    pub fn verify_generation_for(
         &self,
         owner: &Arc<()>,
         identity: &MappingIdentity,
@@ -214,16 +215,6 @@ impl PreparedContextWire {
                 "prepared wire belongs to a different provider identity or profile",
             ));
         }
-        match &profile.registration {
-            Some(CountRegistration {
-                identity: registered,
-                ..
-            }) if registered == identity => {}
-            _ => return Err(accounting_error("count profile unsupported or mismatched")),
-        }
-        if !self.coverage.is_complete() {
-            return Err(accounting_error("count coverage incomplete"));
-        }
         let (bytes, wire_digest) =
             encoding::measure_digest(&self.generation_body, "generation wire")?;
         if wire_digest != self.generation_wire_digest
@@ -234,6 +225,26 @@ impl PreparedContextWire {
             return Err(accounting_error(
                 "prepared wire digest or byte size mismatch",
             ));
+        }
+        Ok(())
+    }
+    /// Checks instance, endpoint/model/revisions, current profile and count coverage before I/O.
+    pub fn verify_for(
+        &self,
+        owner: &Arc<()>,
+        identity: &MappingIdentity,
+        profile: &CountProfile,
+    ) -> Result<(), ProviderError> {
+        self.verify_generation_for(owner, identity, profile)?;
+        match &profile.registration {
+            Some(CountRegistration {
+                identity: registered,
+                ..
+            }) if registered == identity => {}
+            _ => return Err(accounting_error("count profile unsupported or mismatched")),
+        }
+        if !self.coverage.is_complete() {
+            return Err(accounting_error("count coverage incomplete"));
         }
         Ok(())
     }
