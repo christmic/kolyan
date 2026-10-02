@@ -16,7 +16,10 @@ external effects. Voice, GUI, A2A and model training remain outside this scope.
 ## Requirements and ownership
 
 The phase review owns the assessment. Requirement 0030 remains the sole
-authority for its three unfinished acceptance items and retained run evidence.
+authority for its retained actual-model cases and run evidence. The user's
+2026-10-02 clarification makes self-iteration an experimental feedback activity
+after functional development, not a prerequisite for mainline delivery or an
+obligation to immediately produce an accepted code change.
 This program owns stage dependencies and completion rules. Each increment owns
 its precise contracts, implementation decisions, cases and validation receipts
 in a separate numbered requirement, linked here before implementation.
@@ -42,7 +45,7 @@ Single-process scheduling adds no distributed lease to Runtime.
 
 | Stage | Required outcome | Dependency and scope |
 | --- | --- | --- |
-| E0 Current acceptance | Close the three 0030 gaps: complex delegation/approval, long-task finalization, independently accepted Kolyan-authored change | Retain original cases and failures; precedes a claim that current Agent execution is accepted |
+| E0 Current acceptance | Close the functional 0030 gaps: complex delegation/approval and long-task finalization | Retain original cases and failures; self-iteration supplies experimental feedback, not a delivery prerequisite |
 | E1 Execution correctness | Standalone Step liveness; typed preparation errors; explicit goal evidence and bounded correction | Step and error classification may develop independently of E0; business-goal contracts precede host wiring |
 | E2 Context and resources | Authenticated model-aware accounting, governed reduction, large-output references and managed background execution | Preserve provenance and tool pairing; no diagnostic estimator promoted to trusted count |
 | E3 Governed capabilities | Selective Skills loading, working MCP lifecycle, concrete hooks, scoped revisioned memory | Each first implementation must exercise a real execution consumer, not just expose a trait |
@@ -58,7 +61,7 @@ Cross-stage integration waits for the dependencies it actually needs.
 The first mainline is goal verification and a usable Agent host, together with
 context engineering. Small Step/error corrections are supporting slices, not
 a replacement for the phase review's larger capability gaps. Existing 0030
-failures remain acceptance dependencies, but do not prevent independent design
+functional failures remain acceptance dependencies, but do not prevent independent design
 and development of these larger capabilities.
 
 The coordinator owns this program, requirement 0030 evidence, the goal/host
@@ -143,8 +146,13 @@ The evolving integrated suite must cover:
   recalled instructions never replace current authority.
 - Coordination: duplicate wakeups, mailbox order, cancellation races,
   concurrent budget ceilings, reservations and recovery without overspending.
-- Independent self-iteration: isolated worktree, actual model-authored diff,
-  independent review, relevant regression and an explicit merge decision.
+
+After functional increments, run bounded self-iteration experiments in isolated
+worktrees to collect actual-model feedback. Retain unsuccessful runs as findings;
+an experiment may finish without a usable modification. No repeated correction
+loop is required for mainline acceptance. If a candidate is proposed for merging,
+require actual model-authored evidence, independent review, relevant regression
+and an explicit merge decision; experimental status never relaxes these checks.
 
 Offline tests prove deterministic invariants. Live tests use the authorized
 MiniMax endpoints through both supported protocols and retain actual requests,
@@ -171,5 +179,15 @@ until diagnosis and corresponding evidence establish the fix.
 
 The program is complete only when the integrated host demonstrates the scoped
 outcome, all required increments have verifiable acceptance receipts, and E0's
-original requirements are satisfied. The document, parallel dispatch, offline
+functional requirements are satisfied. Experimental self-iteration success is
+not a completion condition. The document, parallel dispatch, offline
 pass or a single successful model run does not constitute completion.
+
+## Build resource discipline
+
+The user additionally requires timely control of Rust build latency and disk
+growth. Follow the single-source [build cache rules](../architecture/code-conventions.md#编译时间与缓存占用):
+reuse bounded caches, serialize gates sharing a target, measure disk use, and
+clean only confirmed inactive build artifacts. Keep source and experiment proof
+outside disposable caches. This is part of the development workflow, not a
+replacement for any E0–E5 implementation or actual-model acceptance requirement.

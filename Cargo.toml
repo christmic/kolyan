@@ -24,3 +24,9 @@ tokio = { version = "1", features = ["macros", "time"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+# Keep backtrace file/line information without full variable/type debug data.
+# The test profile inherits dev; reuse one mainline incremental cache.
+[profile.dev]
+debug = "line-tables-only"
+incremental = true

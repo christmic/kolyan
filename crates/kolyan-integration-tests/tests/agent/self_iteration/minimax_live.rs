@@ -1,5 +1,6 @@
 //! Independent MiniMax experiment; the historical four-stage fixture is immutable.
 
+mod correction;
 mod driver;
 mod execution;
 mod failure;

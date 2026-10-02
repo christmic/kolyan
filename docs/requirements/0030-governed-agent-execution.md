@@ -4357,3 +4357,18 @@ Root 执行、文件工具和同一四文件 allowlist。该任务是新准入�
 已 Failed 的 Task，不重写旧失败，不代写候选。候选仍由实际 MiniMax 驱动
 Kolyan 修改，最多一个 Turn、16 Step、40 calls；最终以主控独立源码审查、
 七项固定验证及必要主干回归决定是否合入，不以模型自述或审核 JSON 授权。
+
+### 实验定位与本次收尾
+
+用户于 2026-10-02 明确：自我开发仅是功能开发后真实运行、获取反馈的实验，
+不要求立刻产生可接受修改，也不是主线功能验收的前置条件。主线依照
+[阶段计划](0031-agent-evolution-program.md) 推进；上述失败保留为反馈，
+不再为本实验追加修正循环。任何未来候选合入仍须独立审查和回归。
+
+本次独立修正真实运行已终态退出 101，63.81 秒，失败原因为受隔离文件
+工具执行返回 `Operation(MissingMatch)`；当前证据不能进一步确定匹配失败
+的具体请求原因，也不能据此宣称模型或生产实现正确。实际轨迹保留于
+`/tmp/kolyan-self-iteration-minimax-v1.uGjdtb/host/self-iteration-correction-FjKbiv/actual.jsonl`，
+日志为 `/tmp/kolyan-self-correction-main-minimax-live-v1.log`。未合入候选。
+同批主干离线实验框架回归 25 passed、0 failed、4 ignored，日志为
+`/tmp/kolyan-self-correction-main-lean-offline-v1.log`；离线通过不代替真实通过。

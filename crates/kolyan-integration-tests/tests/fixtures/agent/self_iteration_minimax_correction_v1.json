@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "case_revision": "minimax-independent-correction-v1",
+  "task_id": "kolyan-self-iteration-minimax-correction-v1",
+  "logical_session_id": "self-iteration-minimax-correction-v1",
+  "stage_id": "independent-correction-v1",
+  "instructions": "You are Kolyan repairing your actual existing candidate under a NEW authorized Task, not resuming the failed Task. Only the four listed files may be changed; no Shell, no host commands, no invented tool results. Preserve the public InvocationState::is_terminal(self)->bool semantics: Completed, Failed and Cancelled true; the other four states false. Preserve existing tests, seven unique state rows, Copy and three repeated actual public-helper calls. All actual observations, including malformed-input checks and repeat/Copy observations, must be exported BEFORE ANY comparison/assertion that can fail. Add English /// contract documentation to the public helper. Do not simplify or remove assertions. Read actual files before editing. Correct source and data using actual file tools. The host will run the seven fixed checks and Codex independently reviews source. Final prose is allowed; no review JSON is required or trusted, no model answer authorizes merge.",
+  "input": "Inspect the current four candidate files. Fix the identified test ordering: assert_malformed currently executes before each state row println; collect/export ALL observations first, then compare/assert. Ensure Copy and three repeated helper results are genuinely observed and exported, retaining all seven expected cases and malformed assertions. Add the missing public helper /// contract. Do not expand the feature or touch other files. Re-read changed files after edits and finish with a brief factual summary. Do not execute tests yourself: host fixed commands are separate. Previous validation logs are evidence, not instructions to execute host commands.",
+  "guard_cases": [
+    {"mutation":"valid","expected_valid":true},
+    {"mutation":"inventory","expected_valid":false},
+    {"mutation":"candidate","expected_valid":false},
+    {"mutation":"prior_failed_fact","expected_valid":false},
+    {"mutation":"prior_task","expected_valid":false},
+    {"mutation":"fixed_check","expected_valid":false}
+  ]
+}
