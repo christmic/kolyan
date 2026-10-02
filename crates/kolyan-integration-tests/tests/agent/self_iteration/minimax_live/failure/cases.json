@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"before_admission","admitted":false,"cancelled":false,"outcome":"not_admitted","state":null,"new_facts":0},
+    {"id":"ready_rejected","admitted":true,"cancelled":false,"outcome":"failed","state":"Failed","new_facts":1},
+    {"id":"cancelled_preserved","admitted":true,"cancelled":true,"outcome":"terminal_preserved","state":"Cancelled","new_facts":0}
+  ]
+}

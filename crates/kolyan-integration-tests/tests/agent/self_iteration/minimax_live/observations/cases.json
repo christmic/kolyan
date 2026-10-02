@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"valid_noise","mutation":"noise","error":null},
+    {"id":"valid_reordered","mutation":"reverse","error":null},
+    {"id":"valid_escaped_marker","mutation":"escape_marker","error":null},
+    {"id":"missing_all","mutation":"empty","error":"missing_state"},
+    {"id":"missing_one","mutation":"remove","error":"missing_state"},
+    {"id":"duplicate_state","mutation":"duplicate","error":"duplicate_state"},
+    {"id":"foreign_state","mutation":"foreign","error":"foreign_state"},
+    {"id":"wrong_version","mutation":"version","error":"wrong_version"},
+    {"id":"missing_version","mutation":"missing_version","error":"invalid_row"},
+    {"id":"unknown_field","mutation":"unknown","error":"invalid_row"},
+    {"id":"duplicate_json_field","mutation":"duplicate_field","error":"invalid_row"},
+    {"id":"duplicate_event_field","mutation":"duplicate_event","error":"invalid_row"},
+    {"id":"escaped_duplicate_event_field","mutation":"escaped_duplicate_event","error":"invalid_row"},
+    {"id":"escaped_malformed_target","mutation":"escaped_malformed","error":"invalid_row"},
+    {"id":"missing_copy_before","mutation":"missing_before","error":"invalid_row"},
+    {"id":"missing_copy_after","mutation":"missing_after","error":"invalid_row"},
+    {"id":"missing_results","mutation":"missing_results","error":"invalid_row"},
+    {"id":"malformed_target","mutation":"malformed","error":"invalid_row"},
+    {"id":"copy_before_changed","mutation":"before","error":"copy_changed"},
+    {"id":"copy_after_changed","mutation":"after","error":"copy_changed"},
+    {"id":"wrong_result","mutation":"result","error":"results_mismatch"},
+    {"id":"two_repeats","mutation":"two_results","error":"invalid_row"},
+    {"id":"four_repeats","mutation":"four_results","error":"invalid_row"},
+    {"id":"string_result","mutation":"string_result","error":"invalid_row"},
+    {"id":"invalid_expected_duplicates","mutation":"expected_duplicate","error":"invalid_expected"},
+    {"id":"invalid_expected_count","mutation":"expected_remove","error":"invalid_expected"},
+    {"id":"expected_truth_controls_comparison","mutation":"expected_invert","error":"results_mismatch"}
+  ]
+}
