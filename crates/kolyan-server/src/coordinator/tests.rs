@@ -1,5 +1,9 @@
 use super::*;
+
+mod boundary;
 use kolyan_ledger::InMemoryLedger;
+
+mod publication;
 
 #[derive(Clone)]
 struct RacingLedger {
@@ -48,4 +52,24 @@ fn identical_concurrent_commit_is_idempotent_but_changed_fact_is_rejected() {
         assert_eq!(result.is_err(), mismatch);
         assert_eq!(ledger.events_after(0).unwrap().len(), 1);
     }
+}
+
+#[test]
+fn active_checkpoint_drive_is_running_until_local_worker_releases_it() {
+    let ledger = InMemoryLedger::default();
+    let coordinator = ExecutionCoordinator::new(ledger.clone());
+    let key = ExecutionRef {
+        session_id: "s".into(),
+        turn_id: "t".into(),
+        execution_id: "e".into(),
+    };
+    coordinator.start(key.clone()).unwrap();
+    coordinator.release("e");
+    coordinator.append_once(&key,"paused",LedgerEventKind::ExecutionSuspended,
+        json!({"schema_version":1,"publication_cursor":0,"suspension":crate::suspension::tests::fixture()})).unwrap();
+    assert_eq!(coordinator.state("e").unwrap(), ExecutionState::Suspended);
+    coordinator.admit(key, AdmissionKind::Resume).unwrap();
+    assert_eq!(coordinator.state("e").unwrap(), ExecutionState::Running);
+    coordinator.release("e");
+    assert_eq!(coordinator.state("e").unwrap(), ExecutionState::Suspended);
 }

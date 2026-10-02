@@ -1,0 +1,10 @@
+[
+ {"id":"exact","mutation":"read","max_bytes":16777216,"expected":"exact_initialization"},
+ {"id":"noncritical","mutation":"critical","max_bytes":16777216,"expected":"refused"},
+ {"id":"unknown_schema","mutation":"schema","max_bytes":16777216,"expected":"refused"},
+ {"id":"foreign_subject","mutation":"subject","max_bytes":16777216,"expected":"refused"},
+ {"id":"missing_cause","mutation":"cause","max_bytes":16777216,"expected":"refused"},
+ {"id":"changed_digest","mutation":"digest","max_bytes":16777216,"expected":"refused"},
+ {"id":"one_byte","mutation":"read","max_bytes":1,"expected":"refused"},
+ {"id":"foreign_owner","mutation":"foreign","max_bytes":16777216,"expected":"refused"}
+]

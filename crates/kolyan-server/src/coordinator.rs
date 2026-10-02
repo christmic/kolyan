@@ -29,18 +29,29 @@ where
             }
             state = match event.kind {
                 LedgerEventKind::ExecutionStarted => ExecutionState::Running,
+                LedgerEventKind::TurnCheckpointPrepared | LedgerEventKind::TurnCheckpointMerged => {
+                    ExecutionState::Running
+                }
                 LedgerEventKind::ExecutionSuspended => ExecutionState::Suspended,
                 LedgerEventKind::ExecutionCancelled | LedgerEventKind::TurnCancelled => {
                     ExecutionState::Cancelled
                 }
                 LedgerEventKind::TurnCompleted => ExecutionState::Completed,
-                LedgerEventKind::TurnFailed | LedgerEventKind::EffectUncertain => {
-                    ExecutionState::Failed
-                }
+                LedgerEventKind::TurnFailed
+                | LedgerEventKind::TurnTimedOut
+                | LedgerEventKind::EffectUncertain => ExecutionState::Failed,
                 _ => state,
             };
         }
-        Ok(state)
+        // A saved checkpoint remains authoritative during driving, but it is
+        // not a stopped public projection while this coordinator owns work.
+        Ok(
+            if state == ExecutionState::Suspended && self.is_active(execution_id) {
+                ExecutionState::Running
+            } else {
+                state
+            },
+        )
     }
 
     pub fn start(&self, execution: ExecutionRef) -> Result<ExecutionAdmission, CoordinatorError> {
@@ -143,7 +154,7 @@ where
             .remove(execution_id);
     }
 
-    fn admit(
+    pub(super) fn admit(
         &self,
         execution: ExecutionRef,
         kind: AdmissionKind,
@@ -238,6 +249,3 @@ fn is_terminal(state: ExecutionState) -> bool {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod boundary_tests;

@@ -1,5 +1,4 @@
 use super::super::*;
-use kolyan_core::{ApprovalState, ToolDispatchPolicy, TurnContinuation};
 use kolyan_ledger::InMemoryLedger;
 use kolyan_model::{ModelRequest, ProviderFuture};
 use kolyan_storage::FileSessionStore;
@@ -12,8 +11,8 @@ impl ModelProvider for NeverModel {
     }
 }
 
-#[test]
-fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
+#[tokio::test]
+async fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
     let root = tempfile::tempdir().unwrap();
     let store = FileSessionStore::new(root.path()).unwrap();
     store.create("s").unwrap();
@@ -41,67 +40,8 @@ fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
     let coordinator = ExecutionCoordinator::new(ledger.clone());
     coordinator.start(key.clone()).unwrap();
     coordinator.release("e");
-    let request: ModelRequest = serde_json::from_value(json!({
-        "request_id":"r","model":{"provider":"fixture","model":"m"},
-        "system":[],"messages":[],"tools":[],"tool_choice":"auto",
-        "output_format":null,"prompt_cache":null,"reasoning":null,
-        "max_output_tokens":null,"extensions":{}
-    }))
-    .unwrap();
-    let approval = ApprovalRequest {
-        approval_id: "a".into(),
-        turn_id: "t".into(),
-        call_id: "c".into(),
-        tool_name: "file.write".into(),
-        reason: "requires approval".into(),
-        state: ApprovalState::Pending,
-        expires_at_ms: None,
-        continuation: TurnContinuation {
-            continuation_id: "continuation".into(),
-            approval_id: "a".into(),
-            turn_id: "t".into(),
-            model_request: request,
-            assistant_content: vec![],
-            pending_calls: vec![],
-            steps: vec![],
-            max_steps: 3,
-            next_step_index: 1,
-            call_id: "c".into(),
-            tool_name: "file.write".into(),
-            args_fingerprint: "args".into(),
-            policy_version: "v1".into(),
-            // Denial consumes an opaque checkpoint without preparing or executing tools.
-            prepared_calls: Vec::new(),
-            preparation_errors: Vec::new(),
-            execution_scope: serde_json::from_value(json!({
-                "execution": {"session_id":"s", "turn_id":"t", "execution_id":"e"},
-                "step_id":"t-step-0", "agent_snapshot_digest":null
-            }))
-            .unwrap(),
-            approved_call_ids: vec![],
-            max_tool_calls: Some(3),
-            tool_calls_used: 0,
-            deadline_at_ms: None,
-            tool_dispatch: ToolDispatchPolicy::default(),
-            tool_timeout_ms: None,
-        },
-    };
-    coordinator
-        .append_once(
-            &key,
-            "approval/a/requested",
-            LedgerEventKind::ApprovalRequested,
-            json!(approval),
-        )
-        .unwrap();
-    coordinator
-        .append_once(
-            &key,
-            "paused",
-            LedgerEventKind::ExecutionSuspended,
-            json!({"approval_id":"a"}),
-        )
-        .unwrap();
+    let suspension = crate::suspension::tests::persist_approval(ledger.clone()).await;
+    let approval_id = &suspension.waiting.approvals[0].approval_id;
     let service = SessionExecutionService::new(
         ExecutionService::new(ledger.clone(), NoopTraceSink),
         SessionService::new(store.clone()),
@@ -113,7 +53,7 @@ fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
     };
     assert!(
         service
-            .deny(TurnExecutor::new(NeverModel), &wrong, "a")
+            .deny(TurnExecutor::new(NeverModel), &wrong, approval_id)
             .is_err()
     );
     assert!(
@@ -124,17 +64,30 @@ fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
     assert_eq!(ledger.events_after(0).unwrap(), before);
     let suspended_record = store.load("s").unwrap();
     service
-        .deny(TurnExecutor::new(NeverModel), &key, "a")
+        .deny(TurnExecutor::new(NeverModel), &key, approval_id)
         .unwrap();
     assert_eq!(service.state("e").unwrap(), ExecutionState::Failed);
     assert_eq!(
         store.load("s").unwrap().turns[0].status,
         SessionTurnStatus::Failed
     );
-    assert!(!ledger.claim("e/attempt/resume/a").unwrap());
+    // Exclusivity is a durable bound deny decision, not a stranded resume claim.
+    assert_eq!(
+        ledger
+            .events_after(0)
+            .unwrap()
+            .iter()
+            .filter(|event| {
+                event.kind == LedgerEventKind::ApprovalResolved
+                    && event.payload["decision"] == "deny"
+                    && event.payload["checkpoint_id"] == suspension.checkpoint.checkpoint_id
+            })
+            .count(),
+        1
+    );
     assert!(
         service
-            .deny(TurnExecutor::new(NeverModel), &key, "a")
+            .deny(TurnExecutor::new(NeverModel), &key, approval_id)
             .is_err()
     );
     let events = ledger.events_after(0).unwrap();
@@ -145,7 +98,7 @@ fn denial_is_durable_exclusive_and_reconcilable_without_execution() {
             .count(),
         1
     );
-    assert!(!events.iter().any(|e| matches!(
+    assert!(!events[before.len()..].iter().any(|e| matches!(
         e.kind,
         LedgerEventKind::ModelRequested
             | LedgerEventKind::ToolExecutionStarted

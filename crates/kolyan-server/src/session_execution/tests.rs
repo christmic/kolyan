@@ -1,4 +1,7 @@
+mod decision_gap;
 mod denial;
+mod merge_gap;
+mod preparation;
 
 use super::*;
 use kolyan_ledger::InMemoryLedger;

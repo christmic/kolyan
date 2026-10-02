@@ -1,18 +1,33 @@
 mod coordinator;
 mod instance_registry;
+mod private_context;
 mod rpc_execution;
 mod session_execution;
+mod suspension;
 mod task_driver;
 mod tasks;
 pub use instance_registry::{
     InstanceOwner, InstanceRegistry, InstanceRegistryError, InstanceReservation,
 };
+pub use private_context::{
+    PrivateContextOwner, PrivateContextOwnershipVerifier, PrivateContextService,
+    VerifiedPrivateContextInitialization, private_context_initialization,
+};
 pub use rpc_execution::ExecutionRpc;
-pub use task_driver::{TaskExecutionError, TaskExecutionService};
+pub use suspension::{current_suspension as execution_suspension, suspension_view};
+pub use task_driver::{
+    HistoricalContextRequest, TaskExecutionError, TaskExecutionService, VerifiedConsumedResult,
+    VerifiedHistoricalContext, VerifiedTaskOutcome, VerifiedTaskResult,
+};
 pub use tasks::*;
 
+#[cfg(test)]
+#[path = "tests/input_source.rs"]
+mod input_fixture;
+
 use kolyan_core::{
-    ApprovalRequest, ToolExecutor, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
+    ResumeInput, ToolExecutor, TurnExecution, TurnExecutor, TurnOutcome, TurnRequest,
+    TurnSuspension,
 };
 use kolyan_ledger::{LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
 use kolyan_model::{Message, MessageRole, ModelProvider};
@@ -135,6 +150,7 @@ pub struct ExecutionServer<L> {
 pub struct ExecutionService<L, S> {
     server: ExecutionServer<L>,
     trace: S,
+    external_wait_verifier: Arc<dyn kolyan_runtime::ExternalWaitVerifier>,
 }
 
 struct ExecutionGuard<L: LedgerStore + Clone> {
@@ -208,11 +224,31 @@ where
         Self {
             server: ExecutionServer::new(ledger),
             trace,
+            external_wait_verifier: Arc::new(kolyan_runtime::RefuseExternalWaits),
         }
     }
 
     pub fn server(&self) -> &ExecutionServer<L> {
         &self.server
+    }
+
+    /// Host-only verification port. Installing it confers no new tool grant;
+    /// Runtime still validates original authority and bounded results. Until
+    /// exact admission proofs are implemented, the default refuses all waits.
+    pub fn with_external_wait_verifier(
+        mut self,
+        verifier: Arc<dyn kolyan_runtime::ExternalWaitVerifier>,
+    ) -> Self {
+        self.external_wait_verifier = verifier;
+        self
+    }
+
+    fn driver(&self) -> DurableTurnDriver<L, S> {
+        DurableTurnDriver::new(
+            self.server.coordinator().ledger().clone(),
+            self.trace.clone(),
+        )
+        .with_external_wait_verifier(self.external_wait_verifier.clone())
     }
 
     pub async fn start<P, T>(
@@ -238,10 +274,7 @@ where
             server: self.server.clone(),
             execution_id: execution_id.clone(),
         };
-        let driver = DurableTurnDriver::new(
-            self.server.coordinator().ledger().clone(),
-            self.trace.clone(),
-        );
+        let driver = self.driver();
         let result = driver
             .start(executor, request, session_id, execution_id.clone())
             .await;
@@ -254,6 +287,61 @@ where
         executor: TurnExecutor<P, T>,
         session_id: impl Into<String>,
         execution_id: impl Into<String>,
+        checkpoint_id: &str,
+        input: ResumeInput,
+    ) -> Result<DurableTurnResult, ServerError>
+    where
+        P: ModelProvider,
+        T: ToolExecutor,
+    {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let driver = self.driver();
+        let suspension = driver.load_suspension(&execution_id, checkpoint_id)?;
+        let execution = ExecutionRef {
+            session_id: session_id.clone(),
+            turn_id: suspension.checkpoint.scope.execution.turn_id.clone(),
+            execution_id: execution_id.clone(),
+        };
+        suspension::verify_resume_input(
+            self.server.coordinator().ledger(),
+            &execution,
+            &suspension,
+            &input,
+        )?;
+        if self.server.state(&execution_id)? != ExecutionState::Suspended {
+            return Err(CoordinatorError::NotSuspended {
+                execution_id: execution_id.clone(),
+            }
+            .into());
+        }
+        self.server
+            .coordinator()
+            .admit(execution, AdmissionKind::Resume)?;
+        let _guard = ExecutionGuard {
+            server: self.server.clone(),
+            execution_id: execution_id.clone(),
+        };
+        let result = driver
+            .resume(
+                executor,
+                session_id,
+                execution_id.clone(),
+                checkpoint_id,
+                input,
+            )
+            .await;
+        self.server.release(&execution_id);
+        Ok(result?)
+    }
+
+    /// Confirm only an exact pending approval. The persisted decision contains
+    /// every authority coordinate; the Runtime revalidates it before merging.
+    pub async fn resume_approval<P, T>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
         approval_id: &str,
     ) -> Result<DurableTurnResult, ServerError>
     where
@@ -262,38 +350,150 @@ where
     {
         let session_id = session_id.into();
         let execution_id = execution_id.into();
-        let driver = DurableTurnDriver::new(
-            self.server.coordinator().ledger().clone(),
-            self.trace.clone(),
-        );
-        let approval = driver.load_approval(&execution_id, approval_id)?;
-        let execution = ExecutionRef {
-            session_id: session_id.clone(),
-            turn_id: approval.turn_id.clone(),
-            execution_id: execution_id.clone(),
+        let suspension = self.load_current_suspension(&execution_id)?;
+        let key = ExecutionRef {
+            session_id,
+            execution_id,
+            turn_id: suspension.checkpoint.scope.execution.turn_id.clone(),
         };
-        self.server.resume(execution)?;
+        if self.server.state(&key.execution_id)? != ExecutionState::Suspended {
+            return Err(CoordinatorError::NotSuspended {
+                execution_id: key.execution_id.clone(),
+            }
+            .into());
+        }
+        self.server
+            .coordinator()
+            .admit(key.clone(), AdmissionKind::Resume)?;
         let _guard = ExecutionGuard {
             server: self.server.clone(),
-            execution_id: execution_id.clone(),
+            execution_id: key.execution_id.clone(),
         };
-        let result = driver
-            .resume(executor, session_id, execution_id.clone(), approval_id)
-            .await;
-        self.server.release(&execution_id);
-        Ok(result?)
+        let confirmation = suspension::confirm_approval(
+            self.server.coordinator().ledger(),
+            &key,
+            &suspension,
+            approval_id,
+        )?;
+        let input = ResumeInput::ApprovalConfirmed(confirmation);
+        suspension::verify_resume_input(
+            self.server.coordinator().ledger(),
+            &key,
+            &suspension,
+            &input,
+        )?;
+        let driver = self.driver();
+        if suspension
+            .checkpoint
+            .approvals
+            .iter()
+            .any(|approval| approval.approval_id == approval_id && approval.evidence_id.is_some())
+        {
+            return Ok(driver
+                .resume_committed(
+                    executor,
+                    &key.session_id,
+                    &key.execution_id,
+                    &suspension.checkpoint.checkpoint_id,
+                )
+                .await?);
+        }
+        Ok(driver
+            .resume(
+                executor,
+                &key.session_id,
+                &key.execution_id,
+                &suspension.checkpoint.checkpoint_id,
+                input,
+            )
+            .await?)
     }
 
-    pub fn load_approval(
+    /// Recover the drive gap after a durable preparation or pure merge, without reconsuming
+    /// an approval or external result. This is host orchestration, not an HTTP
+    /// approval shortcut. A genuine content-bound publication is mandatory.
+    pub async fn resume_committed<P: ModelProvider, T: ToolExecutor>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        checkpoint_id: &str,
+    ) -> Result<DurableTurnResult, ServerError> {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let events = self
+            .server
+            .coordinator()
+            .ledger()
+            .execution_events_after(&execution_id, 0)
+            .map_err(CoordinatorError::from)?;
+        if events
+            .iter()
+            .rev()
+            .find(|event| {
+                matches!(
+                    event.kind,
+                    LedgerEventKind::ExecutionSuspended
+                        | LedgerEventKind::TurnCheckpointMerged
+                        | LedgerEventKind::TurnCheckpointPrepared
+                )
+            })
+            .is_none_or(|event| {
+                !matches!(
+                    event.kind,
+                    LedgerEventKind::TurnCheckpointMerged | LedgerEventKind::TurnCheckpointPrepared
+                )
+            })
+        {
+            return Err(StorageError::Conflict(
+                "no committed preparation or merge to recover".into(),
+            )
+            .into());
+        }
+        let saved = self.load_suspension(&execution_id, checkpoint_id)?;
+        let key = ExecutionRef {
+            session_id,
+            execution_id,
+            turn_id: saved.checkpoint.scope.execution.turn_id.clone(),
+        };
+        if saved.checkpoint.scope.execution.session_id != key.session_id {
+            return Err(StorageError::Conflict("foreign committed resume Session".into()).into());
+        }
+        let state = self.server.state(&key.execution_id)?;
+        if !matches!(state, ExecutionState::Running | ExecutionState::Suspended) {
+            return Err(CoordinatorError::NotRecoverable {
+                execution_id: key.execution_id.clone(),
+                state,
+            }
+            .into());
+        }
+        self.server
+            .coordinator()
+            .admit(key.clone(), AdmissionKind::Recover)?;
+        let _guard = ExecutionGuard {
+            server: self.server.clone(),
+            execution_id: key.execution_id.clone(),
+        };
+        Ok(self
+            .driver()
+            .resume_committed(executor, &key.session_id, &key.execution_id, checkpoint_id)
+            .await?)
+    }
+
+    pub fn load_suspension(
         &self,
         execution_id: &str,
-        approval_id: &str,
-    ) -> Result<ApprovalRequest, ServerError> {
-        let driver = DurableTurnDriver::new(
-            self.server.coordinator().ledger().clone(),
-            self.trace.clone(),
-        );
-        Ok(driver.load_approval(execution_id, approval_id)?)
+        checkpoint_id: &str,
+    ) -> Result<TurnSuspension, ServerError> {
+        let driver = self.driver();
+        Ok(driver.load_suspension(execution_id, checkpoint_id)?)
+    }
+
+    pub fn load_current_suspension(
+        &self,
+        execution_id: &str,
+    ) -> Result<TurnSuspension, ServerError> {
+        Ok(self.driver().load_current_suspension(execution_id)?)
     }
 
     pub fn cancel(&self, execution: &ExecutionRef) -> Result<(), ServerError> {
@@ -314,6 +514,13 @@ pub struct SessionExecutionService<L, S, SS> {
     execution: ExecutionService<L, S>,
     sessions: SessionService<SS>,
     context_policy: kolyan_storage::SessionContextPolicy,
+    preparation_hook: Option<Arc<dyn TurnPreparationHook>>,
+}
+
+/// Trusted observation/binding of the final immutable request. Called after
+/// Task ceilings and Session history, before saving Turn input. No request mutation.
+pub trait TurnPreparationHook: Send + Sync {
+    fn prepare(&self, execution: &ExecutionRef, request: &TurnRequest) -> Result<(), ServerError>;
 }
 
 impl<L> ExecutionServer<L>

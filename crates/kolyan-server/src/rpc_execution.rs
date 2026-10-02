@@ -132,12 +132,12 @@ where
                     )
                     .await
                     .map_err(failed)?;
-                Ok(result_value(result))
+                result_value(result).map_err(failed)
             }
             "execution.approve" => {
                 let result = self
                     .service
-                    .resume(
+                    .resume_approval(
                         (self.executor)(),
                         &key.session_id,
                         &key.execution_id,
@@ -145,7 +145,7 @@ where
                     )
                     .await
                     .map_err(failed)?;
-                Ok(result_value(result))
+                result_value(result).map_err(failed)
             }
             "execution.cancel" => {
                 self.service.cancel(&key).map_err(failed)?;
@@ -160,7 +160,7 @@ where
                     event.execution_id == key.execution_id
                         && event.kind == kolyan_ledger::LedgerEventKind::ExecutionCancelled
                 });
-                let stopped = events.iter().any(|event| {
+                let terminal = events.iter().any(|event| {
                     event.execution_id == key.execution_id
                         && matches!(
                             event.kind,
@@ -170,13 +170,17 @@ where
                                 | kolyan_ledger::LedgerEventKind::TurnTimedOut
                         )
                 });
+                let suspension =
+                    crate::suspension::current_suspension(&key, &events).map_err(failed)?;
+                let stopped = terminal || suspension.is_some();
                 let state = if cancelled && !stopped {
                     json!("Cancelling")
                 } else {
                     json!(state)
                 };
                 Ok(
-                    json!({"state":state, "cancellation_requested":cancelled, "execution_stopped":stopped}),
+                    json!({"state":state, "cancellation_requested":cancelled, "execution_stopped":stopped,
+                        "waiting":suspension.as_ref().map(crate::suspension_view).transpose().map_err(failed)?}),
                 )
             }
             "execution.events" => {
@@ -203,16 +207,16 @@ where
     }
 }
 
-fn result_value(result: kolyan_runtime::DurableTurnResult) -> Value {
-    match result {
+fn result_value(result: kolyan_runtime::DurableTurnResult) -> Result<Value, crate::ServerError> {
+    Ok(match result {
         kolyan_runtime::DurableTurnResult::Completed(execution, _) => json!({
             "state":"Completed", "end_reason":format!("{:?}", execution.result.end_reason),
             "steps":execution.result.steps,
         }),
-        kolyan_runtime::DurableTurnResult::AwaitingApproval { approval, .. } => json!({
-            "state":"Suspended", "approval":approval,
+        kolyan_runtime::DurableTurnResult::Suspended { suspension, .. } => json!({
+            "state":"Suspended", "waiting":crate::suspension_view(&suspension)?,
         }),
-    }
+    })
 }
 
 fn string<'a>(value: &'a Value, key: &str) -> Result<&'a str, (i32, String)> {

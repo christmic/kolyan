@@ -13,6 +13,7 @@ where
             execution,
             sessions,
             context_policy: kolyan_storage::SessionContextPolicy::ConversationOnly,
+            preparation_hook: None,
         }
     }
 
@@ -20,6 +21,11 @@ where
     /// captured with their immutable input boundary.
     pub fn with_context_policy(mut self, policy: kolyan_storage::SessionContextPolicy) -> Self {
         self.context_policy = policy;
+        self
+    }
+
+    pub fn with_preparation_hook(mut self, hook: Arc<dyn TurnPreparationHook>) -> Self {
+        self.preparation_hook = Some(hook);
         self
     }
 
@@ -45,21 +51,15 @@ where
                 .execution_events_after(&turn.execution_id, 0)
                 .map_err(CoordinatorError::from)?;
             let state = self.execution.state(&turn.execution_id)?;
-            let suspension = facts
-                .iter()
-                .rev()
-                .find(|event| event.kind == LedgerEventKind::ExecutionSuspended);
-            let status = terminal_status(&facts).or_else(|| {
-                (state == ExecutionState::Suspended
-                    && facts.iter().any(|event| {
-                        event.kind == LedgerEventKind::ApprovalRequested
-                            && event.payload.get("continuation").is_some()
-                            && suspension.is_some_and(|suspended| {
-                                suspended.payload["approval_id"] == event.payload["approval_id"]
-                            })
-                    }))
-                .then_some(SessionTurnStatus::Suspended)
-            });
+            let key = ExecutionRef {
+                session_id: session_id.into(),
+                turn_id: turn.turn_id.clone(),
+                execution_id: turn.execution_id.clone(),
+            };
+            let suspended = state == ExecutionState::Suspended
+                && suspension::current_suspension(&key, &facts)?.is_some();
+            let status =
+                terminal_status(&facts).or(suspended.then_some(SessionTurnStatus::Suspended));
             if let Some(status) = status
                 && (status != turn.status
                     || !facts.iter().any(|event| {
@@ -95,6 +95,16 @@ where
         };
         contextual_messages.extend(current_messages.clone());
         request.model_request.messages = contextual_messages;
+        if let Some(hook) = &self.preparation_hook {
+            hook.prepare(
+                &ExecutionRef {
+                    session_id: session_id.clone(),
+                    turn_id: turn_id.clone(),
+                    execution_id: execution_id.clone(),
+                },
+                &request,
+            )?;
+        }
         self.sessions.store.begin_turn_with_projection(
             &session_id,
             SessionTurn {
@@ -119,7 +129,8 @@ where
         executor: TurnExecutor<P, T>,
         session_id: impl Into<String>,
         execution_id: impl Into<String>,
-        approval_id: &str,
+        checkpoint_id: &str,
+        input: ResumeInput,
     ) -> Result<DurableTurnResult, ServerError>
     where
         P: ModelProvider,
@@ -127,19 +138,94 @@ where
     {
         let session_id = session_id.into();
         let execution_id = execution_id.into();
-        let approval = self.execution.load_approval(&execution_id, approval_id)?;
-        let session = self.sessions.load(&session_id)?;
+        let suspension = self
+            .execution
+            .load_suspension(&execution_id, checkpoint_id)?;
+        let turn_id = suspension.checkpoint.scope.execution.turn_id.clone();
+        let pending_messages =
+            self.resume_messages(&session_id, &execution_id, &suspension, false)?;
+        let result = self
+            .execution
+            .resume(
+                executor,
+                session_id.clone(),
+                execution_id,
+                checkpoint_id,
+                input,
+            )
+            .await;
+        self.commit_result(&session_id, &turn_id, pending_messages, result)
+    }
+
+    pub async fn resume_approval<P: ModelProvider, T: ToolExecutor>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        approval_id: &str,
+    ) -> Result<DurableTurnResult, ServerError> {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let suspension = self.execution.load_current_suspension(&execution_id)?;
+        let turn_id = suspension.checkpoint.scope.execution.turn_id.clone();
+        let pending_messages =
+            self.resume_messages(&session_id, &execution_id, &suspension, false)?;
+        let result = self
+            .execution
+            .resume_approval(executor, &session_id, &execution_id, approval_id)
+            .await;
+        self.commit_result(&session_id, &turn_id, pending_messages, result)
+    }
+
+    /// Recover only the persisted merge/drive gap, retaining immutable input.
+    pub async fn resume_committed<P: ModelProvider, T: ToolExecutor>(
+        &self,
+        executor: TurnExecutor<P, T>,
+        session_id: impl Into<String>,
+        execution_id: impl Into<String>,
+        checkpoint_id: &str,
+    ) -> Result<DurableTurnResult, ServerError> {
+        let session_id = session_id.into();
+        let execution_id = execution_id.into();
+        let saved = self
+            .execution
+            .load_suspension(&execution_id, checkpoint_id)?;
+        let turn_id = saved.checkpoint.scope.execution.turn_id.clone();
+        let pending_messages = self.resume_messages(&session_id, &execution_id, &saved, true)?;
+        let result = self
+            .execution
+            .resume_committed(executor, &session_id, &execution_id, checkpoint_id)
+            .await;
+        self.commit_result(&session_id, &turn_id, pending_messages, result)
+    }
+
+    fn resume_messages(
+        &self,
+        session_id: &str,
+        execution_id: &str,
+        suspension: &TurnSuspension,
+        committed_recovery: bool,
+    ) -> Result<Vec<Message>, ServerError> {
+        let turn_id = &suspension.checkpoint.scope.execution.turn_id;
+        let session = self.sessions.load(session_id)?;
         let turn = session
             .turns
             .iter()
-            .find(|turn| turn.turn_id == approval.turn_id && turn.execution_id == execution_id)
-            .ok_or_else(|| StorageError::Conflict("approval does not belong to Session".into()))?;
-        if turn.status != SessionTurnStatus::Suspended {
+            .find(|turn| &turn.turn_id == turn_id && turn.execution_id == execution_id)
+            .ok_or_else(|| {
+                StorageError::Conflict("suspension does not belong to Session".into())
+            })?;
+        if suspension.checkpoint.scope.execution.session_id != session_id {
+            return Err(StorageError::Conflict("foreign suspension Session".into()).into());
+        }
+        if turn.status != SessionTurnStatus::Suspended
+            && !(committed_recovery && turn.status == SessionTurnStatus::Running)
+        {
             return Err(StorageError::Conflict("Session Turn is not suspended".into()).into());
         }
         let input = session
             .inputs
-            .get(&approval.turn_id)
+            .get(turn_id)
             .ok_or_else(|| StorageError::Conflict("missing immutable Turn input".into()))?;
         let history = match input.context_policy {
             kolyan_storage::SessionContextPolicy::ConversationOnly => &session.messages,
@@ -153,27 +239,24 @@ where
         }
         let mut expected = history.clone();
         expected.extend(input.messages.clone());
-        if !approval
-            .continuation
-            .model_request
-            .messages
-            .starts_with(&expected)
+        if suspension.checkpoint.input_message_count != expected.len()
+            || !suspension
+                .checkpoint
+                .model_request
+                .messages
+                .starts_with(&expected)
         {
             return Err(StorageError::Conflict(
                 "checkpoint input differs from original Turn".into(),
             )
             .into());
         }
-        let pending_messages = input.messages.clone();
-        let result = self
-            .execution
-            .resume(executor, session_id.clone(), execution_id, approval_id)
-            .await;
-        self.commit_result(&session_id, &approval.turn_id, pending_messages, result)
+        Ok(input.messages.clone())
     }
 
     /// Reject exactly the current persisted approval without invoking model or
-    /// tool code. The shared resume claim prevents approve/deny double decisions.
+    /// tool code. Local admission and an exact durable decision exclude racing
+    /// approval; no permanent resume claim can strand a checkpoint on restart.
     /// A crash after the terminal fact is recoverable through reconcile.
     pub fn deny<P, T>(
         &self,
@@ -197,34 +280,25 @@ where
             );
         }
         let ledger = self.execution.server.coordinator().ledger();
-        let events = ledger
-            .execution_events_after(&execution.execution_id, 0)
-            .map_err(CoordinatorError::from)?;
-        let current = events.iter().rev().find(|event| {
-            event.execution_id == execution.execution_id
-                && event.kind == LedgerEventKind::ApprovalRequested
-        });
-        if !current.is_some_and(|event| event.payload["approval_id"] == approval_id) {
-            return Err(StorageError::Conflict("approval is not current".into()).into());
-        }
-        let approval = self
+        let suspension = self
             .execution
-            .load_approval(&execution.execution_id, approval_id)?;
-        if approval.turn_id != execution.turn_id {
+            .load_current_suspension(&execution.execution_id)?;
+        if suspension.checkpoint.scope.execution.turn_id != execution.turn_id {
             return Err(StorageError::Conflict("approval Turn mismatch".into()).into());
         }
         executor
-            .reject_approval(approval, approval_id, "denied by user")
+            .with_execution_key(suspension.checkpoint.scope.execution.clone())
+            .reject_approval(suspension.clone(), approval_id, "denied by user")
             .map_err(RuntimeError::from)?;
-        if !ledger
-            .claim(&format!(
-                "{}/attempt/resume/{approval_id}",
-                execution.execution_id
-            ))
-            .map_err(CoordinatorError::from)?
-        {
-            return Err(StorageError::Conflict("approval already decided".into()).into());
-        }
+        self.execution
+            .server
+            .coordinator()
+            .admit(execution.clone(), AdmissionKind::Resume)?;
+        let _guard = ExecutionGuard {
+            server: self.execution.server.clone(),
+            execution_id: execution.execution_id.clone(),
+        };
+        suspension::record_approval_decision(ledger, execution, &suspension, approval_id, "deny")?;
         // Terminal persistence is atomic against cancellation. No side effect
         // is authorized by this decision, even if the process stops afterwards.
         let event_id = format!("{}/approval/{approval_id}/denied", execution.execution_id);
@@ -239,12 +313,6 @@ where
                 payload: json!({"reason":"ApprovalRejected", "approval_id":approval_id}),
             })
             .map_err(CoordinatorError::from)?;
-        self.execution.server.coordinator().append_once(
-            execution,
-            &format!("approval/{approval_id}/resolved"),
-            LedgerEventKind::ApprovalResolved,
-            json!({"approval_id":approval_id, "decision":"deny"}),
-        )?;
         self.commit_session(
             &execution.session_id,
             &execution.turn_id,
@@ -259,9 +327,9 @@ where
         if state == ExecutionState::Suspended {
             self.execution.server.coordinator().append_once(
                 execution,
-                "turn-cancelled-at-approval",
+                "turn-cancelled-at-suspension",
                 LedgerEventKind::TurnCancelled,
-                json!({"boundary":"approval"}),
+                json!({"boundary":"suspension"}),
             )?;
             self.commit_session(
                 &execution.session_id,
@@ -297,10 +365,15 @@ where
         let status = match terminal_status(&events) {
             Some(status) => status,
             None if state == ExecutionState::Suspended
-                && events.iter().any(|event| {
-                    event.kind == LedgerEventKind::ApprovalRequested
-                        && event.payload.get("continuation").is_some()
-                }) =>
+                && suspension::current_suspension(
+                    &ExecutionRef {
+                        session_id: session_id.into(),
+                        turn_id: turn.turn_id.clone(),
+                        execution_id: execution_id.into(),
+                    },
+                    &events,
+                )?
+                .is_some() =>
             {
                 SessionTurnStatus::Suspended
             }
@@ -436,8 +509,8 @@ where
         result: Result<DurableTurnResult, ServerError>,
     ) -> Result<DurableTurnResult, ServerError> {
         match result {
-            Ok(DurableTurnResult::AwaitingApproval {
-                approval,
+            Ok(DurableTurnResult::Suspended {
+                suspension,
                 trajectory,
             }) => {
                 self.commit_session(
@@ -446,8 +519,8 @@ where
                     SessionTurnStatus::Suspended,
                     Vec::new(),
                 )?;
-                Ok(DurableTurnResult::AwaitingApproval {
-                    approval,
+                Ok(DurableTurnResult::Suspended {
+                    suspension,
                     trajectory,
                 })
             }
