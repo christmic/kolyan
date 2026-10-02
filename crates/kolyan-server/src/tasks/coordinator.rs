@@ -71,6 +71,37 @@ impl<J: FactJournal> TaskCoordinator<J> {
         &self.journal
     }
 
+    /// Configure once before execution. Identical fact retry is idempotent;
+    /// changing an existing policy or budgeting past work is rejected.
+    pub fn configure_execution_budget(
+        &self,
+        task_id: &str,
+        fact_id: &str,
+        policy: super::TaskExecutionBudgetPolicy,
+    ) -> Result<TaskSnapshot, TaskError> {
+        self.command(
+            task_id,
+            fact_id,
+            TaskEvent::ExecutionBudgetConfigured(policy),
+        )
+    }
+
+    /// Atomically charge the complete Turn ceiling and start one exact attempt.
+    /// Failed CAS confers no execution permission; charges are never refunded.
+    pub fn start_budgeted_attempt(
+        &self,
+        task_id: &str,
+        fact_id: &str,
+        binding: AttemptBinding,
+        max_steps: u32,
+    ) -> Result<TaskSnapshot, TaskError> {
+        self.command(
+            task_id,
+            fact_id,
+            TaskEvent::BudgetedAttemptStarted { binding, max_steps },
+        )
+    }
+
     /// Replay validates all critical semantics. Querying never executes work.
     pub fn snapshot(&self, task_id: &str) -> Result<TaskSnapshot, TaskError> {
         let records = self.records(task_id)?;
@@ -370,6 +401,15 @@ impl<J: FactJournal> TaskCoordinator<J> {
                 causes.push(source);
             }
         }
+        if matches!(event, TaskEvent::BudgetedAttemptStarted { .. }) {
+            let policy = snapshot
+                .as_ref()
+                .and_then(|s| s.execution_budget.as_ref())
+                .ok_or_else(|| invalid("budgeted start has no saved policy"))?;
+            if !causes.contains(&policy.policy_reference) {
+                causes.push(policy.policy_reference.clone());
+            }
+        }
         let draft = FactDraft {
             fact_id: fact_id.into(),
             subject,
@@ -405,6 +445,14 @@ impl<J: FactJournal> TaskCoordinator<J> {
 
 fn envelope(task_id: &str, event: &TaskEvent) -> (&'static str, FactSubject) {
     let (kind, subject_kind, id) = match event {
+        TaskEvent::ExecutionBudgetConfigured(_) => {
+            ("task.execution_budget_configured", "budget", task_id)
+        }
+        TaskEvent::BudgetedAttemptStarted { binding, .. } => (
+            "task.budgeted_attempt_started",
+            "attempt",
+            binding.attempt_id.as_str(),
+        ),
         TaskEvent::GoalAssessed(assessment) => (
             "task.goal_assessed",
             "goal",
@@ -474,6 +522,8 @@ fn replay<J: FactJournal>(
         let known = matches!(
             record.draft.kind.as_str(),
             "task.registered"
+                | "task.execution_budget_configured"
+                | "task.budgeted_attempt_started"
                 | "task.goal_assessed"
                 | "task.invocation_admitted"
                 | "task.dependency_admitted"

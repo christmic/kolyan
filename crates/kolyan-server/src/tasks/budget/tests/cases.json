@@ -1,0 +1,22 @@
+[
+ {"id":"exact_limit","mode":"reserve","total":6,"first":4,"second":2,"accepted":true,"remaining":0},
+ {"id":"exhausted","mode":"reserve","total":4,"first":4,"second":1,"accepted":false,"remaining":0},
+ {"id":"over_remaining","mode":"reserve","total":6,"first":4,"second":3,"accepted":false,"remaining":2},
+ {"id":"zero_reservation","mode":"reserve","total":6,"first":4,"second":0,"accepted":false,"remaining":2},
+ {"id":"per_turn_ceiling","mode":"reserve","total":20,"first":4,"second":9,"accepted":false,"remaining":16},
+ {"id":"ordinary_start_bypass","mode":"bypass","total":6,"first":0,"second":2,"accepted":false,"remaining":6},
+ {"id":"changed_policy","mode":"changed_policy","total":6,"first":0,"second":0,"accepted":false,"remaining":6},
+ {"id":"same_policy_new_fact","mode":"second_policy","total":6,"first":0,"second":0,"accepted":false,"remaining":6},
+ {"id":"exact_policy_fact_retry","mode":"same_policy","total":6,"first":0,"second":0,"accepted":true,"remaining":6},
+ {"id":"late_configuration","mode":"late_policy","total":6,"first":4,"second":0,"accepted":false,"remaining":null},
+ {"id":"missing_policy","mode":"missing_policy","total":6,"first":0,"second":2,"accepted":false,"remaining":null},
+ {"id":"foreign_binding","mode":"foreign","total":6,"first":4,"second":2,"accepted":false,"remaining":2},
+ {"id":"duplicate_reservation","mode":"duplicate","total":6,"first":4,"second":2,"accepted":false,"remaining":2},
+ {"id":"cancelled_task","mode":"cancel","total":6,"first":4,"second":2,"accepted":false,"remaining":2},
+ {"id":"unsigned_upper_bound","mode":"reserve","total":18446744073709551615,"first":1,"second":1,"accepted":true,"remaining":18446744073709551613},
+ {"id":"zero_policy_budget","mode":"invalid_total","total":6,"first":0,"second":0,"accepted":false,"remaining":null},
+ {"id":"zero_policy_cutoff","mode":"invalid_deadline","total":6,"first":0,"second":0,"accepted":false,"remaining":null},
+ {"id":"blank_policy_identity","mode":"invalid_id","total":6,"first":0,"second":0,"accepted":false,"remaining":null},
+ {"id":"overlong_policy_revision","mode":"invalid_revision","total":6,"first":0,"second":0,"accepted":false,"remaining":null},
+ {"id":"foreign_source_reference","mode":"foreign_source","total":6,"first":4,"second":2,"accepted":false,"remaining":2}
+]

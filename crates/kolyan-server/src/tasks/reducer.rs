@@ -60,6 +60,7 @@ pub(super) fn apply(
             waiting: Vec::new(),
             success_evidence: Vec::new(),
             goal_assessments: Vec::new(),
+            execution_budget: None,
         });
         return Ok(());
     }
@@ -82,6 +83,13 @@ pub(super) fn apply(
         return Err(transition("task is terminal"));
     }
     match event {
+        TaskEvent::ExecutionBudgetConfigured(policy) => {
+            super::budget::configure(state, policy, record)?;
+        }
+        TaskEvent::BudgetedAttemptStarted { binding, max_steps } => {
+            super::budget::reserve(state, &binding, max_steps, record)?;
+            start(state, binding)?;
+        }
         TaskEvent::GoalAssessed(assessment) => {
             super::goals::apply_assessment(state, *assessment, record)?
         }
@@ -92,7 +100,12 @@ pub(super) fn apply(
         } => {
             add_dependency(state, &invocation_id, &dependency_id)?;
         }
-        TaskEvent::AttemptStarted(binding) => start(state, binding)?,
+        TaskEvent::AttemptStarted(binding) => {
+            if state.execution_budget.is_some() {
+                return Err(transition("configured Task requires atomic budgeted start"));
+            }
+            start(state, binding)?;
+        }
         TaskEvent::AttemptObserved(observation) => observe(state, observation, record)?,
         TaskEvent::AttemptResumed {
             binding,

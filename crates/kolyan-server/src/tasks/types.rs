@@ -312,6 +312,7 @@ pub struct InvocationSnapshot {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TaskSnapshot {
+    pub execution_budget: Option<super::TaskExecutionBudgetState>,
     pub goal_assessments: Vec<GoalAssessmentRecord>,
     pub definition: TaskDefinition,
     pub position: u64,
@@ -341,6 +342,11 @@ pub enum TaskError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) enum TaskEvent {
+    ExecutionBudgetConfigured(super::TaskExecutionBudgetPolicy),
+    BudgetedAttemptStarted {
+        binding: AttemptBinding,
+        max_steps: u32,
+    },
     GoalAssessed(Box<GoalAssessment>),
     Registered(TaskDefinition),
     InvocationAdmitted(InvocationDefinition),

@@ -1,0 +1,9 @@
+[
+ {"id":"capped_turn","mode":"answer","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":null,"calls":1,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null},
+ {"id":"shared_child_pool","mode":"answer","total":10,"request_steps":8,"child":true,"start_ok":true,"resume_ok":null,"calls":2,"remaining":0,"root_reserved":8,"child_reserved":2,"file":null},
+ {"id":"exhausted_before_child","mode":"answer","total":8,"request_steps":8,"child":true,"start_ok":true,"resume_ok":null,"calls":1,"remaining":0,"root_reserved":8,"child_reserved":0,"file":null},
+ {"id":"expired_no_model","mode":"expired","total":4,"request_steps":8,"child":false,"start_ok":false,"resume_ok":null,"calls":0,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null},
+ {"id":"approval_rebuild_same_reservation","mode":"approval","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":true,"calls":2,"remaining":0,"root_reserved":4,"child_reserved":0,"file":"budget\n"},
+ {"id":"approval_expired_same_cutoff","mode":"approval_expired","total":4,"request_steps":8,"child":false,"start_ok":true,"resume_ok":false,"calls":1,"remaining":0,"root_reserved":4,"child_reserved":0,"file":null},
+ {"id":"suspended_root_shares_pool_with_self_call","mode":"approval_child","total":6,"request_steps":4,"child":true,"start_ok":true,"resume_ok":true,"calls":3,"remaining":0,"root_reserved":4,"child_reserved":2,"file":"budget\n"}
+]

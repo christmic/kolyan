@@ -113,6 +113,10 @@ name = "task_execution"
 path = "tests/server/task_execution.rs"
 
 [[test]]
+name = "task_budget"
+path = "tests/server/task_budget.rs"
+
+[[test]]
 name = "task_recovery"
 path = "tests/server/task_recovery.rs"
 

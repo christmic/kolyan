@@ -4,12 +4,14 @@
 //! models nor restores tool permissions; the host verifies stopped execution
 //! evidence before submitting observations. CAS is the only write boundary.
 
+mod budget;
 mod coordinator;
 pub(crate) mod goals;
 mod input;
 mod reducer;
 mod types;
 
+pub use budget::{TaskExecutionBudgetPolicy, TaskExecutionBudgetState, TaskStepReservation};
 pub use coordinator::TaskCoordinator;
 pub use goals::*;
 pub use input::{

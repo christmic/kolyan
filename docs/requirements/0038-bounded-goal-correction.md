@@ -153,3 +153,54 @@ Use one fixed target per active write set, serial Cargo gates and parallel code
 development. Follow the single-source build-cache rules in code-conventions.
 Module, relevant service integration, strict all-target checks and normal hooks
 precede each bounded commit. Full regression and live C2 gates remain required.
+
+## C0 implementation and verification
+
+2026-10-03: the durable policy, atomic reservation/start, mandatory configured
+budget path and exact resume ceiling are implemented. C1 correction ownership
+and C2 automatic orchestration remain unimplemented. This is not a live-model or
+self-development acceptance claim.
+
+Server module gate `/tmp/kolyan-task-budget-main-module-v2.log` exited 0 with
+126 passed, zero failed. The new independent matrix physically reread 20 cases
+for each of Memory and reopened SQLite. Two additional real CAS races synchronized
+writers after validation and before append: exactly one reservation succeeded,
+the pool was spent once, and removing the exact policy cause made replay fail.
+The underlying journal remained unchanged during the read-only corruption probe.
+Arithmetic boundaries cover the full unsigned policy limit and over-reservation;
+they do not claim to construct billions of reservations to trigger a sum overflow.
+
+Service gate `/tmp/kolyan-task-budget-main-service-v5.log` exited 0 with all seven
+exported rows reread and compared. It uses the actual Task/Session/Runtime,
+SQLite journals, filesystem sessions and governed file tool with an explicitly
+synthetic model. Cases cover capping 8 requested Steps to 4, a completed Root
+followed by a Continuation capped to the remaining 2, exhausted successor
+admission, zero model calls after expiry, approval reconstruction without a second
+reservation, expiry during approval, and a suspended Root sharing 4 plus 2 slots
+with a real SelfCall before consuming the child result and resuming. The two
+successor rows retain `child` as their invocation ID; their actual role is
+Continuation, distinct from the seventh SelfCall case.
+
+Actual service evidence is retained at
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-task-budget-service-RMgmnf/actual.jsonl`.
+Each row includes full requests, budget facts, input admission, execution events,
+checkpoint and physical file content. All child errors are exported and checked;
+filesystem errors other than NotFound fail rather than becoming an absent file.
+An expired initial attempt conservatively retains its reservation and a binding
+fact, but no input admission or model request. This does not fabricate a stopped
+attempt; reconciliation remains the existing Server responsibility.
+
+Strict workspace/all-target clippy exited 0 in
+`/tmp/kolyan-task-budget-main-strict-v1.log`. Failed service runs v1 through v4
+are retained: the fixes used existing DTOs, corrected invalid test topology and
+distinguished binding from execution admission. No production result-consumption
+guard or existing test assertion was relaxed. Main target measured 16 GiB with
+560 GiB free; no cleanup was necessary or performed.
+
+Full workspace regression exited 0 in
+`/tmp/kolyan-task-budget-main-workspace-v1.log`: 84 test groups, 881 passed,
+zero failed and 66 explicitly ignored. Ignored vendor-network cases were not
+executed. Formatting, source layout (via `sh`) and diff checks each exited 0.
+Normal commit hooks remain a separate gate. Strong model-opening consumers,
+forged-checkpoint integration negatives and C1/C2 remain
+required before reporting the complete goal-correction increment as accepted.

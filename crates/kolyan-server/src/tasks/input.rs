@@ -77,7 +77,8 @@ impl<J: FactJournal> TaskCoordinator<J> {
                 &definition.agent,
                 &definition.constraints_digest,
             ),
-            TaskEvent::AttemptStarted(binding) => (
+            TaskEvent::AttemptStarted(binding)
+            | TaskEvent::BudgetedAttemptStarted { binding, .. } => (
                 &binding.invocation_id,
                 &binding.agent,
                 &binding.constraints_digest,
@@ -256,7 +257,9 @@ impl<J: FactJournal> TaskCoordinator<J> {
 pub(super) fn event_source(event: &TaskEvent) -> Option<&InvocationInputSource> {
     match event {
         TaskEvent::InvocationAdmitted(definition) => Some(&definition.input_source),
-        TaskEvent::AttemptStarted(binding) => Some(&binding.input_source),
+        TaskEvent::AttemptStarted(binding) | TaskEvent::BudgetedAttemptStarted { binding, .. } => {
+            Some(&binding.input_source)
+        }
         _ => None,
     }
 }

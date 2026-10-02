@@ -7,6 +7,7 @@ pub use goal_source::{
 };
 mod historical_context;
 pub use historical_context::{HistoricalContextRequest, VerifiedHistoricalContext};
+mod budget;
 mod result;
 mod retry;
 
@@ -206,6 +207,19 @@ where
         if request.config.max_steps == 0 {
             return Err(invalid("Turn requires a nonzero Step budget").into());
         }
+        let executor = if let Some(budget) = &before.execution_budget {
+            let remaining = budget.remaining_steps()?;
+            if remaining == 0 {
+                return Err(invalid("Task Step reservation budget exhausted").into());
+            }
+            request.config.max_steps = request
+                .config
+                .max_steps
+                .min(remaining.min(u64::from(u32::MAX)) as usize);
+            executor.with_absolute_deadline_at_ms(budget.policy.deadline_at_ms)
+        } else {
+            executor
+        };
         if let Some(limit) = before.definition.limits.max_tokens {
             if before.usage.unreported_steps > 0 {
                 return Err(invalid("unknown usage blocks budgeted work").into());
@@ -228,11 +242,16 @@ where
                     .min(cap),
             );
         }
-        self.coordinator.start_attempt(
-            task_id,
-            &format!("{task_id}/attempt/{}/start", binding.attempt_id),
-            binding.clone(),
-        )?;
+        let start_id = format!("{task_id}/attempt/{}/start", binding.attempt_id);
+        if before.execution_budget.is_some() {
+            let steps = u32::try_from(request.config.max_steps)
+                .map_err(|_| invalid("Turn Step ceiling exceeds Task representation"))?;
+            self.coordinator
+                .start_budgeted_attempt(task_id, &start_id, binding.clone(), steps)?;
+        } else {
+            self.coordinator
+                .start_attempt(task_id, &start_id, binding.clone())?;
+        }
         self.bind_execution(task_id, &binding)?;
         let result = self
             .execution
@@ -263,6 +282,8 @@ where
             .execution()
             .load_suspension(&binding.execution.execution_id, checkpoint_id)?;
         crate::suspension::verify_resume_input(self.ledger(), &binding.execution, &saved, &input)?;
+        let executor =
+            self.budget_resume_executor(task_id, &binding, &saved.checkpoint, executor)?;
         let coordinate = serde_json::to_vec(&(checkpoint_id, &input))
             .map_err(|error| invalid(error.to_string()))?;
         self.coordinator.resume_attempt(
@@ -312,6 +333,8 @@ where
         }
         let coordinate = serde_json::to_vec(&(&saved.checkpoint.checkpoint_id, approval_id))
             .map_err(|error| invalid(error.to_string()))?;
+        let executor =
+            self.budget_resume_executor(task_id, &binding, &saved.checkpoint, executor)?;
         self.coordinator.resume_attempt(
             task_id,
             &format!(
