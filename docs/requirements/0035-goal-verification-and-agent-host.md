@@ -372,6 +372,13 @@ revision 为 domain-separated SHA-256，绑定 checker schema/实现版本及有
 新增独立数据矩阵验证克隆稳定性、prepare 使用同一值、配置和 worker 字节
 改变、ToolSet 合并后的实际值、读取失败与无目标文件副作用；旧测试保持不变。
 
+该宿主版本读取前置能力已集成并独立验证：Tools 71 passed、0 failed，新增
+18 行实际临时文件数据矩阵全部先导出、关闭并物理读回；当前主线原有 strict
+receipt 校验模块保留。另跑真实 file_worker_process/exact_file_boundary 两目标，
+7 个函数通过。日志分别为 `/tmp/kolyan-tools-revision-main-v1.log` 与
+`/tmp/kolyan-tools-revision-native-main-v1.log`。这些验证不是具体文件目标 checker、
+实际 Agent 宿主或真实模型目标验收，后续消费者仍须完成。
+
 直接实现已冻结的 Server GoalChecker 接口，仅消费 VerifiedGoalSource。完整
 source 上寻找匹配的 Completed、非 is_error receipt；严格解析真实 FileOperation
 及直接保存的 ExactFileBinding，核对 scope execution/snapshot、工具名、精确

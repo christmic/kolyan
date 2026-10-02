@@ -232,7 +232,7 @@ impl IsolatedFileTools {
         };
         PreparedCall::new(
             call,
-            self.revision()?,
+            self.adapter_revision()?,
             InvocationClaim {
                 tool_name: operation.name().into(),
                 capabilities,
@@ -500,7 +500,11 @@ impl IsolatedFileTools {
         Ok(operation)
     }
 
-    fn revision(&self) -> Result<String, IsolatedFileError> {
+    /// Read the worker bytes and normalized configuration's exact revision.
+    /// This synchronous file I/O does not execute the worker, prepare a call,
+    /// inspect a target or grant authority. Hosts call it during blocking assembly.
+    /// Recalculation observes current worker bytes, not historical proof.
+    pub fn adapter_revision(&self) -> Result<String, IsolatedFileError> {
         let mut file = std::fs::File::open(&self.config.worker).map_err(IsolatedFileError::Io)?;
         let mut digest = Sha256::new();
         std::io::copy(&mut file, &mut digest).map_err(IsolatedFileError::Io)?;
@@ -521,3 +525,6 @@ impl IsolatedFileTools {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod adapter_revision_tests;

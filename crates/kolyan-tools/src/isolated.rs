@@ -92,6 +92,15 @@ impl IsolatedToolSet {
         })
     }
 
+    /// Read the exact revision of the actual merged file adapter.
+    /// This synchronous file I/O neither executes a worker nor grants authority;
+    /// hosts call it during blocking assembly, never to reconstruct historical trust.
+    pub fn file_adapter_revision(&self) -> Result<String, IsolatedToolSetError> {
+        self.files
+            .adapter_revision()
+            .map_err(IsolatedToolSetError::File)
+    }
+
     /// Share a bounded observation queue across the original four adapters.
     /// Each executed call independently binds its verified scope and digest.
     pub fn with_process_observer(

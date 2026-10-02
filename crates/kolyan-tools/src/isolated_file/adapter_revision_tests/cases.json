@@ -1,0 +1,20 @@
+[
+  {"id":"clone","action":"clone","changed":false,"read_error":false},
+  {"id":"prepare_missing","action":"prepare_missing","changed":false,"read_error":false},
+  {"id":"prepare_existing","action":"prepare_existing","changed":false,"read_error":false},
+  {"id":"workspace","action":"workspace","changed":true,"read_error":false},
+  {"id":"staging","action":"staging","changed":true,"read_error":false},
+  {"id":"protected","action":"protected","changed":true,"read_error":false},
+  {"id":"read_limit","action":"read_limit","changed":true,"read_error":false},
+  {"id":"write_limit","action":"write_limit","changed":true,"read_error":false},
+  {"id":"output_limit","action":"output_limit","changed":true,"read_error":false},
+  {"id":"timeout","action":"timeout","changed":true,"read_error":false},
+  {"id":"worker_bytes","action":"worker_bytes","changed":true,"read_error":false},
+  {"id":"same_worker_bytes","action":"same_worker_bytes","changed":false,"read_error":false},
+  {"id":"worker_removed","action":"worker_removed","changed":false,"read_error":true},
+  {"id":"merged_shell_protected","action":"merged_shell_protected","changed":true,"read_error":false},
+  {"id":"merged_file_protected","action":"merged_file_protected","changed":true,"read_error":false},
+  {"id":"merged_duplicate_roots","action":"merged_duplicate_roots","changed":false,"read_error":false},
+  {"id":"shell_only_limits","action":"shell_only_limits","changed":false,"read_error":false},
+  {"id":"merged_worker_removed","action":"merged_worker_removed","changed":false,"read_error":true}
+]

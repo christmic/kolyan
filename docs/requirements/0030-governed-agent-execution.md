@@ -4286,3 +4286,19 @@ Clippy、格式及差异检查通过。网络 ignored 项不计为通过。原 f
 退出 0：821 passed、0 failed、62 ignored，日志
 `/tmp/kolyan-evolution-workspace-main-v1.log`。该运行不包含上述新增矩阵源码，
 不能用其数量宣称新矩阵已经全仓或网络验收。
+
+新增 MiniMax 矩阵使用固定源码 `4a4f053` 运行到终态：退出 101，803.10 秒，
+1 个 Rust 函数失败；十六个数据行 6 passed、10 failed，OpenAI 4/8、Anthropic
+2/8。每行均运行一次，无跳过、参数替换或人工模型调用。日志
+`/tmp/kolyan-explicit-contract-main-live-v1.log`；实际完整报告位于
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-r1-matrix-7v3TUX/report.json`。
+明确输入契约未使该矩阵全面通过，旧失败记录仍保留。
+
+独立核对 inline 的 `kolyan-agent-delegation-LCw9v5/actual.jsonl`：第 6 行
+宿主提供的完整定义与第 39–42 行原始 Provider/中立调用逐字段一致；第 166 行
+实际子读取 receipt 成功，第 134 行结果进入子下一请求，第 336 行父恢复请求
+含完整 child completed 结果。第 341–351 行输出部分父答案，第 352 行为
+HTTP 200 SSE 流接收 22794 字节后的 TLS unexpected EOF，没有 Completed。
+这条失败不是 inline 定义或权限参数冲突；不能据此定位供应商、代理或链路。
+另一 readonly 行也报告 Stream/Transport 错误，12331 字节；其他八条失败的
+缺 admission/wait/receipt 断言仍须分别核对轨迹，不能统一套用 TLS 原因。

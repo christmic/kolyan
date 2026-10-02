@@ -16,6 +16,18 @@ The host supplies the trusted worker binary, external staging root, protected
 control paths and byte/time limits. Assembly unions both adapters' protected paths
 and denies the staging root to sibling Shell execution.
 
+`IsolatedFileTools::adapter_revision()` reads the worker binary and hashes the
+normalized file configuration using the same calculation as `prepare`.
+`IsolatedToolSet::file_adapter_revision()` forwards to the actual file instance
+after protected-root merging. Both return explicit errors and perform synchronous
+read-only file I/O: call them during blocking host assembly. They do not execute
+the worker, prepare a dummy call, inspect target files or grant authority.
+Recalculation can change after worker/configuration changes; historical goal
+verification uses its saved trusted revision set, never current-worker inspection.
+Independent revision fixtures export complete JSONL rows, close the file and
+physically reread it before comparing clone/preparation, mutation, merged roots,
+read errors and unchanged target/staging observations.
+
 File workers consume only `ExactFileWorkerRequest`. They verify saved directory
 and leaf identities through nofollow handles instead of resolving model paths
 again. Write/edit create a 0700 private staging directory outside the workspace,
