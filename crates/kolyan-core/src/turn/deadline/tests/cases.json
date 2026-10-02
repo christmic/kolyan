@@ -1,0 +1,22 @@
+[
+ {"id":"none","duration_ns":null,"unix_seconds":1,"unix_nanos":900000,"span_ns":100000,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":null,"error":null},
+ {"id":"zero","duration_ns":0,"unix_seconds":1,"unix_nanos":900000,"span_ns":100000,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":1000,"error":null},
+ {"id":"submillisecond","duration_ns":500000,"unix_seconds":1,"unix_nanos":900000,"span_ns":0,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":1001,"error":null},
+ {"id":"sum_before_floor","duration_ns":200000,"unix_seconds":1,"unix_nanos":900000,"span_ns":0,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":1001,"error":null},
+ {"id":"span_crosses_floor","duration_ns":200000,"unix_seconds":1,"unix_nanos":900000,"span_ns":200000,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":1000,"error":null},
+ {"id":"span_exhausts","duration_ns":1000000,"unix_seconds":1,"unix_nanos":0,"span_ns":2000000,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":999,"error":null},
+ {"id":"span_before_epoch_floor","duration_ns":0,"unix_seconds":0,"unix_nanos":1000,"span_ns":2000,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":0,"error":null},
+ {"id":"absolute_only","duration_ns":null,"unix_seconds":1,"unix_nanos":900000,"span_ns":500000,"ceiling_ms":1002,"epoch_error":false,"instant_error":false,"expected_ms":1002,"error":null},
+ {"id":"external_large_span","duration_ns":null,"unix_seconds":1,"unix_nanos":900000,"span_ns":5000000,"ceiling_ms":1010,"epoch_error":false,"instant_error":false,"expected_ms":1010,"error":null},
+ {"id":"external_span_exhausts_live","duration_ns":null,"unix_seconds":1,"unix_nanos":900000,"span_ns":5000000,"ceiling_ms":1002,"epoch_error":false,"instant_error":false,"expected_ms":1002,"error":null},
+ {"id":"mixed_external_wins_span","duration_ns":20000000,"unix_seconds":1,"unix_nanos":900000,"span_ns":5000000,"ceiling_ms":1010,"epoch_error":false,"instant_error":false,"expected_ms":1010,"error":null},
+ {"id":"mixed_relative_wins_span","duration_ns":10000000,"unix_seconds":1,"unix_nanos":900000,"span_ns":5000000,"ceiling_ms":1010,"epoch_error":false,"instant_error":false,"expected_ms":1005,"error":null},
+ {"id":"mixed_equal_identity_span","duration_ns":14100000,"unix_seconds":1,"unix_nanos":900000,"span_ns":5000000,"ceiling_ms":1010,"epoch_error":false,"instant_error":false,"expected_ms":1010,"error":null},
+ {"id":"tighter_executor","duration_ns":10000000,"unix_seconds":1,"unix_nanos":0,"span_ns":0,"ceiling_ms":1003,"epoch_error":false,"instant_error":false,"expected_ms":1003,"error":null},
+ {"id":"looser_executor","duration_ns":10000000,"unix_seconds":1,"unix_nanos":0,"span_ns":0,"ceiling_ms":2000,"epoch_error":false,"instant_error":false,"expected_ms":1010,"error":null},
+ {"id":"expired_absolute","duration_ns":null,"unix_seconds":2,"unix_nanos":0,"span_ns":0,"ceiling_ms":1000,"epoch_error":false,"instant_error":false,"expected_ms":1000,"error":null},
+ {"id":"epoch_error","duration_ns":1000,"unix_seconds":0,"unix_nanos":0,"span_ns":0,"ceiling_ms":null,"epoch_error":true,"instant_error":false,"expected_ms":null,"error":"ClockBeforeUnixEpoch"},
+ {"id":"unix_conversion_overflow","duration_ns":0,"unix_seconds":18446744073709551615,"unix_nanos":0,"span_ns":0,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":null,"error":"UnixOverflow"},
+ {"id":"unix_add_overflow","duration_ns":1000000000,"unix_seconds":18446744073709551615,"unix_nanos":0,"span_ns":0,"ceiling_ms":null,"epoch_error":false,"instant_error":false,"expected_ms":null,"error":"UnixOverflow"},
+ {"id":"instant_overflow","duration_ns":1000000,"unix_seconds":1,"unix_nanos":0,"span_ns":0,"ceiling_ms":null,"epoch_error":false,"instant_error":true,"expected_ms":null,"error":"InstantOverflow"}
+]
