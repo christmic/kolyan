@@ -9,6 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 #[derive(Clone)]
 pub struct OpenAiClient {
     http: Client,
+    count_http: Client,
     config: OpenAiConfig,
 }
 
@@ -24,7 +25,15 @@ impl OpenAiClient {
             ));
         }
         let http = Client::builder().timeout(config.timeout).build()?;
-        Ok(Self { http, config })
+        let count_http = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .retry(reqwest::retry::never())
+            .build()?;
+        Ok(Self {
+            http,
+            count_http,
+            config,
+        })
     }
 
     pub async fn create_response(
@@ -347,6 +356,7 @@ mod opening_tests;
 #[path = "client/diagnostic_tests.rs"]
 mod diagnostic_tests;
 
+mod counting;
 #[cfg(test)]
 #[path = "client/opening_diagnostic_http_tests.rs"]
 mod opening_diagnostic_http_tests;

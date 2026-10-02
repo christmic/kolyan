@@ -131,6 +131,7 @@ async fn anthropic(case: &Value) -> Value {
 
 fn openai_error(error: OpenAiError) -> String {
     match error {
+        OpenAiError::Count(failure) => format!("count:{failure}"),
         OpenAiError::Configuration(_) => "configuration".into(),
         OpenAiError::OpeningBudgetExhausted => "transport".into(),
         OpenAiError::RetriedError { source, .. } => openai_error(*source),
@@ -144,6 +145,7 @@ fn openai_error(error: OpenAiError) -> String {
 
 fn anthropic_error(error: AnthropicError) -> String {
     match error {
+        AnthropicError::Count(failure) => format!("count:{failure}"),
         AnthropicError::Configuration(_) => "configuration".into(),
         AnthropicError::OpeningBudgetExhausted => "transport".into(),
         AnthropicError::RetriedError { source, .. } => anthropic_error(*source),

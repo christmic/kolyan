@@ -11,6 +11,8 @@ pub struct ResponseDiagnostics {
 
 #[derive(Debug, Error)]
 pub enum OpenAiError {
+    #[error(transparent)]
+    Count(#[from] crate::CountFailure),
     #[error("invalid OpenAI client configuration: {0}")]
     Configuration(String),
     #[error("OpenAI opening budget exhausted before successful response headers")]

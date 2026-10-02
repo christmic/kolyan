@@ -11,6 +11,8 @@ pub struct ResponseDiagnostics {
 
 #[derive(Debug, Error)]
 pub enum AnthropicError {
+    #[error(transparent)]
+    Count(#[from] crate::CountFailure),
     #[error("Anthropic opening budget exhausted")]
     OpeningBudgetExhausted,
     #[error("invalid Anthropic opening configuration: {0}")]

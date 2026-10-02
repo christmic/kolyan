@@ -188,6 +188,7 @@ fn classify(error: &AnthropicError) -> &'static str {
         AnthropicError::Framing(_) => "framing",
         AnthropicError::Api(_) => "api",
         AnthropicError::Configuration(_) => "configuration",
+        AnthropicError::Count(_) => "count",
         AnthropicError::RetriedError { .. } => unreachable!(),
     }
 }
