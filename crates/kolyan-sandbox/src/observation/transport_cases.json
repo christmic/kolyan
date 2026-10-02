@@ -1,0 +1,349 @@
+{"cases":[
+  {
+    "id": "output_saturation_lifecycle_survives",
+    "capacity": 1,
+    "valid": true,
+    "actions": [
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stdout",
+          "text": "a"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stdout",
+          "text": "b"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "op": "receive",
+        "asynchronous": false
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      }
+    ],
+    "observations": [
+      {
+        "context": "",
+        "event": {
+          "kind": "output_observed",
+          "stream": "stdout",
+          "bytes": [
+            97
+          ]
+        }
+      },
+      {
+        "context": "",
+        "event": {
+          "kind": "spawned"
+        }
+      }
+    ],
+    "lifecycle_dropped": 0,
+    "output_dropped": 1
+  },
+  {
+    "id": "both_full",
+    "capacity": 1,
+    "valid": true,
+    "actions": [
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stderr",
+          "text": "x"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "reaped"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stdout",
+          "text": "y"
+        }
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      },
+      {
+        "op": "receive",
+        "asynchronous": false
+      }
+    ],
+    "observations": [
+      {
+        "context": "",
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "context": "",
+        "event": {
+          "kind": "output_observed",
+          "stream": "stderr",
+          "bytes": [
+            120
+          ]
+        }
+      }
+    ],
+    "lifecycle_dropped": 1,
+    "output_dropped": 1
+  },
+  {
+    "id": "closed_loss",
+    "capacity": 1,
+    "valid": true,
+    "actions": [
+      {
+        "op": "close_receiver"
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stdout",
+          "text": "a"
+        }
+      }
+    ],
+    "observations": [],
+    "lifecycle_dropped": 1,
+    "output_dropped": 1
+  },
+  {
+    "id": "context_and_refused_loss",
+    "capacity": 1,
+    "valid": true,
+    "actions": [
+      {
+        "op": "refuse_context"
+      }
+    ],
+    "observations": [],
+    "lifecycle_dropped": 2,
+    "output_dropped": 0
+  },
+  {
+    "id": "mixed_sender_merge_and_pipe_capture",
+    "capacity": 4,
+    "valid": true,
+    "actions": [
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stdout",
+          "text": "a"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 1,
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "output",
+          "stream": "stderr",
+          "text": "b"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "capture",
+          "stream": "stdout"
+        }
+      },
+      {
+        "op": "emit",
+        "sender": 0,
+        "event": {
+          "kind": "capture",
+          "stream": "stderr"
+        }
+      },
+      {
+        "op": "close_senders"
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      },
+      {
+        "op": "receive",
+        "asynchronous": false
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      },
+      {
+        "op": "receive",
+        "asynchronous": false
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      },
+      {
+        "op": "receive",
+        "asynchronous": false
+      },
+      {
+        "op": "receive",
+        "asynchronous": true
+      }
+    ],
+    "observations": [
+      {
+        "context": "",
+        "event": {
+          "kind": "output_observed",
+          "stream": "stdout",
+          "bytes": [
+            97
+          ]
+        }
+      },
+      {
+        "context": "second",
+        "event": {
+          "kind": "spawned"
+        }
+      },
+      {
+        "context": "",
+        "event": {
+          "kind": "output_observed",
+          "stream": "stderr",
+          "bytes": [
+            98
+          ]
+        }
+      },
+      {
+        "context": "",
+        "event": {
+          "kind": "capture_completed",
+          "stream": "stdout",
+          "retained_bytes": 1,
+          "error": null
+        }
+      },
+      {
+        "context": "",
+        "event": {
+          "kind": "capture_completed",
+          "stream": "stderr",
+          "retained_bytes": 1,
+          "error": null
+        }
+      },
+      {
+        "error": "disconnected"
+      },
+      {
+        "error": "disconnected"
+      }
+    ],
+    "lifecycle_dropped": 0,
+    "output_dropped": 0
+  },
+  {
+    "id": "empty_while_open",
+    "capacity": 1,
+    "valid": true,
+    "actions": [
+      {
+        "op": "receive",
+        "asynchronous": false
+      }
+    ],
+    "observations": [
+      {
+        "error": "empty"
+      }
+    ],
+    "lifecycle_dropped": 0,
+    "output_dropped": 0
+  },
+  {
+    "id": "capacity_0",
+    "capacity": 0,
+    "valid": false,
+    "actions": [],
+    "observations": [],
+    "lifecycle_dropped": 0,
+    "output_dropped": 0
+  },
+  {
+    "id": "capacity_1025",
+    "capacity": 1025,
+    "valid": false,
+    "actions": [],
+    "observations": [],
+    "lifecycle_dropped": 0,
+    "output_dropped": 0
+  },
+  {
+    "id": "capacity_1024",
+    "capacity": 1024,
+    "valid": true,
+    "actions": [],
+    "observations": [],
+    "lifecycle_dropped": 0,
+    "output_dropped": 0
+  }
+],"concurrent":{"capacity":512,"producers":3,"pairs":64}}

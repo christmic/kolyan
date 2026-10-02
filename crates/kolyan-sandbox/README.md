@@ -148,6 +148,31 @@ tests must be reevaluated when the backend changes.
 
 ## Verification
 
+Optional process telemetry uses `sandbox_process_observation_channel(1..=1024)`
+and `MacOsSandbox::with_process_observer(sender)`. Lifecycle and output events use
+independent bounded Tokio queues, each with the selected capacity, and at most
+two receiver merge heads. Output cannot consume lifecycle capacity. Sends use
+`try_send`: full/closed queues increment `dropped()`, which remains aggregate
+loss, and the corresponding `lifecycle_dropped()` or `output_dropped()` counter.
+A short internal critical section sequences sends and merges accepted events
+in producer order; it performs no await, process I/O or caller callbacks. Neither
+queue authorizes work or waits for consumer capacity. Both queues remain lossy
+when their own capacity is exhausted or the receiver is gone.
+Host correlation is capped at 4096 bytes; refusing
+oversized correlation increments lifecycle and aggregate loss. Each actual launch receives a fresh UUID,
+actual direct-child PID and process-group ID. Output events copy only existing
+retained chunks (at most 4096 bytes), sharing the original stdout/stderr ceiling.
+Per-pipe order is preserved; cross-pipe event order is not a causal guarantee.
+Errors retain at most 1024 UTF-8 bytes with `[truncated]` and `errors_truncated`.
+
+Spawn means successful process creation, not successful worker exec or file I/O.
+Cancellation observation is separate from host delivery. Signal result,
+group-cleanup check, successful wait/reap and each capture completion are separate
+events. `Reaped` never means group cleanup succeeded or effects rolled back.
+Queue loss makes diagnostic acceptance incomplete; it never retries an effect.
+No observer callback, pause/authorization response, worker-protocol change or
+production deadline/output/policy expansion is introduced.
+
 `cargo test -p kolyan-sandbox` executes actual macOS enforcement tests: positive
 admitted I/O, readonly denial, outside-root and symlink read/write denial,
 protected metadata, exact argv/stdin, clean environment, parameter injection,

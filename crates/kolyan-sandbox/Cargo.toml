@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 thiserror.workspace = true
+serde.workspace = true
+uuid = { version = "1", features = ["v4"] }
 tokio = { workspace = true, features = ["sync", "rt"] }
 
 [target.'cfg(unix)'.dependencies]

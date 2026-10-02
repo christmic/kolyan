@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "native_high_output_explicit_cancel",
+      "control": "cancel",
+      "queue_capacity": 32,
+      "command": "chunk=$(printf '%04096d' 0); i=0; while [ \"$i\" -lt 128 ]; do printf '%s' \"$chunk\"; printf '%s' \"$chunk\" >&2; i=$((i+1)); done; printf READY > phase; while :; do /bin/sleep 1; done",
+      "phase_content": "READY",
+      "process_timeout_ms": 30000,
+      "max_output_bytes": 2097152,
+      "host_phase_timeout_ms": 45000,
+      "host_cleanup_timeout_ms": 15000,
+      "expected_cause": "explicit_control"
+    },
+    {
+      "id": "native_high_output_future_drop",
+      "control": "drop",
+      "queue_capacity": 32,
+      "command": "chunk=$(printf '%04096d' 0); i=0; while [ \"$i\" -lt 128 ]; do printf '%s' \"$chunk\"; printf '%s' \"$chunk\" >&2; i=$((i+1)); done; printf READY > phase; while :; do /bin/sleep 1; done",
+      "phase_content": "READY",
+      "process_timeout_ms": 30000,
+      "max_output_bytes": 2097152,
+      "host_phase_timeout_ms": 45000,
+      "host_cleanup_timeout_ms": 15000,
+      "expected_cause": "dropped_future"
+    }
+  ]
+}

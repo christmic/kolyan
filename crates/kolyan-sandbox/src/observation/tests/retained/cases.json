@@ -1,0 +1,6 @@
+[
+  {"id":"raw_streams_preserved","command":"printf 'out'; printf 'err' >&2; exit 7","cap":64,"queue":32,"cancelled":false,"expected_error":null,"expected_loss":false,"expected_stdout":"out","expected_stderr":"err"},
+  {"id":"shared_output_overflow","command":"printf '123456789'; printf 'abcdefghi' >&2","cap":5,"queue":32,"cancelled":false,"expected_error":"output exceeded","expected_loss":false,"expected_stdout":null,"expected_stderr":null},
+  {"id":"queue_loss_preserves_result","command":"printf 'unchanged'","cap":64,"queue":1,"cancelled":false,"expected_error":null,"expected_loss":true,"expected_stdout":"unchanged","expected_stderr":""},
+  {"id":"cancel_before_spawn","command":"printf 'must not run'","cap":64,"queue":32,"cancelled":true,"expected_error":"cancelled","expected_loss":false,"expected_stdout":null,"expected_stderr":null}
+]

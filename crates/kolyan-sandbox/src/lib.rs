@@ -2,10 +2,16 @@
 //! Cancellation and dropped futures notify an independent process-owning reaper.
 
 mod exact_file;
+mod observation;
 mod process;
 mod profile;
 
 pub use exact_file::FileSandboxConfig;
+pub use observation::{
+    SandboxCancellationCause, SandboxOutputStream, SandboxProcessEvent, SandboxProcessObservation,
+    SandboxProcessObservationReceiver, SandboxProcessObservationSender,
+    sandbox_process_observation_channel,
+};
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -119,6 +125,7 @@ pub trait SandboxExecutor: Send + Sync {
 #[derive(Clone, Debug)]
 pub struct MacOsSandbox {
     access: profile::Access,
+    observer: Option<SandboxProcessObservationSender>,
 }
 
 impl MacOsSandbox {
@@ -129,6 +136,7 @@ impl MacOsSandbox {
         require_backend(std::path::Path::new("/usr/bin/sandbox-exec"))?;
         Ok(Self {
             access: profile::Access::Workspace(profile::canonical_config(config)?),
+            observer: None,
         })
     }
 
@@ -142,7 +150,14 @@ impl MacOsSandbox {
         require_backend(std::path::Path::new("/usr/bin/sandbox-exec"))?;
         Ok(Self {
             access: profile::Access::Files(exact_file::canonical_config(config)?),
+            observer: None,
         })
+    }
+
+    /// Attach optional diagnostics; queue loss never changes execution authority.
+    pub fn with_process_observer(mut self, observer: SandboxProcessObservationSender) -> Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Execute once; no retries. Drop requests cleanup without requiring a Tokio
@@ -153,14 +168,16 @@ impl MacOsSandbox {
         cancellation: SandboxCancellation,
     ) -> Result<SandboxOutput, SandboxError> {
         let access = self.access.clone();
+        let observer = self.observer.clone();
         let dropped = Arc::new(AtomicBool::new(false));
         let guard = DropCancellation(dropped.clone());
         let (send, receive) = tokio::sync::oneshot::channel();
         std::thread::Builder::new()
             .name("kolyan-sandbox-reaper".into())
             .spawn(move || {
-                let result = profile::admit(&access, request)
-                    .and_then(|admitted| process::execute(admitted, cancellation, dropped));
+                let result = profile::admit(&access, request).and_then(|admitted| {
+                    process::execute(admitted, cancellation, dropped, observer)
+                });
                 let _ = send.send(result);
             })?;
         let result = receive.await.map_err(|_| SandboxError::Worker)?;

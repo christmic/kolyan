@@ -26,6 +26,7 @@ fn exited_leader(script: &str) -> (ProcessOwner, rustix::process::Pid) {
         child,
         group,
         armed: true,
+        observation: None,
     };
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

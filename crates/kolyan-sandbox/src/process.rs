@@ -13,12 +13,17 @@ use std::sync::{Arc, atomic::AtomicBool};
 use std::time::{Duration, Instant};
 
 use crate::{SandboxCancellation, SandboxError, SandboxOutput, profile::Admitted};
+use crate::{
+    SandboxCancellationCause, SandboxOutputStream, SandboxProcessEvent,
+    SandboxProcessObservationSender, observation::LaunchObservation,
+};
 
 #[cfg(target_os = "macos")]
 struct ProcessOwner {
     child: Child,
     group: nix::unistd::Pid,
     armed: bool,
+    observation: Option<LaunchObservation>,
 }
 
 #[cfg(target_os = "macos")]
@@ -26,8 +31,14 @@ impl Drop for ProcessOwner {
     fn drop(&mut self) {
         if self.armed {
             // Best effort on unwinding; ordinary completion propagates cleanup errors.
-            let _ = nix::sys::signal::killpg(self.group, nix::sys::signal::Signal::SIGKILL);
-            let _ = self.child.wait();
+            let kill = nix::sys::signal::killpg(self.group, nix::sys::signal::Signal::SIGKILL);
+            emit(
+                &self.observation,
+                SandboxProcessEvent::TerminationAttempted {
+                    error: kill.as_ref().err().map(ToString::to_string),
+                },
+            );
+            observe_reap(&self.observation, &self.child.wait());
         }
     }
 }
@@ -37,6 +48,7 @@ pub(crate) fn execute(
     admitted: Admitted,
     cancel: SandboxCancellation,
     dropped: Arc<AtomicBool>,
+    observer: Option<SandboxProcessObservationSender>,
 ) -> Result<SandboxOutput, SandboxError> {
     use nix::{
         sys::signal::{Signal, killpg},
@@ -73,7 +85,10 @@ pub(crate) fn execute(
         child,
         group,
         armed: true,
+        observation: None,
     };
+    owner.observation = observer.map(|sender| sender.launch(owner.child.id(), group.as_raw()));
+    emit(&owner.observation, SandboxProcessEvent::Spawned);
     let total = Arc::new(AtomicUsize::new(0));
     let overflow = Arc::new(AtomicBool::new(false));
     let stdout = capture(
@@ -81,18 +96,32 @@ pub(crate) fn execute(
         total.clone(),
         overflow.clone(),
         admitted.request.max_output_bytes,
+        owner.observation.clone(),
+        SandboxOutputStream::Stdout,
     );
     let stderr = capture(
         owner.child.stderr.take().ok_or(SandboxError::Worker)?,
         total,
         overflow.clone(),
         admitted.request.max_output_bytes,
+        owner.observation.clone(),
+        SandboxOutputStream::Stderr,
     );
     let mut input = owner.child.stdin.take().ok_or(SandboxError::Worker)?;
     let writer = std::thread::spawn(move || input.write_all(&admitted.request.stdin));
     let started = Instant::now();
     let outcome = loop {
         if cancel.is_cancelled() || dropped.load(Ordering::Acquire) {
+            emit(
+                &owner.observation,
+                SandboxProcessEvent::CancellationObserved {
+                    cause: if cancel.is_cancelled() {
+                        SandboxCancellationCause::ExplicitControl
+                    } else {
+                        SandboxCancellationCause::DroppedFuture
+                    },
+                },
+            );
             break Err(SandboxError::Cancelled);
         }
         if overflow.load(Ordering::Acquire) {
@@ -118,10 +147,22 @@ pub(crate) fn execute(
         }
     };
     // Also terminate background descendants after a successful leader exit.
-    let cleanup = check_group_cleanup(killpg(group, Signal::SIGKILL), || {
-        zombie_only_group(group, wait_pid)
-    });
+    let signal = killpg(group, Signal::SIGKILL);
+    emit(
+        &owner.observation,
+        SandboxProcessEvent::TerminationAttempted {
+            error: signal.as_ref().err().map(ToString::to_string),
+        },
+    );
+    let cleanup = check_group_cleanup(signal, || zombie_only_group(group, wait_pid));
+    emit(
+        &owner.observation,
+        SandboxProcessEvent::GroupCleanup {
+            error: cleanup.as_ref().err().map(ToString::to_string),
+        },
+    );
     let reap = owner.child.wait();
+    observe_reap(&owner.observation, &reap);
     if reap.is_ok() {
         owner.armed = false;
     }
@@ -211,6 +252,7 @@ fn zombie_only_group(
         ),
         child: inspector,
         armed: true,
+        observation: None,
     };
     let overflow = Arc::new(AtomicBool::new(false));
     let states = capture(
@@ -218,6 +260,8 @@ fn zombie_only_group(
         Arc::new(AtomicUsize::new(0)),
         overflow.clone(),
         65536,
+        None,
+        SandboxOutputStream::Stdout,
     );
     let status = loop {
         if let Some(status) = inspector.child.try_wait()? {
@@ -255,6 +299,7 @@ pub(crate) fn execute(
     _: Admitted,
     _: SandboxCancellation,
     _: Arc<AtomicBool>,
+    _: Option<SandboxProcessObservationSender>,
 ) -> Result<SandboxOutput, SandboxError> {
     Err(SandboxError::Unsupported)
 }
@@ -265,23 +310,73 @@ fn capture<R: Read + Send + 'static>(
     total: Arc<AtomicUsize>,
     overflow: Arc<AtomicBool>,
     limit: usize,
+    observation: Option<LaunchObservation>,
+    stream: SandboxOutputStream,
 ) -> std::thread::JoinHandle<Result<Vec<u8>, std::io::Error>> {
     std::thread::spawn(move || {
         let mut output = Vec::new();
         let mut buffer = [0; 4096];
-        loop {
+        let result = (|| loop {
             let count = reader.read(&mut buffer)?;
             if count == 0 {
-                return Ok(output);
+                return Ok::<_, std::io::Error>(());
             }
             let previous = total.fetch_add(count, Ordering::AcqRel);
             let retain = count.min(limit.saturating_sub(previous));
             output.extend_from_slice(&buffer[..retain]);
+            if retain != 0 && observation.is_some() {
+                emit(
+                    &observation,
+                    SandboxProcessEvent::OutputObserved {
+                        stream,
+                        bytes: buffer[..retain].to_vec(),
+                    },
+                );
+            }
             if retain != count {
                 overflow.store(true, Ordering::Release);
             }
-        }
+        })();
+        emit(
+            &observation,
+            SandboxProcessEvent::CaptureCompleted {
+                stream,
+                retained_bytes: output.len(),
+                error: result.as_ref().err().map(ToString::to_string),
+            },
+        );
+        result.map(|()| output)
     })
+}
+
+#[cfg(target_os = "macos")]
+fn emit(observation: &Option<LaunchObservation>, event: SandboxProcessEvent) {
+    if let Some(observation) = observation {
+        observation.emit(event);
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn observe_reap(
+    observation: &Option<LaunchObservation>,
+    result: &std::io::Result<std::process::ExitStatus>,
+) {
+    use std::os::unix::process::ExitStatusExt;
+    match result {
+        Ok(status) => emit(
+            observation,
+            SandboxProcessEvent::Reaped {
+                exit_code: status.code(),
+                signal: status.signal(),
+            },
+        ),
+        Err(error) => emit(
+            observation,
+            SandboxProcessEvent::CleanupFailed {
+                error: error.to_string(),
+            },
+        ),
+    }
 }
 
 #[cfg(all(test, target_os = "macos"))]
