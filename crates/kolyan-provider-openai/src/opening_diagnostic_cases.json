@@ -1,0 +1,14 @@
+{
+  "schema_version":1,
+  "cases":[
+    {"id":"zero_sends_unfinished","statuses":[],"decision":null,"root":"budget","status":null,"stop":null,"diagnostic":false,"diagnostic_kind":null,"kind":"Transport","phase":"Open"},
+    {"id":"zero_sends_elapsed","statuses":[],"decision":null,"root":"budget","status":null,"stop":"ElapsedLimit","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"Transport","phase":"Open"},
+    {"id":"authentication","statuses":[401],"decision":{"Stop":{"reason":"Ineligible"}},"root":"http","status":401,"stop":"Ineligible","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"Authentication","phase":"Open"},
+    {"id":"permanent_quota","statuses":[429],"decision":{"Stop":{"reason":"PermanentQuota"}},"root":"http","status":429,"stop":"PermanentQuota","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"RateLimited","phase":"Open"},
+    {"id":"unavailable","statuses":[529],"decision":{"Stop":{"reason":"Disabled"}},"root":"http","status":529,"stop":"Disabled","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"Unavailable","phase":"Open"},
+    {"id":"current_status_body_timeout","statuses":[529,401],"decision":{"Stop":{"reason":"ElapsedLimit"}},"root":"http","status":401,"stop":"ElapsedLimit","diagnostic":true,"diagnostic_kind":"local_http_opening_retry","kind":"Authentication","phase":"Open"},
+    {"id":"invalid_request","statuses":[400],"decision":{"Stop":{"reason":"Ineligible"}},"root":"http","status":400,"stop":"Ineligible","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"InvalidRequest","phase":"Open"},
+    {"id":"stream_api_cause","statuses":[200],"decision":null,"root":"api","status":null,"stop":null,"diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"Other","phase":"Stream"},
+    {"id":"send_retry_then_elapsed","statuses":[null],"decision":{"Retry":{"delay_ms":0,"basis":"Backoff"}},"root":"budget","status":null,"stop":"ElapsedLimit","diagnostic":true,"diagnostic_kind":"local_http_opening_report","kind":"Transport","phase":"Open"}
+  ]
+}

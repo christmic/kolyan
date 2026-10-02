@@ -74,6 +74,14 @@ impl ModelProvider for OpenAiProvider {
                 .stream_response_with_extensions(&wire, &plan.wire_extensions)
                 .await
                 .map_err(openai_error)?;
+            let retry_metadata = response.retry_report().was_retried().then(|| {
+                Ok(ModelEvent::Provider(kolyan_model::ProviderMetadata {
+                    provider: request.model.provider.clone(),
+                    raw: Some(
+                        json!({"kind":"local_http_opening_retry","report":response.retry_report()}),
+                    ),
+                }))
+            });
             let model = request.model.clone();
             let model_for_map = model.clone();
             let mut call_ids = BTreeMap::new();
@@ -102,7 +110,11 @@ impl ModelProvider for OpenAiProvider {
                     raw: Some(json!({"kind":"request_planning","decisions":audit})),
                 }))
             }));
-            Ok(Box::pin(prefix.chain(stream)) as _)
+            Ok(Box::pin(
+                prefix
+                    .chain(futures_util::stream::iter(retry_metadata))
+                    .chain(stream),
+            ) as _)
         })
     }
 }
@@ -638,12 +650,32 @@ fn provider_error(message: impl Into<String>) -> ProviderError {
     )
 }
 fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
+    let diagnostics = error
+        .opening_report()
+        .filter(|report| report.attempts() > 0 || report.terminal_stop().is_some())
+        .map(|report| {
+            let kind = if report.was_retried() {
+                "local_http_opening_retry"
+            } else {
+                "local_http_opening_report"
+            };
+            json!({"kind":kind,"report":report})
+        });
     let message = ProviderError::describe(&error);
-    let status = match &error {
+    let status = match error.root() {
         kolyan_protocol_openai::OpenAiError::Http { status, .. } => Some(*status),
         _ => None,
     };
-    let (kind, phase) = match error {
+    let (kind, phase) = match error.root() {
+        kolyan_protocol_openai::OpenAiError::Configuration(_) => {
+            (ProviderErrorKind::InvalidRequest, ProviderErrorPhase::Open)
+        }
+        kolyan_protocol_openai::OpenAiError::OpeningBudgetExhausted => {
+            (ProviderErrorKind::Transport, ProviderErrorPhase::Open)
+        }
+        kolyan_protocol_openai::OpenAiError::RetriedError { .. } => {
+            unreachable!("root strips local wrappers")
+        }
         kolyan_protocol_openai::OpenAiError::Api(_) => {
             (ProviderErrorKind::Other, ProviderErrorPhase::Stream)
         }
@@ -670,8 +702,12 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
     let mut error = ProviderError::new(kind, phase, message);
     error.status = status;
     error.provider = Some("openai".into());
+    error.diagnostics = diagnostics;
     error
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod opening_diagnostic_tests;
