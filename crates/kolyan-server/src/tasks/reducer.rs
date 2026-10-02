@@ -9,11 +9,12 @@ use std::collections::BTreeSet;
 
 use kolyan_ledger::{FactRecord, FactRef};
 
+use super::InvocationInputSource;
 use super::types::*;
 
 use attempts::{authorize_retry, observe, resume, start};
 use completion::{cancel, complete};
-use topology::{add_dependency, admit, consume, required_results};
+use topology::{add_dependency, admit, consume, consume_terminal, has_consumed, required_results};
 use validation::{agent, available_id, digest, reason, validate_definition};
 
 pub(super) fn invalid(message: impl Into<String>) -> TaskError {
@@ -91,8 +92,8 @@ pub(super) fn apply(
         TaskEvent::AttemptObserved(observation) => observe(state, observation, record)?,
         TaskEvent::AttemptResumed {
             binding,
-            approval_id,
-        } => resume(state, binding, &approval_id)?,
+            checkpoint_id,
+        } => resume(state, binding, &checkpoint_id)?,
         TaskEvent::RecoveryNeeded {
             attempt_id,
             reason: why,
@@ -131,6 +132,10 @@ pub(super) fn apply(
             invocation_id,
             result,
         } => consume(state, &invocation_id, result, record)?,
+        TaskEvent::TerminalResultConsumed {
+            invocation_id,
+            result,
+        } => consume_terminal(state, &invocation_id, *result, record)?,
         TaskEvent::Completed { evidence } => complete(state, evidence)?,
         TaskEvent::Cancelled { reason: why } => cancel(state, &why)?,
         TaskEvent::Failed { reason: why } => {
@@ -153,7 +158,7 @@ fn refresh(state: &mut TaskSnapshot) {
     for (id, inv) in &state.invocations {
         let pending: Vec<_> = required_results(state, id)
             .into_iter()
-            .filter(|child| !inv.consumed_results.contains_key(child))
+            .filter(|child| !has_consumed(inv, child))
             .collect();
         if !pending.is_empty() {
             state.waiting.push(WaitingReason::ChildResults {

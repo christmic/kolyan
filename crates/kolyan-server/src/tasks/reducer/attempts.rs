@@ -16,6 +16,7 @@ pub(super) fn start(state: &mut TaskSnapshot, binding: AttemptBinding) -> Result
         .ok_or_else(|| invalid("unknown invocation"))?;
     if inv.definition.agent != binding.agent
         || inv.definition.constraints_digest != binding.constraints_digest
+        || inv.definition.input_source != binding.input_source
     {
         return Err(transition(
             "changed revision/instance/constraints require new admission",
@@ -54,7 +55,7 @@ pub(super) fn start(state: &mut TaskSnapshot, binding: AttemptBinding) -> Result
         .definition
         .dependencies
         .iter()
-        .any(|id| !inv.consumed_results.contains_key(id))
+        .any(|id| !has_consumed(inv, id))
     {
         return Err(transition(
             "dependencies require explicit result consumption before execution",
@@ -62,6 +63,7 @@ pub(super) fn start(state: &mut TaskSnapshot, binding: AttemptBinding) -> Result
     }
     let inv = state.invocations.get_mut(&binding.invocation_id).unwrap();
     inv.state = InvocationState::Running;
+    inv.terminal_fact = None;
     inv.attempts.push(binding.attempt_id.clone());
     state.attempts.insert(
         binding.attempt_id.clone(),
@@ -198,14 +200,36 @@ pub(super) fn observe(
     if attempt.state == InvocationState::Suspended
         && !matches!(
             observation.outcome,
-            AttemptOutcome::Failed { .. }
+            AttemptOutcome::Suspended { .. }
+                | AttemptOutcome::Failed { .. }
                 | AttemptOutcome::Cancelled { .. }
                 | AttemptOutcome::RecoveryRequired { .. }
         )
     {
         return Err(transition(
-            "approval must be explicitly resumed before execution completion",
+            "suspension must be explicitly resumed before execution completion",
         ));
+    }
+    if attempt.state == InvocationState::Suspended
+        && let AttemptOutcome::Suspended { waiting } = &observation.outcome
+    {
+        let Some(WaitingReason::Suspension(previous)) = &attempt.waiting else {
+            return Err(invalid("suspended attempt lacks checkpoint coordinates"));
+        };
+        if waiting.checkpoint_id != previous.checkpoint_id
+            || waiting
+                .approval_ids
+                .iter()
+                .any(|id| !previous.approval_ids.contains(id))
+            || waiting
+                .external_wait_ids
+                .iter()
+                .any(|id| !previous.external_wait_ids.contains(id))
+        {
+            return Err(transition(
+                "partial merge cannot replace checkpoint or introduce waits",
+            ));
+        }
     }
     if let Some(previous) = &attempt.observation
         && observation.source.cursor <= previous.source.cursor
@@ -229,7 +253,7 @@ pub(super) fn observe(
             let inv = &state.invocations[&inv_id];
             if required_results(state, &inv_id)
                 .iter()
-                .any(|id| !inv.consumed_results.contains_key(id))
+                .any(|id| !has_consumed(inv, id))
             {
                 return Err(transition(
                     "child results must be consumed before parent completion",
@@ -237,8 +261,8 @@ pub(super) fn observe(
             }
             InvocationState::Completed
         }
-        AttemptOutcome::Suspended { approval_id } => {
-            identity(approval_id)?;
+        AttemptOutcome::Suspended { waiting } => {
+            validate_waiting(waiting)?;
             InvocationState::Suspended
         }
         AttemptOutcome::Failed { reason: why, .. } => {
@@ -276,9 +300,7 @@ pub(super) fn observe(
     let attempt = state.attempts.get_mut(&observation.attempt_id).unwrap();
     attempt.state = next;
     attempt.waiting = match &observation.outcome {
-        AttemptOutcome::Suspended { approval_id } => Some(WaitingReason::Approval {
-            approval_id: approval_id.clone(),
-        }),
+        AttemptOutcome::Suspended { waiting } => Some(WaitingReason::Suspension(waiting.clone())),
         AttemptOutcome::RecoveryRequired { reason } => Some(WaitingReason::Recovery {
             reason: reason.clone(),
         }),
@@ -287,6 +309,12 @@ pub(super) fn observe(
     attempt.observation = Some(observation);
     let inv = state.invocations.get_mut(&inv_id).unwrap();
     inv.state = next;
+    if matches!(
+        next,
+        InvocationState::Completed | InvocationState::Failed | InvocationState::Cancelled
+    ) {
+        inv.terminal_fact = Some(reference(record));
+    }
     if next == InvocationState::Completed {
         inv.completion_fact = Some(reference(record));
     }
@@ -306,14 +334,14 @@ pub(super) fn observe(
 pub(super) fn resume(
     state: &mut TaskSnapshot,
     binding: AttemptBinding,
-    approval_id: &str,
+    checkpoint_id: &str,
 ) -> Result<(), TaskError> {
-    identity(approval_id)?;
+    identity(checkpoint_id)?;
     if state.definition.limits.max_tokens.is_some_and(|limit| {
         state.usage.unreported_steps > 0 || state.usage.total().is_none_or(|total| total >= limit)
     }) {
         return Err(transition(
-            "shared token budget cannot admit approval resumption",
+            "shared token budget cannot admit checkpoint resumption",
         ));
     }
     let attempt = state
@@ -322,14 +350,12 @@ pub(super) fn resume(
         .ok_or_else(|| invalid("unknown attempt"))?;
     if attempt.binding != binding
         || attempt.state != InvocationState::Suspended
-        || attempt.waiting
-            != Some(WaitingReason::Approval {
-                approval_id: approval_id.to_owned(),
-            })
+        || !matches!(&attempt.waiting, Some(WaitingReason::Suspension(waiting))
+            if waiting.checkpoint_id == checkpoint_id)
         || attempt.cancellation_requested
     {
         return Err(transition(
-            "approval/binding/revision/constraints mismatch or cancelled",
+            "checkpoint/binding/revision/constraints mismatch or cancelled",
         ));
     }
     attempt.state = InvocationState::Running;
@@ -339,5 +365,22 @@ pub(super) fn resume(
         .get_mut(&binding.invocation_id)
         .unwrap()
         .state = InvocationState::Running;
+    Ok(())
+}
+
+fn validate_waiting(waiting: &crate::TaskSuspension) -> Result<(), TaskError> {
+    identity(&waiting.checkpoint_id)?;
+    if waiting.approval_ids.is_empty() && waiting.external_wait_ids.is_empty() {
+        return Err(invalid("suspension has no pending waits"));
+    }
+    for ids in [&waiting.approval_ids, &waiting.external_wait_ids] {
+        let mut seen = std::collections::BTreeSet::new();
+        for id in ids {
+            identity(id)?;
+            if !seen.insert(id) {
+                return Err(invalid("duplicate suspension coordinate"));
+            }
+        }
+    }
     Ok(())
 }

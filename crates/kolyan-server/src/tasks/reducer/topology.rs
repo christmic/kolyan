@@ -9,6 +9,18 @@ pub(super) fn admit(
     available_id(state, &definition.invocation_id)?;
     agent(&definition.agent)?;
     digest(&definition.constraints_digest)?;
+    if !matches!(
+        (&definition.role, &definition.input_source),
+        (
+            InvocationRole::Root,
+            InvocationInputSource::Standalone { .. }
+        ) | (
+            InvocationRole::SelfCall | InvocationRole::Delegation | InvocationRole::Continuation,
+            InvocationInputSource::Derived { .. }
+        )
+    ) {
+        return Err(invalid("invocation role and required input source differ"));
+    }
     if state.invocations.len() as u64 >= state.definition.limits.max_invocations {
         return Err(transition("shared invocation budget exhausted"));
     }
@@ -85,6 +97,8 @@ pub(super) fn admit(
             state: InvocationState::Admitted,
             attempts: Vec::new(),
             consumed_results: Default::default(),
+            terminal_consumed_results: Default::default(),
+            terminal_fact: None,
             completion_fact: None,
             cancellation_requested: false,
         },
@@ -178,9 +192,7 @@ pub(super) fn consume(
         inv.state,
         InvocationState::Completed | InvocationState::Cancelled | InvocationState::Failed
     ) || !required_results(state, invocation).contains(&result.child_invocation_id)
-        || inv
-            .consumed_results
-            .contains_key(&result.child_invocation_id)
+        || has_consumed(inv, &result.child_invocation_id)
     {
         return Err(transition(
             "not an admitted result edge or result already consumed",
@@ -215,5 +227,82 @@ pub(super) fn consume(
         .unwrap()
         .consumed_results
         .insert(result.child_invocation_id.clone(), result);
+    Ok(())
+}
+
+pub(super) fn has_consumed(inv: &InvocationSnapshot, child: &str) -> bool {
+    inv.consumed_results.contains_key(child) || inv.terminal_consumed_results.contains_key(child)
+}
+
+pub(super) fn consume_terminal(
+    state: &mut TaskSnapshot,
+    invocation: &str,
+    result: ConsumedTerminalResult,
+    record: &FactRecord,
+) -> Result<(), TaskError> {
+    let owner = state
+        .invocations
+        .get(invocation)
+        .ok_or_else(|| invalid("unknown consumer"))?;
+    let child_id = &result.child.invocation_id;
+    if owner.cancellation_requested
+        || result.parent.invocation_id != invocation
+        || owner.attempts.last() != Some(&result.parent.attempt_id)
+        || state
+            .attempts
+            .get(&result.parent.attempt_id)
+            .is_none_or(|attempt| {
+                attempt.binding != result.parent || attempt.cancellation_requested
+            })
+        || matches!(
+            owner.state,
+            InvocationState::Completed | InvocationState::Failed | InvocationState::Cancelled
+        )
+        || has_consumed(owner, child_id)
+        || !required_results(state, invocation).contains(child_id)
+    {
+        return Err(transition("terminal result edge is unavailable"));
+    }
+    let child = state
+        .invocations
+        .get(child_id)
+        .ok_or_else(|| invalid("unknown child"))?;
+    let attempt = state
+        .attempts
+        .get(&result.child.attempt_id)
+        .ok_or_else(|| invalid("unknown child attempt"))?;
+    let observation = attempt
+        .observation
+        .as_ref()
+        .ok_or_else(|| invalid("missing terminal observation"))?;
+    let disposition = match &observation.outcome {
+        AttemptOutcome::Completed { evidence } => TerminalResultDisposition::Completed {
+            evidence: evidence.clone(),
+        },
+        AttemptOutcome::Failed { reason, .. } => TerminalResultDisposition::Failed {
+            reason: reason.clone(),
+        },
+        AttemptOutcome::Cancelled { reason } => TerminalResultDisposition::Cancelled {
+            reason: reason.clone(),
+        },
+        _ => return Err(transition("child is not terminal")),
+    };
+    if attempt.binding != result.child
+        || child.attempts.last() != Some(&result.child.attempt_id)
+        || child.terminal_fact.as_ref() != Some(&result.terminal_fact)
+        || observation.source != result.source
+        || disposition != result.disposition
+        || !record.draft.causes.contains(&result.terminal_fact)
+    {
+        return Err(invalid(
+            "terminal disposition differs from exact child proof",
+        ));
+    }
+    state
+        .invocations
+        .get_mut(invocation)
+        .unwrap()
+        .terminal_consumed_results
+        .insert(child_id.clone(), result);
     Ok(())
 }

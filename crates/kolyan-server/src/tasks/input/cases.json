@@ -1,0 +1,18 @@
+[
+ {"id":"read","mutation":"Read","cap":"Maximum","accepted":true},
+ {"id":"schema","mutation":"Schema","cap":"Maximum","accepted":false},
+ {"id":"noncritical","mutation":"Critical","cap":"Maximum","accepted":false},
+ {"id":"subject","mutation":"Subject","cap":"Maximum","accepted":false},
+ {"id":"scope","mutation":"Scope","cap":"Maximum","accepted":false},
+ {"id":"kind","mutation":"Kind","cap":"Maximum","accepted":false},
+ {"id":"unknown","mutation":"Unknown","cap":"Maximum","accepted":false},
+ {"id":"missing","mutation":"Missing","cap":"Maximum","accepted":false},
+ {"id":"cycle","mutation":"Cycle","cap":"Maximum","accepted":false},
+ {"id":"duplicate","mutation":"Duplicate","cap":"Maximum","accepted":false},
+ {"id":"foreign","mutation":"Foreign","cap":"Maximum","accepted":false},
+ {"id":"changed_body","mutation":"ChangedBody","cap":"Maximum","accepted":false},
+ {"id":"zero_cap","mutation":"Read","cap":"Zero","accepted":false},
+ {"id":"above_cap","mutation":"Read","cap":"AboveMaximum","accepted":false},
+ {"id":"exact_cap","mutation":"Read","cap":"Exact","accepted":true},
+ {"id":"below_exact_cap","mutation":"Read","cap":"BelowExact","accepted":false}
+]

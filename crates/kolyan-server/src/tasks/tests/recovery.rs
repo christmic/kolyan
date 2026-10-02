@@ -1,5 +1,6 @@
 //! Approval, interruption, retry, cancellation and usage evidence across restarts.
 
+use crate::input_fixture::SourceFixtureAdmission;
 use kolyan_ledger::SqliteFactJournal;
 
 use super::*;
@@ -21,7 +22,7 @@ fn sqlite_approval_restart_retains_binding_and_does_not_admit_new_attempt() {
                 &attempt,
                 3,
                 AttemptOutcome::Suspended {
-                    approval_id: "approval".into(),
+                    waiting: approval_wait(),
                 },
             ),
         )
@@ -32,9 +33,7 @@ fn sqlite_approval_restart_retains_binding_and_does_not_admit_new_attempt() {
     assert_eq!(state.state, TaskState::Waiting);
     assert_eq!(
         state.waiting,
-        vec![WaitingReason::Approval {
-            approval_id: "approval".into()
-        }]
+        vec![WaitingReason::Suspension(approval_wait())]
     );
     assert!(
         coordinator
@@ -173,7 +172,7 @@ fn observed_overspend_is_retained_and_unknown_usage_is_not_zero() {
         task.limits.max_tokens = hard_limit;
         coordinator.register_task("register", task).unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "root",
                 invocation("root", None, InvocationRole::Root),
@@ -187,7 +186,7 @@ fn observed_overspend_is_retained_and_unknown_usage_is_not_zero() {
             &attempt,
             3,
             AttemptOutcome::Suspended {
-                approval_id: "approval".into(),
+                waiting: approval_wait(),
             },
         );
         observed.usage.unreported_steps = unknown;
@@ -224,14 +223,14 @@ fn cancellation_policy_is_explicit_and_actual_stopped_usage_remains_recordable()
         task.cancellation_policy = policy;
         coordinator.register_task("register", task).unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "root",
                 invocation("root", None, InvocationRole::Root),
             )
             .unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "child",
                 invocation("child", Some("root"), InvocationRole::Delegation),
@@ -252,7 +251,7 @@ fn cancellation_policy_is_explicit_and_actual_stopped_usage_remains_recordable()
         assert_eq!(state.attempts["a-child"].state, InvocationState::Running);
         assert!(
             coordinator
-                .admit_invocation(
+                .admit_fixture(
                     "task",
                     "new",
                     invocation("new", Some("root"), InvocationRole::Delegation)
@@ -288,14 +287,14 @@ fn root_only_cancellation_does_not_revoke_existing_child_approval_resume() {
         task.cancellation_policy = policy;
         coordinator.register_task("register", task).unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "root",
                 invocation("root", None, InvocationRole::Root),
             )
             .unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "child",
                 invocation("child", Some("root"), InvocationRole::Delegation),
@@ -313,7 +312,7 @@ fn root_only_cancellation_does_not_revoke_existing_child_approval_resume() {
                     &child,
                     3,
                     AttemptOutcome::Suspended {
-                        approval_id: "approval".into(),
+                        waiting: approval_wait(),
                     },
                 ),
             )
@@ -362,7 +361,7 @@ fn approval_completion_without_explicit_resume_is_rejected() {
                 &attempt,
                 3,
                 AttemptOutcome::Suspended {
-                    approval_id: "approval".into(),
+                    waiting: approval_wait(),
                 },
             ),
         )
@@ -386,4 +385,12 @@ fn approval_completion_without_explicit_resume_is_rejected() {
         coordinator.snapshot("task").unwrap().invocations["root"].state,
         InvocationState::Suspended
     );
+}
+
+fn approval_wait() -> TaskSuspension {
+    TaskSuspension {
+        checkpoint_id: "approval".into(),
+        approval_ids: vec!["approval".into()],
+        external_wait_ids: Vec::new(),
+    }
 }

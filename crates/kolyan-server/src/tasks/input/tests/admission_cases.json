@@ -1,0 +1,11 @@
+[
+ {"id":"exact_start_and_replay","mutation":"Read","accepted":true},
+ {"id":"changed_attempt_source","mutation":"WrongAttemptSource","accepted":false},
+ {"id":"missing_definition_source","mutation":"MissingDefinitionSource","accepted":false},
+ {"id":"missing_attempt_source","mutation":"MissingAttemptSource","accepted":false},
+ {"id":"missing_admission_cause","mutation":"MissingAdmissionCause","accepted":false},
+ {"id":"missing_attempt_cause","mutation":"MissingAttemptCause","accepted":false},
+ {"id":"root_derived","mutation":"WrongRole","accepted":false},
+ {"id":"cancelled_admission","mutation":"Cancelled","accepted":false},
+ {"id":"late_body_change","mutation":"ChangedBody","accepted":false}
+]

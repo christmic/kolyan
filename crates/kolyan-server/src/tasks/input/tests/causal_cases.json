@@ -1,0 +1,7 @@
+[
+ {"id":"deep_exact_count","shape":"Chain","nodes":1024,"body_bytes":0,"accepted":true,"unique_reads":1024},
+ {"id":"shared_wide_dag","shape":"SharedDag","nodes":33,"body_bytes":0,"accepted":true,"unique_reads":33},
+ {"id":"cross_stream_cycle","shape":"Cycle","nodes":16,"body_bytes":0,"accepted":false,"unique_reads":16},
+ {"id":"over_unique_limit","shape":"Chain","nodes":1025,"body_bytes":0,"accepted":false,"unique_reads":1024},
+ {"id":"over_byte_limit","shape":"Chain","nodes":1024,"body_bytes":20000,"accepted":false,"unique_reads":null}
+]

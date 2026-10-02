@@ -1,5 +1,6 @@
 //! Fixture-owned boundary values for shared governance limits.
 
+use crate::input_fixture::SourceFixtureAdmission;
 use serde::Deserialize;
 
 use super::*;
@@ -29,7 +30,7 @@ fn fixture_boundaries_reject_without_partial_writes() {
         }
         coordinator.register_task("register", task).unwrap();
         coordinator
-            .admit_invocation(
+            .admit_fixture(
                 "task",
                 "root",
                 invocation("root", None, InvocationRole::Root),
@@ -38,7 +39,7 @@ fn fixture_boundaries_reject_without_partial_writes() {
         let result = match case.operation.as_str() {
             "recursion" | "invocations" => {
                 let before = coordinator.snapshot("task").unwrap();
-                let result = coordinator.admit_invocation(
+                let result = coordinator.admit_fixture(
                     "task",
                     "child",
                     invocation("child", Some("root"), InvocationRole::SelfCall),

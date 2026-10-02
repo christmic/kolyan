@@ -1,0 +1,6 @@
+[
+ {"id":"publication_identical","operation":"Publication","identical":true,"participants":4,"accepted":4,"refused":0,"committed":1},
+ {"id":"publication_different","operation":"Publication","identical":false,"participants":4,"accepted":1,"refused":3,"committed":1},
+ {"id":"admission_identical","operation":"Admission","identical":true,"participants":4,"accepted":4,"refused":0,"committed":1},
+ {"id":"admission_different","operation":"Admission","identical":false,"participants":4,"accepted":1,"refused":3,"committed":1}
+]

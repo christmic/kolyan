@@ -1,8 +1,12 @@
 //! Deterministic task-domain scenarios; no model or execution mocks in production.
 
+use crate::input_fixture::SourceFixtureAdmission;
 mod budgets;
+mod consume_gap;
 mod recovery;
 mod retry;
+mod suspension;
+mod terminal_results;
 mod topology;
 mod validation;
 
@@ -42,6 +46,15 @@ fn agent() -> AgentIdentity {
 
 fn invocation(id: &str, parent: Option<&str>, role: InvocationRole) -> InvocationDefinition {
     InvocationDefinition {
+        input_source: crate::input_fixture::fixture_source(
+            "task",
+            id,
+            if (role) == crate::InvocationRole::Root {
+                crate::InvocationInputKind::Standalone
+            } else {
+                crate::InvocationInputKind::Derived
+            },
+        ),
         invocation_id: id.into(),
         agent: agent(),
         constraints_digest: "c".repeat(64),
@@ -53,6 +66,15 @@ fn invocation(id: &str, parent: Option<&str>, role: InvocationRole) -> Invocatio
 
 fn binding(invocation_id: &str, attempt_id: &str) -> AttemptBinding {
     AttemptBinding {
+        input_source: crate::input_fixture::fixture_source(
+            "task",
+            invocation_id,
+            if (invocation_id) == "root" {
+                crate::InvocationInputKind::Standalone
+            } else {
+                crate::InvocationInputKind::Derived
+            },
+        ),
         attempt_id: attempt_id.into(),
         invocation_id: invocation_id.into(),
         execution: ExecutionRef {
@@ -103,7 +125,7 @@ fn setup<J: FactJournal>(journal: J) -> TaskCoordinator<J> {
     let coordinator = TaskCoordinator::new(journal);
     coordinator.register_task("register", definition()).unwrap();
     coordinator
-        .admit_invocation(
+        .admit_fixture(
             "task",
             "admit-root",
             invocation("root", None, InvocationRole::Root),
