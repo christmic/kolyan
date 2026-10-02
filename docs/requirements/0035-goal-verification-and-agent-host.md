@@ -133,6 +133,43 @@ and matching prepared content/result digest and byte length. Display paths and
 model assertions cannot substitute for physical resource binding. Unknown
 checker revision, missing proof or incomplete inspection fails closed.
 
+#### 文件 worker 收据的独立校验
+
+现有 isolated file adapter 对零退出码的 JSON 结果只比较显示 path；目标证明
+不能把这种结果直接视为经过内容校验。本批增加 production decoder：严格按
+FileOperationResult 解码并校验 path、规范小写 SHA-256、操作上限和内容形状。
+Read 必须有完整 UTF-8 content，其字节数与摘要必须等于返回值；Write 的返回
+content 必须为空，bytes/hash 必须等于实际 prepared write content。Edit 返回
+content 为空且满足写入上限、摘要格式；不能凭 new_text 推算整个修改后文件，
+不宣称已经独立验证其完整内容。校验不重新打开文件，也不比较旧 inode。
+
+零退出码后 JSON 损坏或收据不一致时，Read 返回普通验证错误；Write/Edit
+可能已在 rename 提交后产生该结果，因此返回新的 IsolatedFileError::Uncertain，
+Turn adapter 必须映射为已有 ToolError::Uncertain，而非普通可反馈后纠正的
+Failed。不得重放效果或把未验证结果保存成 Completed。保留正常工具上限与
+权限检查、现有超时/取消契约；这不是对所有进程终止后效果状态的完整判定。
+
+新增独立数据驱动解码与边界分类测试，覆盖空/Unicode 内容、不同 path、缺失
+read 内容、非空 replacement 内容、bytes/hash 不一致、未知/重复 JSON 字段、
+负数/溢出 bytes、上限和 edit 的不可独立推算边界。完整 operation、raw stdout、
+limits、result/error 先导出，再物理回读比较。已有 real local file-worker 矩阵
+独立回归，不能用纯 decoder 测试冒充实际工具或模型执行。此修复是可信收据的
+前置条件，目标 checker 仍须独立重验准备、授权、scope 和物理终态来源。
+
+该 production decoder 已接到 isolated adapter 的真实零退出码结果路径。新增
+27 个收据数据场景和 2 个 Turn 错误分类场景，完整 stdout bytes、operation、
+limits 和结果先导出后回读比较。主控 Tools 回归 70 passed、0 failed、0 ignored；
+已有真实本地 file-worker 与 exact-file boundary 共 7 个测试函数通过，原输入与
+断言未修改。严格 Tools Clippy 通过。这些是 decoder 和本机进程证据，不是
+真实模型目标 checker 的验收。
+
+日志：`/tmp/kolyan-worker-receipt-main-v2.log`、
+`/tmp/kolyan-worker-receipt-native-main-v1.log`、
+`/tmp/kolyan-worker-receipt-strict-main-v1.log`。完整新增矩阵文件位于 native
+临时根目录的 `kolyan-file-receipt-rvvOeJ/actual.jsonl` 与
+`kolyan-file-receipt-boundary-aV4oIz/actual.jsonl`，真实进程轨迹由 native 日志
+单独记录。正常 rename receipt 仍只证明历史提交，不证明当前文件未被再写。
+
 Runtime owns the first released proof-read slice. Add a read-only
 `inspect_effect_proof` entry in a dedicated module, internally reusing
 `reconciliation::receipt::PreparedEvidence::from_facts` and `validate_receipt`.

@@ -102,6 +102,7 @@ fn raw_cap(call_id: &str, limit: usize) -> Result<usize, ToolError> {
 
 fn tool_error(error: IsolatedFileError) -> ToolError {
     match error {
+        IsolatedFileError::Uncertain(message) => ToolError::Uncertain { message },
         IsolatedFileError::Sandbox(SandboxError::Cancelled) => ToolError::Cancelled,
         IsolatedFileError::Sandbox(SandboxError::Timeout) => ToolError::TimedOut,
         IsolatedFileError::Prepared(error) => ToolError::PolicyDenied {

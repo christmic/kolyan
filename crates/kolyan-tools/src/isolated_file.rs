@@ -23,6 +23,7 @@ use crate::file_operations::{
     FileOperation, FileOperationError, FileOperationLimits, FileOperationResult,
 };
 
+mod receipt;
 mod turn;
 
 const MAX_WORKER_INPUT_BYTES: usize = 64 * 1024 * 1024;
@@ -43,6 +44,7 @@ pub struct IsolatedFileConfig {
 #[derive(Debug)]
 pub enum IsolatedFileError {
     Invalid(String),
+    Uncertain(String),
     Prepared(PreparedError),
     Operation(FileOperationError),
     Sandbox(SandboxError),
@@ -54,6 +56,9 @@ impl std::fmt::Display for IsolatedFileError {
         match self {
             Self::Invalid(message) => {
                 write!(formatter, "invalid isolated file execution: {message}")
+            }
+            Self::Uncertain(message) => {
+                write!(formatter, "uncertain isolated file outcome: {message}")
             }
             Self::Prepared(error) => error.fmt(formatter),
             Self::Operation(error) => error.fmt(formatter),
@@ -420,14 +425,7 @@ impl IsolatedFileTools {
                 String::from_utf8_lossy(&output.stderr)
             )));
         }
-        let result: FileOperationResult = serde_json::from_slice(&output.stdout)
-            .map_err(|error| IsolatedFileError::Invalid(error.to_string()))?;
-        if result.path != operation.path() {
-            return Err(IsolatedFileError::Invalid(
-                "worker result path mismatch".into(),
-            ));
-        }
-        Ok(result)
+        receipt::decode(operation, &output.stdout, self.config.file_limits)
     }
 
     fn worker_request(

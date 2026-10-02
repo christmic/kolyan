@@ -1,5 +1,7 @@
 use super::*;
 
+mod receipt;
+
 #[test]
 fn complete_result_budget_includes_escaped_call_id_and_json_content() {
     let id = "quote\"\\\n";

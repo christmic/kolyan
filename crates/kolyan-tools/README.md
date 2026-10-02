@@ -24,6 +24,15 @@ Only the selected staging leaf is admitted. Rename is the effect commit point;
 this does not promise a transaction against an uncooperative external writer,
 cross-filesystem replacement or power-loss durability.
 
+Zero-exit worker receipts are strictly decoded before a successful ToolResult:
+read content is checked against its UTF-8 byte length and SHA-256; write bytes
+and SHA-256 must match the prepared content, with no returned replacement content.
+Edit checks shape, limits and canonical digest, not a digest inferred from its
+replacement segment. Malformed or inconsistent write/edit receipts are Uncertain
+because rename may already have committed; they are not ordinary retryable tool
+failures. No file is reopened or effect replayed for this validation. See
+[goal verification prerequisites](../../docs/requirements/0035-goal-verification-and-agent-host.md).
+
 Input and output bounds are independent. Shell stdin is empty; the trusted file
 protocol has a bounded input envelope. Complete serialized `ToolResult` size is
 checked separately from process output. Shell results preserve readable UTF-8 or

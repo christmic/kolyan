@@ -1,0 +1,4 @@
+[
+  {"input_kind":"uncertain","reason":"replacement receipt mismatch","expected":"uncertain"},
+  {"input_kind":"invalid","reason":"read receipt mismatch","expected":"failed"}
+]
