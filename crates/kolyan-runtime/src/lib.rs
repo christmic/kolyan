@@ -7,6 +7,7 @@ use thiserror::Error;
 
 mod approval;
 mod driver;
+pub mod effect_hooks;
 mod effect_proof;
 mod execution;
 mod external;

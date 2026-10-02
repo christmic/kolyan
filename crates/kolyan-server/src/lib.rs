@@ -160,6 +160,7 @@ pub struct ExecutionService<L, S> {
     server: ExecutionServer<L>,
     trace: S,
     external_wait_verifier: Arc<dyn kolyan_runtime::ExternalWaitVerifier>,
+    effect_hooks: Option<Arc<dyn kolyan_runtime::effect_hooks::EffectHookPort>>,
 }
 
 struct ExecutionGuard<L: LedgerStore + Clone> {
@@ -234,6 +235,7 @@ where
             server: ExecutionServer::new(ledger),
             trace,
             external_wait_verifier: Arc::new(kolyan_runtime::RefuseExternalWaits),
+            effect_hooks: None,
         }
     }
 
@@ -252,12 +254,25 @@ where
         self
     }
 
+    /// Host configuration, independent of tool grants and transport requests.
+    pub fn with_effect_hooks(
+        mut self,
+        hooks: Arc<dyn kolyan_runtime::effect_hooks::EffectHookPort>,
+    ) -> Self {
+        self.effect_hooks = Some(hooks);
+        self
+    }
+
     fn driver(&self) -> DurableTurnDriver<L, S> {
-        DurableTurnDriver::new(
+        let driver = DurableTurnDriver::new(
             self.server.coordinator().ledger().clone(),
             self.trace.clone(),
         )
-        .with_external_wait_verifier(self.external_wait_verifier.clone())
+        .with_external_wait_verifier(self.external_wait_verifier.clone());
+        match &self.effect_hooks {
+            Some(hooks) => driver.with_effect_hooks(hooks.clone()),
+            None => driver,
+        }
     }
 
     pub async fn start<P, T>(

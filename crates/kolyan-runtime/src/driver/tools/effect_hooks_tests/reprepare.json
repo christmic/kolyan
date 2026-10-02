@@ -1,0 +1,1 @@
+{"window_ms":100,"cases":[{"id":"revision-changed","mode":"revision","expected":"invalid_batch"},{"id":"scope-binding-changed","mode":"binding","expected":"invalid_batch"},{"id":"prepare-failed","mode":"error","expected":"invalid_batch"},{"id":"prepare-timeout","mode":"pending","expected":"timed_out"},{"id":"prepare-cancelled","mode":"cancel","expected":"cancelled"}]}

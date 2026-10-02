@@ -4,7 +4,7 @@
 
 状态：Main 已审查 A/B 冻结交付并核对全部 21 项摘要；生产基础及新增测试
 按小批次集成。私有门禁不是主干或真实 Agent 消费者的验收。
-C/D 的 Runtime、Server、Runner 共享接线待 Main 集成，当前未授权修改。
+C/D 的 Runtime、Server、Runner 共享接线按下述契约分批集成；尚未全部验收。
 基线：`6db275c8fe90ede0fca2953a5b309aafea9f47ea`。
 工作树：`/tmp/kolyan-evolution-worktrees.3FHbOB/governed-hooks`，
 分支 `codex/governed-hooks`。上述路径记录隔离交付来源；主干集成由 Main
@@ -111,8 +111,9 @@ Agent 新 `HookPreparingProvider<P>` 实现 ModelProvider，严格原样 delegat
 返回原 stream；不修改 delta、模型响应、重试机制、请求 DTO 或 timeout。
 
 Runtime 拟新增中立 `EffectHookPort`，只负责现有工具效果边界：
-`before_effect(&ToolInvocation) -> Future<Result<(), ToolError>>`；
-`after_receipt(&ToolInvocation, receipt: CommittedEffectReceipt) -> Future<Result<(), HookObservationError>>`。
+`before_effect(EffectHookContext) -> EffectHookFuture<EffectHookDecision>`；
+`after_receipt(EffectHookContext, CommittedEffectReceipt) -> EffectHookFuture<()>`；
+`verify_observation(EffectHookContext, CommittedEffectReceipt) -> EffectHookFuture<()>`。
 `CommittedEffectReceipt` 必须来自 Runtime 已验证/提交的事件引用、cursor、payload；
 不能由 Agent 伪造工具结果替代。Runtime 不依赖 Agent hook DTO/注册实现。
 `DurableTurnDriver::with_effect_hooks(...)` 将 port 装到 start 与 resume 的 DurableTools；
@@ -370,3 +371,97 @@ exit 0 in `/tmp/kolyan-tool-window-main-workspace-v1.log`: 90 result groups,
 901 passed, zero failed and 69 ignored, including helper-subprocess groups.
 Ignored vendor-network entries were not executed. This gate retains actual local
 native-tool, long-task and approval regression; it is not new MiniMax acceptance.
+
+## Runtime effect consumer integration
+
+Main integrates the reviewed Runtime tool slice and explicit Driver/Server
+assembly. The neutral port does not depend on Agent script registration or
+replace current policy, authority or sandbox enforcement. Native Agent bridge
+and BeforeModel consumption remain separate required gates.
+
+EffectHookContext has private construction from actual verified preparation,
+issued authority, effect/input identity and the original control/window.
+CommittedEffectReceipt has private construction from the acknowledged Ledger
+event, with exact readback and original binding/result validation. Neither is
+deserializable authority. None means an unconfigured host; a configured port
+must never silently fall back on failure.
+
+BeforeEffect runs only for new entry without a saved receipt, external wait or
+Started fact. After it returns Continue, Runtime prepares the original call
+again within the original absolute cutoff, compares the entire PreparedCall,
+then revalidates the original grant and cancellation before Authorized/Started.
+Changed revision, resource/execution binding, requirements or preparation error
+refuse before effect entry. Denied maps to PolicyDenied; host/storage/protocol
+failure maps to fatal InvalidBatch; cancellation and expiry retain their types.
+
+AfterReceipt runs after the real receipt and completion projection are committed.
+It must publish independent observation evidence before succeeding. Observer
+failure preserves the original effect result and receipt, with diagnostic phase
+and receipt identity/cursor; it does not authorize another effect. Uncertain or
+externally waiting effects do not have a completed receipt to observe.
+
+Saved receipts invoke read-only VerifyObservation, never BeforeEffect or another
+script. Missing, interrupted, foreign or failed observation refuses, without
+repair writes or effect replay. Receipt publication and observation publication
+are separate commits; an interrupted gap remains incomplete, not success.
+
+Driver start and checkpoint resume both install the same configured port.
+ExecutionService propagates it through each reconstructed Driver;
+SessionExecutionService exposes explicit transparent configuration. Host rebuild
+must explicitly reinstall the trusted port rather than restore executable code
+from a model or checkpoint. Every wait consumes the original Core window.
+
+The independent Runtime dataset uses actual Memory/SQLite Ledger and FactJournal
+adapters with declared scripted hooks and tools, not native script or provider
+acceptance. It covers entry denial/failure/cancellation/deadline, re-preparation
+changes, publication/ack failures, original tool errors, external/uncertain
+outcomes, observer failure/drop, and complete/missing/foreign replay proof.
+Actual Driver/Server consumer tests must additionally exercise start, approval
+suspension and reconstructed resume, checking that hooks do not run while
+approval is pending and are not lost across service reconstruction.
+
+### Main effect consumer verification
+
+Main verified all ten frozen source/document digests, imported nine source/data
+files and added the actual Driver start/resume and Server/Session propagation.
+The private reprepare test file was renamed to reprepare_tests.rs to comply
+with the existing source-layout checker; its test body and dataset are unchanged.
+No existing cases or assertions were modified.
+
+The module gate exited 0 in `/tmp/kolyan-effect-hooks-main-module-v1.log`:
+Runtime 69 and Server 129 passed, zero failed or ignored. Main physically read
+the 46 Memory/SQLite effect rows and five current-preparation rows from the
+actual files printed by that log. These use declared scripted ports, with real
+Ledger/Journal publication, acknowledgement, saved observation and fatal-error
+behavior; they are not native script or live model claims.
+
+The separate central server_effect_hooks framework exited 0 in
+`/tmp/kolyan-effect-hooks-main-server-v5.log`, exporting and physically comparing
+all nine cases at
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-server-effect-hooks-142R6O/actual.jsonl`.
+It uses real FileLedger, FileSessionStore, SQLite observation facts and the
+explicit in-process RestrictedFileTool, with scripted model/hook ports. Cases
+cover ordinary success, entry denial, host failure, cancellation, timeout,
+observer failure after an actual write, approval/rebuilt-success, approval/
+rebuilt-hook-denial and user denial without any hook. It retains exact requests,
+authority/window, original receipt/result, physical file and Session outcomes.
+Both positive execution rows pass the actual tool result into the final model
+request. Approval pause has zero hook calls and no effect; reconstruction reads
+persisted approval and explicitly reinstalls host configuration.
+
+The v1 harness compile failure and v2 failed oracle are retained. Core's existing
+default ToolDispatchPolicy is FailTurn, so hook denial must fail immediately;
+only the new dataset's two denial expectations were corrected after inspecting
+that policy. Existing tests and production dispatch semantics were unchanged.
+The later file-read check distinguishes NotFound from operational read failure.
+
+Workspace/all-target strict Clippy, formatting, source-layout and diff checks
+exited 0 in the final v3 gate, with Clippy recorded in
+`/tmp/kolyan-effect-hooks-main-strict-v3.log`. The preceding v2 Clippy passed but
+its layout step failed on the new test filename; that failure was not suppressed.
+Full workspace regression on this joint source exited 0 in
+`/tmp/kolyan-effect-hooks-main-workspace-v1.log`: 91 successful result groups,
+906 passed, zero failed and 69 ignored, including helper subprocess results.
+The complete log has no failed result groups. Ignored network cases were not run.
+Agent native script bridge and BeforeModel consumption remain outstanding;
+no vendor requests ran in these gates.

@@ -11,6 +11,10 @@ use kolyan_model::ToolCall;
 use serde_json::{Value, json};
 
 use super::{RuntimeTurnKey, append_once};
+use crate::effect_hooks::{
+    CommittedEffectReceipt, EffectHookContext, EffectHookDecision, EffectHookError, EffectHookPort,
+    entry_error, observation_error,
+};
 use crate::reconciliation::receipt::{PreparedEvidence, check_event, failed};
 use crate::{ExternalWaitContext, ExternalWaitVerifier, RefuseExternalWaits};
 
@@ -20,6 +24,7 @@ pub(super) struct DurableTools<L, T> {
     inner: T,
     verifier: Arc<dyn ExternalWaitVerifier>,
     snapshot_digest: Option<String>,
+    effect_hooks: Option<Arc<dyn EffectHookPort>>,
 }
 
 impl<L, T> DurableTools<L, T> {
@@ -30,6 +35,7 @@ impl<L, T> DurableTools<L, T> {
             inner,
             verifier: Arc::new(RefuseExternalWaits),
             snapshot_digest: None,
+            effect_hooks: None,
         }
     }
 
@@ -40,6 +46,12 @@ impl<L, T> DurableTools<L, T> {
 
     pub(super) fn with_snapshot_digest(mut self, digest: Option<String>) -> Self {
         self.snapshot_digest = digest;
+        self
+    }
+
+    /// Only an unconfigured host skips hooks; configured failures never fall back.
+    pub(super) fn with_effect_hooks(mut self, hooks: Arc<dyn EffectHookPort>) -> Self {
+        self.effect_hooks = Some(hooks);
         self
     }
 }
@@ -64,6 +76,8 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
             if invocation.control.is_cancelled() {
                 return Err(ToolError::Cancelled);
             }
+            let hook_context =
+                EffectHookContext::new(&bound, invocation.control.clone(), invocation.window);
             let effect = &bound.request.effect_id;
             let prefix = bound.prefix();
             append_once(
@@ -94,12 +108,24 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                 })?;
                 check_entered(&self.ledger, &bound, &self.key)
                     .map_err(|error| self.uncertain(&bound, error.to_string()))?;
-                return bound
-                    .validate_receipt(&event.payload)
-                    .map_err(|error| {
-                        self.uncertain(&bound, format!("saved receipt integrity failed: {error}"))
-                    })?
-                    .map(ToolOutcome::Completed);
+                let result = bound.validate_receipt(&event.payload).map_err(|error| {
+                    self.uncertain(&bound, format!("saved receipt integrity failed: {error}"))
+                })?;
+                if let Some(hooks) = &self.effect_hooks {
+                    hook_context
+                        .check_live()
+                        .map_err(|error| observation_error("verify_observation", &event, error))?;
+                    let receipt =
+                        CommittedEffectReceipt::from_ack(&self.ledger, &bound, event.clone())
+                            .map_err(|error| {
+                                observation_error("verify_observation", &event, error)
+                            })?;
+                    hook_context
+                        .wait(hooks.verify_observation(hook_context.clone(), receipt))
+                        .await
+                        .map_err(|error| observation_error("verify_observation", &event, error))?;
+                }
+                return result.map(ToolOutcome::Completed);
             }
             if let Some(event) = self
                 .ledger
@@ -201,6 +227,57 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                     "uncertain tool effect: reconciliation required".into(),
                 ));
             }
+            if let Some(hooks) = &self.effect_hooks {
+                hook_context.check_live().map_err(entry_error)?;
+                match hook_context
+                    .wait(hooks.before_effect(hook_context.clone()))
+                    .await
+                    .map_err(entry_error)?
+                {
+                    EffectHookDecision::Continue => {}
+                    EffectHookDecision::Denied { reason } => {
+                        if reason.trim().is_empty() || reason.len() > 1024 {
+                            return Err(entry_error(EffectHookError::Host {
+                                message: "invalid hook denial reason".into(),
+                            }));
+                        }
+                        return Err(ToolError::PolicyDenied { message: reason });
+                    }
+                }
+                hook_context.check_live().map_err(entry_error)?;
+                // A hook can await while the executor's revision or resource binding changes.
+                // Re-read current preparation inside the original window, never a renewed grant.
+                let current = hook_context
+                    .wait(Box::pin(async {
+                        self.inner
+                            .prepare(invocation.prepared.call().clone())
+                            .await
+                            .map_err(|error| EffectHookError::Host {
+                                message: format!("post-hook current preparation failed: {error}"),
+                            })
+                    }))
+                    .await
+                    .map_err(entry_error)?;
+                hook_context.check_live().map_err(entry_error)?;
+                if current != invocation.prepared {
+                    return Err(entry_error(EffectHookError::Host {
+                        message: "post-hook current preparation differs from issued preparation"
+                            .into(),
+                    }));
+                }
+                invocation
+                    .grant
+                    .validate(
+                        &invocation.prepared,
+                        &invocation.policy_revision,
+                        &invocation.scope,
+                    )
+                    .map_err(|error| {
+                        entry_error(EffectHookError::Host {
+                            message: format!("post-hook authority differs: {error}"),
+                        })
+                    })?;
+            }
             append_once(
                 &self.ledger,
                 &self.key.execution_id,
@@ -275,7 +352,7 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                 Ok(payload) => payload,
                 Err(error) => return Err(self.uncertain(&bound, error.to_string())),
             };
-            append_once(
+            let receipt_event = append_once(
                 &self.ledger,
                 &self.key.execution_id,
                 &self.key.turn_id,
@@ -308,6 +385,21 @@ impl<L: LedgerStore, T: ToolExecutor> ToolExecutor for DurableTools<L, T> {
                     format!("effect completion projection failed: {error}"),
                 )
             })?;
+            if let Some(hooks) = &self.effect_hooks {
+                hook_context
+                    .check_live()
+                    .map_err(|error| observation_error("after_receipt", &receipt_event, error))?;
+                let receipt = CommittedEffectReceipt::from_ack(
+                    &self.ledger,
+                    &bound,
+                    receipt_event.clone(),
+                )
+                .map_err(|error| observation_error("after_receipt", &receipt_event, error))?;
+                hook_context
+                    .wait(hooks.after_receipt(hook_context.clone(), receipt))
+                    .await
+                    .map_err(|error| observation_error("after_receipt", &receipt_event, error))?;
+            }
             result.map(ToolOutcome::Completed)
         })
     }
@@ -365,3 +457,6 @@ fn check_entered<L: LedgerStore>(
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod effect_hooks_tests;

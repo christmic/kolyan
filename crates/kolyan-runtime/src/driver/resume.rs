@@ -359,9 +359,13 @@ impl<L: LedgerStore + Clone + 'static, S: TraceSink> DurableTurnDriver<L, S> {
         let executor = executor
             .with_execution_key(key.clone())
             .map_tool_executor(|inner| {
-                DurableTools::new(self.ledger.clone(), key.clone(), inner)
+                let tools = DurableTools::new(self.ledger.clone(), key.clone(), inner)
                     .with_snapshot_digest(admission.agent_snapshot_digest.clone())
-                    .with_wait_verifier(self.verifier.clone())
+                    .with_wait_verifier(self.verifier.clone());
+                match &self.effect_hooks {
+                    Some(hooks) => tools.with_effect_hooks(hooks.clone()),
+                    None => tools,
+                }
             })
             .with_boundary_control(Arc::new(LedgerBoundaryControl::for_resume(
                 self.ledger.clone(),

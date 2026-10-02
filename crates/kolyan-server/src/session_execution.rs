@@ -29,6 +29,15 @@ where
         self
     }
 
+    /// Forward trusted effect hooks to every execution and reconstructed resume.
+    pub fn with_effect_hooks(
+        mut self,
+        hooks: Arc<dyn kolyan_runtime::effect_hooks::EffectHookPort>,
+    ) -> Self {
+        self.execution = self.execution.with_effect_hooks(hooks);
+        self
+    }
+
     pub fn execution(&self) -> &ExecutionService<L, S> {
         &self.execution
     }

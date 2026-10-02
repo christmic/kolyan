@@ -36,6 +36,7 @@ pub struct DurableTurnDriver<L, S> {
     ledger: L,
     trace: S,
     verifier: Arc<dyn crate::ExternalWaitVerifier>,
+    effect_hooks: Option<Arc<dyn crate::effect_hooks::EffectHookPort>>,
 }
 
 impl<L, S> DurableTurnDriver<L, S>
@@ -48,6 +49,7 @@ where
             ledger,
             trace,
             verifier: Arc::new(crate::RefuseExternalWaits),
+            effect_hooks: None,
         }
     }
 
@@ -61,6 +63,16 @@ where
 
     pub fn ledger(&self) -> &L {
         &self.ledger
+    }
+
+    /// Install a trusted host consumer on both new entry and checkpoint resume.
+    /// This port can tighten execution, but does not confer tool authority.
+    pub fn with_effect_hooks(
+        mut self,
+        hooks: Arc<dyn crate::effect_hooks::EffectHookPort>,
+    ) -> Self {
+        self.effect_hooks = Some(hooks);
+        self
     }
 
     pub fn cancel(&self, execution_id: &str, turn_id: &str) -> Result<(), RuntimeError> {
@@ -155,9 +167,13 @@ where
         let controlled = executor
             .with_execution_key(key.clone())
             .map_tool_executor(|inner| {
-                DurableTools::new(self.ledger.clone(), key.clone(), inner)
+                let tools = DurableTools::new(self.ledger.clone(), key.clone(), inner)
                     .with_snapshot_digest(admitted.agent_snapshot_digest.clone())
-                    .with_wait_verifier(self.verifier.clone())
+                    .with_wait_verifier(self.verifier.clone());
+                match &self.effect_hooks {
+                    Some(hooks) => tools.with_effect_hooks(hooks.clone()),
+                    None => tools,
+                }
             })
             .with_boundary_control(control)
             .with_event_recorder(recorder.clone())
