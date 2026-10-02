@@ -1,5 +1,6 @@
 mod coordinator;
 mod instance_registry;
+mod preparation;
 mod private_context;
 mod rpc_execution;
 mod session_execution;
@@ -9,6 +10,7 @@ mod tasks;
 pub use instance_registry::{
     InstanceOwner, InstanceRegistry, InstanceRegistryError, InstanceReservation,
 };
+pub use preparation::PreparationFailure;
 pub use private_context::{
     PrivateContextOwner, PrivateContextOwnershipVerifier, PrivateContextService,
     VerifiedPrivateContextInitialization, private_context_initialization,
@@ -30,13 +32,15 @@ use kolyan_core::{
     TurnSuspension,
 };
 use kolyan_ledger::{LedgerError, LedgerEvent, LedgerEventKind, LedgerStore};
-use kolyan_model::{Message, MessageRole, ModelProvider};
+use kolyan_model::{Message, MessageRole, ModelProvider, ModelRequest};
 use kolyan_runtime::{DurableTurnDriver, DurableTurnResult, RuntimeError};
 use kolyan_storage::{SessionRecord, SessionStore, SessionTurn, SessionTurnStatus, StorageError};
 use kolyan_trace::TraceSink;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::HashSet;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
@@ -118,6 +122,8 @@ pub enum CoordinatorError {
 
 #[derive(Debug, Error)]
 pub enum ServerError {
+    #[error("Turn preparation failed: {0}")]
+    Preparation(#[from] PreparationFailure),
     #[error("coordinator failed: {0}")]
     Coordinator(#[from] CoordinatorError),
     #[error("runtime failed: {0}")]
@@ -517,11 +523,23 @@ pub struct SessionExecutionService<L, S, SS> {
     preparation_hook: Option<Arc<dyn TurnPreparationHook>>,
 }
 
-/// Trusted observation/binding of the final immutable request. Called after
-/// Task ceilings and Session history, before saving Turn input. No request mutation.
+/// Trusted host preparation, not a client-selected request replacement port.
+/// Called only for new Turns, after history assembly with its exact base version.
+/// The host must persist full source and selection evidence before returning.
+/// Server independently permits only ordered history omission with the current
+/// input tail intact. Resume/recovery never reselect. Dropping the future does
+/// not prove remote counting or an already-started artifact write was rolled back.
 pub trait TurnPreparationHook: Send + Sync {
-    fn prepare(&self, execution: &ExecutionRef, request: &TurnRequest) -> Result<(), ServerError>;
+    fn prepare<'a>(
+        &'a self,
+        execution: &'a ExecutionRef,
+        session_version: u64,
+        request: &'a TurnRequest,
+    ) -> TurnPreparationFuture<'a>;
 }
+
+pub type TurnPreparationFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<ModelRequest, ServerError>> + Send + 'a>>;
 
 impl<L> ExecutionServer<L>
 where

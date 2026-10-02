@@ -84,6 +84,7 @@ where
         P: ModelProvider,
         T: ToolExecutor,
     {
+        let preparation_started = std::time::Instant::now();
         let session_id = session_id.into();
         let execution_id = execution_id.into();
         let turn_id = request.turn_id.clone();
@@ -96,14 +97,19 @@ where
         contextual_messages.extend(current_messages.clone());
         request.model_request.messages = contextual_messages;
         if let Some(hook) = &self.preparation_hook {
-            hook.prepare(
+            preparation::prepare_turn(
+                hook.as_ref(),
                 &ExecutionRef {
                     session_id: session_id.clone(),
                     turn_id: turn_id.clone(),
                     execution_id: execution_id.clone(),
                 },
-                &request,
-            )?;
+                session.version,
+                &mut request,
+                current_messages.len(),
+                preparation_started,
+            )
+            .await?;
         }
         self.sessions.store.begin_turn_with_projection(
             &session_id,
@@ -239,12 +245,26 @@ where
         }
         let mut expected = history.clone();
         expected.extend(input.messages.clone());
-        if suspension.checkpoint.input_message_count != expected.len()
+        // Restore the already admitted selection, never rerun the host hook or
+        // rebuild an unselected checkpoint from current Session history.
+        let admitted = kolyan_runtime::verified_execution_input(
+            self.execution.server.coordinator().ledger(),
+            &kolyan_runtime::ExecutionKey {
+                session_id: session_id.into(),
+                turn_id: turn_id.clone(),
+                execution_id: execution_id.into(),
+            },
+            16 * 1024 * 1024,
+        )?;
+        let mut full = admitted.model_request.clone();
+        full.messages = expected;
+        preparation::validate_selection(&full, &admitted.model_request, input.messages.len())?;
+        if suspension.checkpoint.input_message_count != admitted.model_request.messages.len()
             || !suspension
                 .checkpoint
                 .model_request
                 .messages
-                .starts_with(&expected)
+                .starts_with(&admitted.model_request.messages)
         {
             return Err(StorageError::Conflict(
                 "checkpoint input differs from original Turn".into(),

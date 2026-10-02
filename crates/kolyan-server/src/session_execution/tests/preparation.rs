@@ -13,11 +13,18 @@ struct RejectHook {
     seen: Arc<Mutex<Vec<TurnRequest>>>,
 }
 impl TurnPreparationHook for RejectHook {
-    fn prepare(&self, execution: &ExecutionRef, request: &TurnRequest) -> Result<(), ServerError> {
-        assert_eq!(execution.session_id, "s");
-        assert_eq!(execution.turn_id, request.turn_id);
-        self.seen.lock().unwrap().push(request.clone());
-        Err(StorageError::Conflict("host rejected final binding".into()).into())
+    fn prepare<'a>(
+        &'a self,
+        execution: &'a ExecutionRef,
+        _: u64,
+        request: &'a TurnRequest,
+    ) -> TurnPreparationFuture<'a> {
+        Box::pin(async move {
+            assert_eq!(execution.session_id, "s");
+            assert_eq!(execution.turn_id, request.turn_id);
+            self.seen.lock().unwrap().push(request.clone());
+            Err(StorageError::Conflict("host rejected final binding".into()).into())
+        })
     }
 }
 

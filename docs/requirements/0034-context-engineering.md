@@ -239,6 +239,23 @@ hook 调用次数不增加。全部实际请求、Session/ledger 和错误先导
 旧 preparation 拒绝用例只迁移 trait 签名，保留原场景和断言。Server seam 通过
 不算实际 selector/count/provenance 宿主闭环完成。
 
+Server seam 已接入主线并由主控独立验证：119 Server、98 Agent 单测通过，
+0 failed/ignored。新增 37 场景在 Memory 与 SQLite 上分别执行，完整 74 行
+先落盘、关闭、物理回读再比较；来源保存拒绝、资源限额、错误字段/消息、
+并发版本冲突、deadline 等待，以及审批/显式 resume/committed recovery
+宿主重建均覆盖。选定输入按 Runtime 已存不可变输入恢复，不重新调用 hook。
+模型与工具为明确声明的本地 scripted adapters，不能记作真实 Provider 验收。
+
+主控跨层门禁 66 passed、0 failed、22 ignored；ignored 网络/显式配置场景
+未执行，不计入通过。严格 Server/Agent Clippy、fmt、source-layout 和 diff
+检查通过。日志 `/tmp/kolyan-context-preparation-main-v1.log`、
+`/tmp/kolyan-context-preparation-main-strict-v1.log`、
+`/tmp/kolyan-context-preparation-cross-layer-main-v1.log`。
+完整新增轨迹位于 native 临时根目录下
+`kolyan-turn-preparation-XWzZeI/actual.jsonl` 和
+`kolyan-turn-preparation-bVuKjb/actual.jsonl`。计量适配器与实际来源消费者
+尚未通过主控集成验收；本段只证明 Server seam 及受影响跨层回归。
+
 必需来源内容：schema/policy revision、逻辑/物理 owner、Session base version、
 完整 source artifact/digest、selected request digest、保留/省略范围、计数证据及
 模型/mapping 身份、budget assurance、reserve、选择原因和拒绝原因。

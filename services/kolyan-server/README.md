@@ -120,7 +120,14 @@ Server 的 `load_verified_result(task_id, binding, max_bytes)` 只读重验精�
 terminal fact、execution binding 与实际结果；返回 tagged Completed/Failed/Cancelled，
 失败子任务不伪装成功。host ceiling 限制完整 JSON envelope，超限报错、不截断。
 `TurnPreparationHook` 在 Task ceiling 和 Session history 合并后、immutable input
-保存前观察最终请求；它不能修改请求、发 grant 或执行子任务。
+保存前异步返回选定 ModelRequest，同时收到历史加载时的 Session base version。
+可信 hook 须先保存完整 source 与选择/计量来源；Server 独立拒绝非消息字段变化、
+新增/修改/重排消息或丢失原当前输入尾部。只允许保序省略历史，工具配对闭包和
+首目标锚点仍由 Agent 投影验证。准备等待至多 30 秒，并取剩余 Turn deadline
+的更小值；零剩余时间不调用，等待从执行窗口扣除。拒绝、超时或丢弃不准入；
+远端计数或已开始的来源写入不承诺回滚。并发 version 冲突不重选或隐式重试，
+resume/approval/recovery 消费保存的选定输入而不重新调用 hook。此端口不发 grant、
+执行子任务或证明生产 selector/count/provenance 闭环已交付。
 `execution.events` 使用账本游标增量拉取；日志保留实际内容，不是只有事件名称。
 文本、思考、工具参数和 usage 的中立模型增量以 `model_stream_event` 返回，与执行事实
 共享 cursor，因此客户端重连后可续读。它们是观察数据，不参与恢复或重复执行判定；
