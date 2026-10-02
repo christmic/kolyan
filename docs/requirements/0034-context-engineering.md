@@ -320,6 +320,42 @@ Unknown/Unsupported/错误使用显式结果类型，不能构造一份成功的
 
 ### B：实际 host selector / provenance
 
+#### 已冻结的纯候选生成切片
+
+```rust,ignore
+pub struct SelectionPolicy {
+    pub id: String,
+    pub revision: String,
+    pub source_bounds: ContextPolicy,
+    pub max_reduced_candidates: u8, // 0..=8
+}
+pub fn selection_candidates(source: &ModelRequest, policy: &SelectionPolicy)
+    -> Result<Vec<ContextProjectionPlan>, ContextError>;
+```
+
+复用 context_source_digest 的原源验证，提取内部原始配对遍历供 projection 和
+selector 共用，不改变旧校验。以实际消息位置构造每个调用—结果的半开区间，
+合并重叠而非仅相邻区间，形成完整连续组；多调用与分散结果形成配对闭包。
+完成配对后释放 ID，重用 ID 不连接旧批次。首个非纯 ToolResult 用户锚点与
+最新此类用户输入起整个尾部必须保留，与其相交的组同样全部保留。
+
+候选零是完整请求。可选组数 G，缩减候选数 N=min(G, max_reduced_candidates)；
+第 k 个缩减候选省略最旧 ceil(k*G/N) 个可选组，k=1..N。N=0 只返回完整候选。
+这是版本化的有界前缀批量规则，最多九个候选；允许缩减时包含必要组最小候选。
+它不承诺枚举所有选择、最优保留量或 token 单调。输出范围排序且合并相邻范围。
+
+纯函数不计数、不判断 fit、不调用 Provider、无持久化或授权。实际宿主逐候选
+消费生产映射与计量，选第一个满足显式预算者；计量错误不能当成预算不足继续
+删历史。必要最小候选仍超限，宿主明确拒绝。无用户锚点或源结构不合法先拒绝。
+每个候选必须通过现有 project_context 配对与保护校验，未知 token 保持 Unknown。
+
+释放写集为 context/selection.rs、分离测试和 JSON 数据、context.rs 模块导出及
+projection.rs 的内部配对 helper。保留全部旧测试输入与断言。新增数据至少覆盖
+重用 ID、多调用逆序结果、中间空消息、尾部混合文本/结果、同一首尾锚点、
+十组八候选的 2/3/4/5/7/8/9/10 删除前缀、零候选、非法限制和完整 opaque 内容。
+完整源、policy、候选、投影和错误先导出后比较。宿主接入属于主控写集；
+这个切片通过不能被记作 E2 完成。
+
 本 design owner 的下一有界写集拟为 Agent 新 `context/selection.rs`、独立
 `context/selection/tests.rs` 与 JSON fixtures、所属模块声明，以及本规格。
 不占 Provider/SDK、Server、Storage 或共享 accounting 源码。需要的 Server seam
