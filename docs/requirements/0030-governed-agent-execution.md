@@ -4302,3 +4302,25 @@ HTTP 200 SSE 流接收 22794 字节后的 TLS unexpected EOF，没有 Completed�
 这条失败不是 inline 定义或权限参数冲突；不能据此定位供应商、代理或链路。
 另一 readonly 行也报告 Stream/Transport 错误，12331 字节；其他八条失败的
 缺 admission/wait/receipt 断言仍须分别核对轨迹，不能统一套用 TLS 原因。
+
+### MiniMax 独立自我迭代实现批次
+
+批准新增 `self_iteration_minimax_v1.json` 与独立 `self_iteration/minimax_live`
+框架，固定 `minimax/anthropic_compat/MiniMax-M3`。保留原 DeepSeek fixture、
+入口、四文件 allowlist、七状态语义与原断言；新 case/Task/Session 身份及
+原 fixture 摘要独立登记，不覆盖旧失败。模型自行写候选，宿主只提供受治理
+read/write/edit，不授予 Shell、不代写或自动格式化。主控另建隔离 worktree
+和项目本地 ignored 配置，重新固定真实基线及非 ignored 文件范围后才运行。
+
+执行 inspect、implement、tests、initialReview，必要时最多一次 repair，
+随后 finalReview；预先限制最多六个 invocation/attempt，沿用每 Turn 16 Step
+及 40 tool-call 上限。复用真实 root/continuation preparation、Server 执行
+与 Runner 收尾，不冒充每阶段另起 root。审核 LocalStrict JSON、同阶段四文件
+新鲜读取收据、候选摘要和独立固定检查保持原强度；非法审核、缺凭据、执行
+失败不作为可修复结论。修复输入携带实际日志、候选摘要及前序事实；终审
+失败必须持久关闭任务，不能留下 Ready 再宣布成功。
+
+新增数据守卫、六阶段转移、修复上限、缺凭据、严格审核、外来路径和失败
+收尾用例；轨迹先导出关闭读回，七状态独立 oracle 重新编译运行，不使用旧
+二进制或只比较模型自述。框架和真实 OS 收据回归后启动唯一新 MiniMax
+实验。候选仍须 Codex 独立审查和回归后才能合入，本批只释放框架实现。
