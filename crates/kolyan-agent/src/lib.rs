@@ -1,18 +1,40 @@
 //! Validated Agent definitions, exact catalog resolution and authority snapshots.
-//! This library performs no model calls, scheduling or grant creation.
+//! Root execution composes the existing durable task service and host factories.
+//! Explicit delegation separates child orchestration from environment tools.
+//! Grants remain policy-owned; parallel driving requires host-attested read-only
+//! enforcement and immutable bounds. Writable work remains conservatively serial.
 //! Invocation bindings use a supplied journal; definitions remain pure values.
 
 pub mod binding;
 mod catalog;
 pub mod context;
 mod definition;
+mod invoke;
 mod permission;
 pub mod provider;
+mod runner;
 mod snapshot;
 
+pub use binding::{
+    AgentInvocationBinding, AgentInvocationBindingStore, BindingContextKind, BindingError,
+    child_private_session_id,
+};
 pub use catalog::{AgentCatalog, AgentSelector, Registration, resolve_self};
 pub use definition::{AgentDefinition, AgentDefinitionInput};
+pub use invoke::{
+    AGENT_INVOKE_NAME, AgentInvokeInput, ChildInvocationInput, InvocationTarget,
+    InvokePrepareError, InvokePrepareLimits, PreparedAgentInvocation, ResolvedChildIntent,
+    agent_invoke_manifest, prepare_agent_invocation,
+};
 pub use permission::{AgentKey, AgentPermissions, DelegationCeiling, EnvironmentTool};
+pub use runner::{
+    AdmittedAgentChild, AgentChildDriveResult, AgentChildWaitVerifier, AgentChildrenPumpResult,
+    AgentDelegationConfig, AgentExecutionBudget, AgentRunner, ChildApprovalResumeRequest,
+    ContinuationProjectionConfig, ContinuationProjectionRequest, DelegationOwner,
+    EnvironmentToolFactory, PreparedRootInput, ProviderFactory, RootApprovalResumeRequest,
+    RootInputPreparationRequest, RootRunRequest, RootRunResult, RunnerError, RunnerToolSet,
+    TaskFinalizationPolicy, TaskFinalizationRequest,
+};
 pub use snapshot::AgentSnapshot;
 
 use thiserror::Error;

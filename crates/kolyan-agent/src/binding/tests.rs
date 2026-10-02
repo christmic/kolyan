@@ -3,6 +3,7 @@ use kolyan_model::ModelRef;
 use tempfile::TempDir;
 
 use super::*;
+mod private_context;
 use crate::{AgentDefinition, AgentDefinitionInput, AgentKey, AgentPermissions, EnvironmentTool};
 
 fn binding() -> AgentInvocationBinding {

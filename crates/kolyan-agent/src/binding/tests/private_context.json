@@ -1,0 +1,15 @@
+[
+  {"id":"exact_child","mutation":"none","allowed":true},
+  {"id":"foreign_fact_stream","mutation":"stream","allowed":false},
+  {"id":"foreign_fact_id","mutation":"fact_id","allowed":false},
+  {"id":"foreign_fact_position","mutation":"position","allowed":false},
+  {"id":"zero_fact_position","mutation":"zero_position","allowed":false},
+  {"id":"foreign_task","mutation":"task","allowed":false},
+  {"id":"foreign_invocation","mutation":"invocation","allowed":false},
+  {"id":"foreign_logical_owner","mutation":"logical","allowed":false},
+  {"id":"foreign_private_context","mutation":"private","allowed":false},
+  {"id":"changed_snapshot","mutation":"snapshot","allowed":false},
+  {"id":"root_is_not_private_child","mutation":"root","allowed":false},
+  {"id":"extra_binding_fact","mutation":"extra_fact","allowed":false},
+  {"id":"missing_binding","mutation":"missing","allowed":false}
+]

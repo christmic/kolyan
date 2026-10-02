@@ -224,6 +224,53 @@ impl AgentInvocationBindingStore {
             )),
         }
     }
+
+    /// Read the authenticated binding and its exact committed fact coordinate.
+    /// This performs no admission, append, instance allocation or catalog lookup.
+    /// Call on a blocking worker when used by an asynchronous host.
+    pub fn load_with_reference(
+        &self,
+        task_id: &str,
+        invocation_id: &str,
+        logical_session_id: &str,
+    ) -> Result<Option<(AgentInvocationBinding, FactRef)>, BindingError> {
+        self.load(task_id, invocation_id, logical_session_id)?
+            .map(|binding| coordinate(task_id, invocation_id).map(|reference| (binding, reference)))
+            .transpose()
+    }
+}
+
+/// Server initialization authenticates its owner against this existing binding
+/// SSOT. Matching an opaque digest alone is insufficient. This proves context
+/// ownership, not Task admission or permission to execute a child.
+impl kolyan_server::PrivateContextOwnershipVerifier for AgentInvocationBindingStore {
+    fn verify_owner(
+        &self,
+        owner: &kolyan_server::PrivateContextOwner,
+        fact: &FactRef,
+    ) -> Result<(), kolyan_server::ServerError> {
+        let reject = |message: String| {
+            kolyan_server::ServerError::from(kolyan_storage::StorageError::Conflict(message))
+        };
+        let (binding, reference) = self
+            .load_with_reference(
+                &owner.task_id,
+                &owner.invocation_id,
+                &owner.logical_session_id,
+            )
+            .map_err(|error| reject(error.to_string()))?
+            .ok_or_else(|| reject("private context binding is absent".into()))?;
+        if reference != *fact
+            || binding.context_kind != BindingContextKind::Child
+            || binding.private_session_id != owner.private_session_id
+            || binding.snapshot.digest() != owner.snapshot_digest
+        {
+            return Err(reject(
+                "private context owner or exact binding fact differs".into(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 fn decode(

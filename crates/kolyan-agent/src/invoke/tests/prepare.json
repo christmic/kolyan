@@ -1,0 +1,29 @@
+{
+  "definitions": [
+    {"definition_id":"parent","revision":"1","display_name":null,"model":{"provider":"unit","model":"parent-model"},"instructions":"Saved parent instructions","permissions":{"tools":["file.read","file.write"],"delegation":{"named_targets":[{"definition_id":"child","revision":"1"}],"allow_inline":true,"allow_self":true}}},
+    {"definition_id":"child","revision":"1","display_name":"Child","model":{"provider":"unit","model":"child-model"},"instructions":"Child instructions","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},
+    {"definition_id":"other","revision":"1","display_name":null,"model":{"provider":"unit","model":"other-model"},"instructions":"Not an allowed target","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}
+  ],
+  "limits":{"max_children":2,"max_parallel":1,"max_child_input_bytes":64,"max_output_bytes":4096,"admission_timeout_ms":1000},
+  "call":{"id":"invoke-1","name":"agent.invoke","arguments":{"children":[{"target":{"kind":"named","value":{"definition_id":"child","revision":"1"}},"input":"Summarize the supplied input.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}],"parallel":false}},
+  "cases":[
+    {"id":"named","mutations":[],"expected":{"category":"prepared","roles":["Delegation"],"models":["child-model"],"parallel":false}},
+    {"id":"inline","mutations":[{"op":"set","pointer":"/children/0/target","value":{"kind":"inline","value":{"definition_id":"inline","revision":"1","display_name":null,"model":{"provider":"unit","model":"inline-model"},"instructions":"Inline instructions","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}}}],"expected":{"category":"prepared","roles":["Delegation"],"models":["inline-model"],"parallel":false}},
+    {"id":"saved-self-ignores-replacement-catalog","replace_catalog_parent":true,"mutations":[{"op":"set","pointer":"/children/0/target","value":{"kind":"self_call"}}],"expected":{"category":"prepared","roles":["SelfCall"],"models":["parent-model"],"parallel":false}},
+    {"id":"parallel-intent-does-not-expand-host-concurrency","mutations":[{"op":"set","pointer":"/parallel","value":true},{"op":"set","pointer":"/children","value":[{"target":{"kind":"named","value":{"definition_id":"child","revision":"1"}},"input":"First independent task","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},{"target":{"kind":"self_call"},"input":"Second independent task","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}],"expected":{"category":"prepared","roles":["Delegation","SelfCall"],"models":["child-model","parent-model"],"parallel":true}},
+    {"id":"unknown-top-field","mutations":[{"op":"set","pointer":"/unknown","value":true}],"expected":{"category":"invalid"}},
+    {"id":"unknown-child-field","mutations":[{"op":"set","pointer":"/children/0/instance_id","value":"model-chosen"}],"expected":{"category":"invalid"}},
+    {"id":"unknown-target-field","mutations":[{"op":"set","pointer":"/children/0/target/unknown","value":true}],"expected":{"category":"invalid"}},
+    {"id":"missing-explicit-parallel","mutations":[{"op":"remove","pointer":"/parallel"}],"expected":{"category":"invalid"}},
+    {"id":"empty-batch","mutations":[{"op":"set","pointer":"/children","value":[]}],"expected":{"category":"invalid"}},
+    {"id":"blank-child-input","mutations":[{"op":"set","pointer":"/children/0/input","value":"   "}],"expected":{"category":"invalid"}},
+    {"id":"child-input-byte-limit","mutations":[{"op":"set","pointer":"/children/0/input","value":"0123456789012345678901234567890123456789012345678901234567890123456789"}],"expected":{"category":"invalid"}},
+    {"id":"child-permission-expansion","mutations":[{"op":"set","pointer":"/children/0/permissions/tools","value":["file.write"]}],"expected":{"category":"permission_denied"}},
+    {"id":"registered-but-unlisted-target","mutations":[{"op":"set","pointer":"/children/0/target/value/definition_id","value":"other"}],"expected":{"category":"permission_denied"}},
+    {"id":"unknown-exact-revision","mutations":[{"op":"set","pointer":"/children/0/target/value/revision","value":"2"}],"expected":{"category":"not_found"}},
+    {"id":"host-revokes-named-authority","deny_named_host":true,"mutations":[],"expected":{"category":"permission_denied"}},
+    {"id":"foreign-parent-session","execution_session":"foreign","mutations":[],"expected":{"category":"invalid"}},
+    {"id":"wrong-tool-name","tool_name":"shell","mutations":[],"expected":{"category":"invalid"}},
+    {"id":"unknown-inline-model-field","mutations":[{"op":"set","pointer":"/children/0/target","value":{"kind":"inline","value":{"definition_id":"inline","revision":"1","display_name":null,"model":{"provider":"unit","model":"inline-model","unknown":true},"instructions":"Inline instructions","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}}}],"expected":{"category":"invalid"}}
+  ]
+}

@@ -62,6 +62,29 @@ impl AgentCatalog {
         Ok(Registration::Inserted)
     }
 
+    /// Exact discoverable targets, narrowed without creating instances or grants.
+    /// Missing revisions are not advertised; registered self identities retain
+    /// the separate self authority and saved-definition equality requirement.
+    pub(crate) fn admitted_named_definitions(
+        &self,
+        parent: &AgentSnapshot,
+        host: &AgentPermissions,
+    ) -> Result<Vec<AgentDefinition>, AgentError> {
+        let authority = parent.permissions().intersection(host)?;
+        let mut definitions = Vec::new();
+        for key in &authority.delegation.named_targets {
+            if !self.definitions.contains_key(key) {
+                continue;
+            }
+            match self.child_definition_ceiling(parent, &AgentSelector::Named(key.clone()), host) {
+                Ok((definition, _)) => definitions.push(definition),
+                Err(AgentError::PermissionDenied) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(definitions)
+    }
+
     /// Resolve exact content and intersect host, definition and requested ceilings.
     /// Requested authority outside either ceiling is an error, not a silent trim.
     pub fn resolve(
@@ -88,6 +111,36 @@ impl AgentCatalog {
         host: &AgentPermissions,
         requested: &AgentPermissions,
     ) -> Result<AgentSnapshot, AgentError> {
+        let (definition, ceiling) = self.child_definition_ceiling(parent, selector, host)?;
+        let instance_id = instance_id.into();
+        if instance_id == parent.identity().instance_id {
+            return Err(AgentError::Invalid(
+                "child must have a distinct instance identity".into(),
+            ));
+        }
+        requested.require_subset_of(&ceiling)?;
+        AgentSnapshot::new(definition, instance_id, requested.clone())
+    }
+
+    /// Resolve immutable intent without allocating or fabricating an instance.
+    pub(crate) fn resolve_child_definition(
+        &self,
+        parent: &AgentSnapshot,
+        selector: &AgentSelector,
+        host: &AgentPermissions,
+        requested: &AgentPermissions,
+    ) -> Result<AgentDefinition, AgentError> {
+        let (definition, ceiling) = self.child_definition_ceiling(parent, selector, host)?;
+        requested.require_subset_of(&ceiling)?;
+        Ok(definition)
+    }
+
+    fn child_definition_ceiling(
+        &self,
+        parent: &AgentSnapshot,
+        selector: &AgentSelector,
+        host: &AgentPermissions,
+    ) -> Result<(AgentDefinition, AgentPermissions), AgentError> {
         let definition = self.definition(selector)?;
         let authority = parent.permissions().intersection(host)?;
         let is_self = definition.key() == parent.definition().key();
@@ -102,15 +155,8 @@ impl AgentCatalog {
         if !allowed {
             return Err(AgentError::PermissionDenied);
         }
-        let instance_id = instance_id.into();
-        if instance_id == parent.identity().instance_id {
-            return Err(AgentError::Invalid(
-                "child must have a distinct instance identity".into(),
-            ));
-        }
         let ceiling = authority.intersection(definition.permissions())?;
-        requested.require_subset_of(&ceiling)?;
-        AgentSnapshot::new(definition, instance_id, requested.clone())
+        Ok((definition, ceiling))
     }
 
     fn definition(&self, selector: &AgentSelector) -> Result<AgentDefinition, AgentError> {
@@ -144,6 +190,31 @@ pub fn resolve_self(
     host: &AgentPermissions,
     requested: &AgentPermissions,
 ) -> Result<AgentSnapshot, AgentError> {
+    let (definition, ceiling) = self_definition_ceiling(parent, host)?;
+    let instance_id = instance_id.into();
+    if instance_id == parent.identity().instance_id {
+        return Err(AgentError::Invalid(
+            "child must have a distinct instance identity".into(),
+        ));
+    }
+    requested.require_subset_of(&ceiling)?;
+    AgentSnapshot::new(definition, instance_id, requested.clone())
+}
+
+pub(crate) fn resolve_self_definition(
+    parent: &AgentSnapshot,
+    host: &AgentPermissions,
+    requested: &AgentPermissions,
+) -> Result<AgentDefinition, AgentError> {
+    let (definition, ceiling) = self_definition_ceiling(parent, host)?;
+    requested.require_subset_of(&ceiling)?;
+    Ok(definition)
+}
+
+fn self_definition_ceiling(
+    parent: &AgentSnapshot,
+    host: &AgentPermissions,
+) -> Result<(AgentDefinition, AgentPermissions), AgentError> {
     let definition = parent.definition();
     let ceiling = parent
         .permissions()
@@ -152,14 +223,7 @@ pub fn resolve_self(
     if !ceiling.delegation.allow_self {
         return Err(AgentError::PermissionDenied);
     }
-    let instance_id = instance_id.into();
-    if instance_id == parent.identity().instance_id {
-        return Err(AgentError::Invalid(
-            "child must have a distinct instance identity".into(),
-        ));
-    }
-    requested.require_subset_of(&ceiling)?;
-    AgentSnapshot::new(definition.clone(), instance_id, requested.clone())
+    Ok((definition.clone(), ceiling))
 }
 
 #[cfg(test)]

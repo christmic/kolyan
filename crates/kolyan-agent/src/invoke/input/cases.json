@@ -1,0 +1,14 @@
+[
+  {"id":"valid_empty_targets","pointer":null,"value":null,"remove":false,"inline":false,"repeat":0,"path":null,"reason":null,"truncated":false},
+  {"id":"empty_string_named_targets","pointer":"/children/0/permissions/delegation/named_targets","value":"","remove":false,"inline":false,"repeat":0,"path":"children[0].permissions.delegation.named_targets","reason":"invalid type: string","truncated":false},
+  {"id":"wrong_array_element","pointer":"/children/0/permissions/delegation/named_targets","value":[""],"remove":false,"inline":false,"repeat":0,"path":"children[0].permissions.delegation.named_targets[0]","reason":"expected struct AgentKey","truncated":false},
+  {"id":"tools_object","pointer":"/children/0/permissions/tools","value":{"item":"file.read"},"remove":false,"inline":false,"repeat":0,"path":"children[0].permissions.tools","reason":"invalid type: map","truncated":false},
+  {"id":"bool_string","pointer":"/children/0/permissions/delegation/allow_self","value":"false","remove":false,"inline":false,"repeat":0,"path":"children[0].permissions.delegation.allow_self","reason":"expected a boolean","truncated":false},
+  {"id":"missing_named_targets","pointer":"/children/0/permissions/delegation/named_targets","value":null,"remove":true,"inline":false,"repeat":0,"path":"children[0].permissions.delegation","reason":"missing field `named_targets`","truncated":false},
+  {"id":"unknown_permissions_field","pointer":"/children/0/permissions/unknown","value":true,"remove":false,"inline":false,"repeat":0,"path":"children[0].permissions","reason":"unknown field `unknown`","truncated":false},
+  {"id":"multibyte_long_invalid_string","pointer":"/children/0/permissions/delegation/named_targets","value":"界","remove":false,"inline":false,"repeat":6000,"path":"children[0].permissions.delegation.named_targets","reason":"invalid type: string","truncated":true},
+  {"id":"valid_inline_empty_targets","pointer":null,"value":null,"remove":false,"inline":true,"repeat":0,"path":null,"reason":null,"truncated":false},
+  {"id":"inline_definition_string_targets","pointer":"/children/0/target/value/permissions/delegation/named_targets","value":"","remove":false,"inline":true,"repeat":0,"path":"children[0].target","reason":"invalid type: string","truncated":false},
+  {"id":"inline_inner_named_targets_path","pointer":"/children/0/target/value/permissions/delegation/named_targets","value":"","remove":false,"inline":true,"repeat":0,"path":"children[0].target","components":["permissions.delegation.named_targets"],"reason":"invalid type: string","truncated":false},
+  {"id":"inline_inner_tools_path","pointer":"/children/0/target/value/permissions/tools","value":{"item":"file.read"},"remove":false,"inline":true,"repeat":0,"path":"children[0].target","components":["permissions.tools"],"reason":"invalid type: map","truncated":false}
+]
