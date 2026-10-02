@@ -5,6 +5,8 @@ mod file_operations;
 mod isolated;
 mod isolated_file;
 mod isolated_shell;
+mod process_observation;
+pub use process_observation::ToolProcessObservationContext;
 mod workspace;
 pub use exact_file::{
     ExactDirectoryBinding, ExactFileBinding, ExactFileIdentity, ExactFileStaging,
@@ -21,7 +23,9 @@ pub use file_operations::{
     FileOperations, ReadArguments, WriteArguments,
 };
 
-use kolyan_core::{ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture};
+use kolyan_core::{
+    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolOutcome, ToolPreparationFuture,
+};
 use kolyan_model::{ToolCall, ToolDefinition, ToolResult};
 use kolyan_policy::{
     InvocationClaim, PolicyContext, PolicyDecisionKind, PolicyResolver, PreparedCall,
@@ -166,6 +170,7 @@ impl ToolExecutor for RestrictedShellTool {
                 self.execute_query(invocation.prepared.call().clone())?,
                 &invocation,
             )
+            .map(ToolOutcome::Completed)
         })
     }
 }
@@ -366,6 +371,7 @@ impl ToolExecutor for RestrictedFileTool {
                 self.execute_file(invocation.prepared.call().clone())?,
                 &invocation,
             )
+            .map(ToolOutcome::Completed)
         })
     }
 }

@@ -1,28 +1,29 @@
 use super::*;
 use futures_util::FutureExt;
+use futures_util::future::BoxFuture;
 use std::fs;
 use std::sync::Arc;
 
 /// Local primitive checks exercise the synchronous internals, not an unmanaged
 /// production ToolExecutor entrypoint. Governed checks use explicit scoped input.
 trait PrimitiveTestCall {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_>;
+    fn execute(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, ToolError>>;
 }
 
 impl PrimitiveTestCall for RestrictedShellTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn execute(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, ToolError>> {
         Box::pin(async move { self.execute_query(call) })
     }
 }
 
 impl PrimitiveTestCall for RestrictedFileTool {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn execute(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, ToolError>> {
         Box::pin(async move { self.execute_file(call) })
     }
 }
 
 impl PrimitiveTestCall for PolicyEnforcingTool<RestrictedFileTool, kolyan_policy::PolicyEngine> {
-    fn execute(&self, call: ToolCall) -> ToolFuture<'_> {
+    fn execute(&self, call: ToolCall) -> BoxFuture<'_, Result<ToolResult, ToolError>> {
         Box::pin(async move {
             let prepared = self.prepare(call).await?;
             let mut source_policy = kolyan_policy::PolicyEngine::default();
@@ -47,14 +48,21 @@ impl PrimitiveTestCall for PolicyEnforcingTool<RestrictedFileTool, kolyan_policy
             .map_err(|error| ToolError::PolicyDenied {
                 message: error.to_string(),
             })?;
-            self.execute_invocation(ToolInvocation {
-                prepared,
-                grant,
-                scope,
-                policy_revision: source_policy.revision(),
-                control: kolyan_core::TurnControl::default(),
-            })
-            .await
+            let outcome = self
+                .execute_invocation(ToolInvocation {
+                    prepared,
+                    grant,
+                    scope,
+                    policy_revision: source_policy.revision(),
+                    control: kolyan_core::TurnControl::default(),
+                })
+                .await?;
+            match outcome {
+                ToolOutcome::Completed(result) => Ok(result),
+                ToolOutcome::AwaitingExternal(wait) => {
+                    panic!("primitive unexpectedly suspended: {wait:?}")
+                }
+            }
         })
     }
 }
