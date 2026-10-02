@@ -166,6 +166,7 @@ fn local_provider(protocol: &str, url: String) -> Provider {
                 api_key: "fixture".into(),
                 timeout: Duration::from_secs(2),
                 transport_retries: 0,
+                http_retry: Default::default(),
                 diagnostics: false,
             })
             .unwrap(),
@@ -178,6 +179,7 @@ fn local_provider(protocol: &str, url: String) -> Provider {
                 version: "2023-06-01".into(),
                 timeout: Duration::from_secs(2),
                 transport_retries: 0,
+                http_retry: Default::default(),
                 diagnostics: false,
             })
             .unwrap(),

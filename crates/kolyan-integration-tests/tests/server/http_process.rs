@@ -73,13 +73,14 @@ impl Process {
         let response = request.send().await.unwrap();
         let status = response.status().as_u16();
         let value: Value = response.json().await.unwrap();
-        schema::response(&value, status, path);
         let mut trace = fs::OpenOptions::new()
             .create(true)
             .append(true)
             .open(self.directory.join("http.jsonl"))
             .unwrap();
         writeln!(trace,"{}",json!({"method":method.as_str(),"path":path,"request":body,"status":status,"response":value})).unwrap();
+        trace.flush().unwrap();
+        schema::response(&value, status, path);
         assert_eq!(status, expected, "{path}: {value}");
         value
     }
@@ -194,11 +195,9 @@ async fn scenarios(directory: &Path, cases: &[Value]) {
                     .join(case["path"].as_str().unwrap())
                     .exists()
             );
-            let approval = result["pending_approval"]["approval_id"]
-                .as_str()
-                .unwrap()
-                .to_owned();
-            assert!(result["pending_approval"].get("continuation").is_none());
+            let pending = schema::single_approval(&result);
+            let approval = pending["approval_id"].as_str().unwrap().to_owned();
+            assert!(pending.get("continuation").is_none());
             if case["restart"] == true {
                 drop(process);
                 process = Process::start(directory);

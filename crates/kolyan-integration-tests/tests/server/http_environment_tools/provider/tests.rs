@@ -2,6 +2,9 @@
 
 use super::*;
 
+#[path = "tests/socket_modes.rs"]
+mod socket_modes;
+
 fn outputs() -> Vec<Value> {
     let cases: Value = serde_json::from_str(include_str!(
         "../../../fixtures/server_http_environment_tools.json"
@@ -75,9 +78,11 @@ fn accepted_nonblocking_socket_timeout_does_not_make_read_line_blocking() {
 
     let root = directory();
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-    listener.set_nonblocking(true).unwrap();
     let mut client = TcpStream::connect(listener.local_addr().unwrap()).unwrap();
+    // Listener readiness is not socket read readiness. Establish the connection
+    // with blocking accept, then explicitly select the mode under examination.
     let (accepted, _) = listener.accept().unwrap();
+    accepted.set_nonblocking(true).unwrap();
     accepted
         .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
@@ -104,7 +109,7 @@ fn accepted_nonblocking_socket_timeout_does_not_make_read_line_blocking() {
         &json!({"explicit_blocking":true,"read":read,"line":line}),
     );
     assert_eq!(line, "POST /v1/responses HTTP/1.1\r\n");
-    eprintln!("Inherited nonblocking Rust evidence: {}", root.display());
+    eprintln!("Explicit nonblocking Rust evidence: {}", root.display());
 }
 
 fn wait_for_trace(root: &Path, predicate: impl Fn(&Value) -> bool) {

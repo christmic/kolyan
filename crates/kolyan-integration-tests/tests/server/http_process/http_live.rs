@@ -126,15 +126,10 @@ async fn live_scenarios(directory: &Path, cases: &[Value]) {
             .await;
         if case["action"] != "none" {
             assert_eq!(result["state"], "suspended", "actual result: {result}");
-            assert_eq!(result["pending_approval"]["tool_name"], "file.write");
-            assert_eq!(
-                result["pending_approval"]["arguments"]["path"],
-                case["path"]
-            );
-            let approval = result["pending_approval"]["approval_id"]
-                .as_str()
-                .unwrap()
-                .to_owned();
+            let pending = schema::single_approval(&result);
+            assert_eq!(pending["tool_name"], "file.write");
+            assert_eq!(pending["arguments"]["path"], case["path"]);
+            let approval = pending["approval_id"].as_str().unwrap().to_owned();
             assert!(
                 !directory
                     .join("workspace")

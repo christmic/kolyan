@@ -1,0 +1,70 @@
+[
+  {
+    "id": "provider_initial_401_body_timeout",
+    "replies": [
+      {
+        "status": 401,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 1,
+    "expected_kind": "authentication",
+    "expected_status": 401,
+    "expected_retry_metadata": false,
+    "opening_window_ms": 80
+  },
+  {
+    "id": "provider_after_529_401_body_timeout",
+    "replies": [
+      {
+        "status": 529,
+        "body": "{\"error\":{\"code\":\"overloaded_error\"}}"
+      },
+      {
+        "status": 401,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 2,
+    "expected_kind": "authentication",
+    "expected_status": 401,
+    "expected_retry_metadata": true,
+    "opening_window_ms": 80
+  },
+  {
+    "id": "provider_initial_429_body_timeout",
+    "replies": [
+      {
+        "status": 429,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 1,
+    "expected_kind": "rate_limited",
+    "expected_status": 429,
+    "expected_retry_metadata": false,
+    "opening_window_ms": 80
+  },
+  {
+    "id": "provider_after_529_429_body_timeout",
+    "replies": [
+      {
+        "status": 529,
+        "body": "{\"error\":{\"code\":\"overloaded_error\"}}"
+      },
+      {
+        "status": 429,
+        "body": "{\"error\":{\"code\":\"terminal_error\"}}",
+        "body_delay_ms": 160
+      }
+    ],
+    "expected_requests": 2,
+    "expected_kind": "rate_limited",
+    "expected_status": 429,
+    "expected_retry_metadata": true,
+    "opening_window_ms": 80
+  }
+]

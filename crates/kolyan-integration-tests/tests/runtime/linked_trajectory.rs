@@ -121,9 +121,11 @@ impl ToolExecutor for FixtureTools {
             .find(|result| result.call_id == call.id)
             .cloned();
         Box::pin(async move {
-            result.ok_or_else(|| ToolError::Failed {
-                message: "missing fixture result".into(),
-            })
+            result
+                .map(kolyan_core::ToolOutcome::Completed)
+                .ok_or_else(|| ToolError::Failed {
+                    message: "missing fixture result".into(),
+                })
         })
     }
 }

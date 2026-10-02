@@ -1,0 +1,4 @@
+[
+  {"id":"completion_retry_after_write","path":"proof.txt","content":"LOCAL-HTTP-EFFECT-PROOF","call_id":"write-proof","completion_statuses":[529,200],"expected_attempts":3,"expected_completed":true,"expected_receipts":1},
+  {"id":"quota_after_write_no_replay","path":"proof.txt","content":"LOCAL-HTTP-QUOTA-PROOF","call_id":"write-proof","completion_statuses":[429],"expected_attempts":2,"expected_completed":false,"expected_receipts":1}
+]

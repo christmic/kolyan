@@ -46,6 +46,7 @@ async fn openai(case: &Value) -> Value {
         api_key: "fixture".into(),
         timeout: Duration::from_millis(100),
         transport_retries: 0,
+        http_retry: Default::default(),
         diagnostics: false,
     })
     .unwrap();
@@ -91,6 +92,7 @@ async fn anthropic(case: &Value) -> Value {
         version: "2023-06-01".into(),
         timeout: Duration::from_millis(100),
         transport_retries: 0,
+        http_retry: Default::default(),
         diagnostics: false,
     })
     .unwrap();
@@ -129,6 +131,9 @@ async fn anthropic(case: &Value) -> Value {
 
 fn openai_error(error: OpenAiError) -> String {
     match error {
+        OpenAiError::Configuration(_) => "configuration".into(),
+        OpenAiError::OpeningBudgetExhausted => "transport".into(),
+        OpenAiError::RetriedError { source, .. } => openai_error(*source),
         OpenAiError::Api(_) => "api".into(),
         OpenAiError::Decode(_) => "json".into(),
         OpenAiError::Framing(_) => "utf8".into(),
@@ -139,6 +144,9 @@ fn openai_error(error: OpenAiError) -> String {
 
 fn anthropic_error(error: AnthropicError) -> String {
     match error {
+        AnthropicError::Configuration(_) => "configuration".into(),
+        AnthropicError::OpeningBudgetExhausted => "transport".into(),
+        AnthropicError::RetriedError { source, .. } => anthropic_error(*source),
         AnthropicError::Api(_) => "api".into(),
         AnthropicError::Decode(_) => "json".into(),
         AnthropicError::Framing(_) => "utf8".into(),

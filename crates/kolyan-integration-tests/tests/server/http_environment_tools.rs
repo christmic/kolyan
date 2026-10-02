@@ -23,6 +23,7 @@ use kolyan_ledger::{LedgerEventKind, LedgerStore, SqliteLedger};
 use reqwest::{Client, Method};
 use serde::Deserialize;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -256,6 +257,7 @@ async fn http_environment_tools_data_matrix() {
                     files,
                     results,
                 } => {
+                    let requires_approval = path.contains("$APPROVAL");
                     let path = expand(&json!(path), &root, &approval)
                         .as_str()
                         .unwrap()
@@ -273,6 +275,11 @@ async fn http_environment_tools_data_matrix() {
                     append(
                         &root.join("http-raw.jsonl"),
                         &json!({"case":case.id,"action":index,"phase":"request","method":method,"path":path,"body":body}),
+                    );
+                    assert!(
+                        !requires_approval || !approval.is_empty(),
+                        "{} action {index}: approval decision requires an exported pending ID",
+                        case.id
                     );
                     let response = request.send().await.unwrap();
                     let code = response.status().as_u16();
@@ -312,8 +319,20 @@ async fn http_environment_tools_data_matrix() {
                             serde_json::from_str(result["content"].as_str().unwrap()).unwrap();
                         compare(&content, &expected.content);
                     }
-                    if let Some(id) = value["pending_approval"]["approval_id"].as_str() {
-                        approval = id.into();
+                    if let Some(pending) = value["pending_approvals"].as_array() {
+                        assert!(
+                            pending.len() <= 1,
+                            "{} action {index}: fixture requires an unambiguous approval",
+                            case.id
+                        );
+                        if let Some(item) = pending.first() {
+                            let id = item["approval_id"]
+                                .as_str()
+                                .expect("pending approval must have an ID");
+                            assert!(!id.is_empty(), "pending approval ID must not be empty");
+                            // Keep the exact observed ID for deliberate late-decision refusal cases.
+                            approval = id.to_owned();
+                        }
                     }
                 }
             }
@@ -332,7 +351,9 @@ async fn http_environment_tools_data_matrix() {
             .iter()
             .filter(|event| {
                 event.kind == LedgerEventKind::ApprovalRequested
-                    && event.payload.get("continuation").is_some()
+                    && event
+                        .event_id
+                        .starts_with(&format!("{}/approval/", event.execution_id))
             })
             .collect();
         assert_eq!(
@@ -342,14 +363,38 @@ async fn http_environment_tools_data_matrix() {
             case.id
         );
         for checkpoint in checkpoints {
-            let id = checkpoint.payload["approval_id"].as_str().unwrap();
+            assert_eq!(checkpoint.payload["schema_version"], 1);
+            let approval: kolyan_core::ApprovalRequest =
+                serde_json::from_value(checkpoint.payload["approval"].clone()).unwrap();
+            let id = approval.approval_id.as_str();
+            assert_eq!(
+                checkpoint.event_id,
+                format!("{}/approval/{id}/requested", checkpoint.execution_id)
+            );
+            assert_eq!(checkpoint.idempotency_key, checkpoint.event_id);
+            let observed: Vec<_> = events
+                .iter()
+                .filter(|event| {
+                    event.kind == LedgerEventKind::ApprovalRequested
+                        && event.execution_id == checkpoint.execution_id
+                        && event.turn_id == checkpoint.turn_id
+                        && event.payload["call_id"] == approval.call_id
+                        && event.payload["name"] == approval.tool_name
+                })
+                .collect();
+            assert_eq!(observed.len(), 1, "one observable event per saved approval");
+            assert!(observed[0].cursor < checkpoint.cursor);
             let suspensions: Vec<_> = events
                 .iter()
                 .filter(|event| {
                     event.kind == LedgerEventKind::ExecutionSuspended
                         && event.execution_id == checkpoint.execution_id
                         && event.turn_id == checkpoint.turn_id
-                        && event.payload["approval_id"] == id
+                        && event.payload["suspension"]["waiting"]["approvals"]
+                            .as_array()
+                            .unwrap()
+                            .iter()
+                            .any(|approval| approval["approval_id"] == id)
                 })
                 .collect();
             assert_eq!(
@@ -357,6 +402,18 @@ async fn http_environment_tools_data_matrix() {
                 1,
                 "one persisted suspension for each saved approval"
             );
+            for event in &suspensions {
+                assert_eq!(event.payload["schema_version"], 1);
+                assert!(event.payload["publication_cursor"].as_u64().unwrap() < event.cursor);
+                let suspension: kolyan_core::TurnSuspension =
+                    serde_json::from_value(event.payload["suspension"].clone()).unwrap();
+                assert_eq!(
+                    suspension.checkpoint.scope.execution.execution_id,
+                    event.execution_id
+                );
+                assert_eq!(suspension.checkpoint.scope.execution.turn_id, event.turn_id);
+                suspension.validate(&suspension.checkpoint.scope).unwrap();
+            }
             let boundaries: Vec<_> = events
                 .iter()
                 .filter(|event| {
@@ -371,13 +428,33 @@ async fn http_environment_tools_data_matrix() {
                 1,
                 "one independent approval boundary admission"
             );
-            assert_eq!(
-                boundaries[0].event_id,
-                format!("{}/approval/{id}/boundary", checkpoint.execution_id)
-            );
+            let resume_source = events.iter().rev().find(|event| {
+                event.kind == LedgerEventKind::TurnCheckpointMerged
+                    && event.execution_id == checkpoint.execution_id
+                    && event.turn_id == checkpoint.turn_id
+                    && event.cursor < boundaries[0].cursor
+            });
+            let boundary_id = match resume_source {
+                Some(source) => format!(
+                    "{}/approval/{id}/boundary/attempt/{}",
+                    checkpoint.execution_id, source.cursor
+                ),
+                None => format!("{}/approval/{id}/boundary", checkpoint.execution_id),
+            };
+            assert_eq!(boundaries[0].event_id, boundary_id);
+            assert_eq!(boundaries[0].idempotency_key, boundary_id);
             assert_eq!(
                 suspensions[0].event_id,
-                format!("{}/execution-suspended/{id}", checkpoint.execution_id)
+                format!(
+                    "{}/checkpoint/suspended/{:x}",
+                    checkpoint.execution_id,
+                    Sha256::digest(serde_json::to_vec(&suspensions[0].payload).unwrap())
+                )
+            );
+            assert_eq!(suspensions[0].idempotency_key, suspensions[0].event_id);
+            assert_eq!(
+                suspensions[0].payload["publication_cursor"],
+                checkpoint.cursor
             );
             assert!(
                 boundaries[0].cursor < checkpoint.cursor
