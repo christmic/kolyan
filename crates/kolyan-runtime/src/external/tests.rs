@@ -78,6 +78,10 @@ async fn default_host_refuses_wait_and_result_even_with_valid_tool_authority() {
     let verifier: &dyn ExternalWaitVerifier = &RefuseExternalWaits;
     let expected = not_configured();
     assert_eq!(
+        verifier.recover_wait(context.issued.clone()).await,
+        Ok(None)
+    );
+    assert_eq!(
         verifier.verify_wait(context.clone()).await,
         Err(expected.clone())
     );

@@ -11,6 +11,9 @@ use kolyan_policy::ToolExecutionScope;
 pub type ExternalVerificationFuture<'a> =
     Pin<Box<dyn Future<Output = Result<(), ToolError>> + Send + 'a>>;
 
+pub type ExternalRecoveryFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Option<ExternalWait>, ToolError>> + Send + 'a>>;
+
 /// Historical authority and exact wait returned by an admitted tool. Possessing
 /// these serialized values does not prove that work was durably admitted.
 #[derive(Debug, Clone, PartialEq)]
@@ -61,6 +64,13 @@ pub trait ExternalWaitVerifier: Send + Sync {
         context: ExternalWaitContext,
         result: ToolResult,
     ) -> ExternalVerificationFuture<'_>;
+
+    /// Read already committed admission after effect entry but before Runtime's
+    /// wait publication. This must not admit work, execute it or issue authority.
+    /// None means no proven wait, not permission to replay an uncertain effect.
+    fn recover_wait(&self, _: IssuedToolAuthority) -> ExternalRecoveryFuture<'_> {
+        Box::pin(async { Ok(None) })
+    }
 }
 
 /// No host verifier means no external waiting or result acceptance. There is no

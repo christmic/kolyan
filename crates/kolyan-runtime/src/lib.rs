@@ -5,13 +5,17 @@ use kolyan_trace::{TraceKind, TraceRecord, TraceSink};
 use serde_json::{Value, json};
 use thiserror::Error;
 
+mod approval;
 mod driver;
 mod execution;
 mod external;
+
+pub use approval::approval_decision_payload;
 mod reconciliation;
 
 pub use external::{
-    ExternalVerificationFuture, ExternalWaitContext, ExternalWaitVerifier, RefuseExternalWaits,
+    ExternalRecoveryFuture, ExternalVerificationFuture, ExternalWaitContext, ExternalWaitVerifier,
+    RefuseExternalWaits,
 };
 
 pub use reconciliation::{
@@ -24,7 +28,9 @@ pub use linked::{
     LinkedTrajectoryRecord,
 };
 
-pub use driver::{DurableTurnDriver, DurableTurnResult};
+pub use driver::{
+    DurableTurnDriver, DurableTurnResult, VerifiedExecutionInput, verified_execution_input,
+};
 pub use execution::{
     AdmissionDecision, AdmissionPort, EffectDisposition, EffectExecutor, EffectGrant,
     EffectOutcome, EffectReceipt, EffectRequest, ExecutionKey, ExecutionRuntime, ExecutionStatus,
@@ -160,6 +166,10 @@ fn encode_turn_event(event: &TurnEvent) -> (LedgerEventKind, Value) {
         TurnEvent::ToolResult { result, .. } => (
             LedgerEventKind::ToolExecutionCompleted,
             json!({ "call_id": result.call_id, "is_error": result.is_error, "result": result }),
+        ),
+        TurnEvent::ToolAwaitingExternal { call_id, wait, .. } => (
+            LedgerEventKind::ToolAwaitingExternal,
+            json!({"call_id":call_id,"wait":wait}),
         ),
         TurnEvent::ToolExecutionFailed {
             call_id,

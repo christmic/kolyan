@@ -1,7 +1,7 @@
 //! One evidence format for prepared execution and historical reconciliation.
 //! Hashes prove binding integrity, not authority outside the trusted journal.
 
-use kolyan_core::ToolError;
+use kolyan_core::{ExternalWait, IssuedToolAuthority, ToolError};
 use kolyan_ledger::{LedgerEvent, LedgerEventKind};
 use kolyan_model::ToolResult;
 use kolyan_policy::{PreparedCall, PreparedGrant, ToolExecutionScope};
@@ -102,6 +102,36 @@ impl PreparedEvidence {
         format!("tool/{}", self.prepared.call().name)
     }
 
+    pub(crate) fn issued(&self) -> IssuedToolAuthority {
+        IssuedToolAuthority {
+            prepared: self.prepared.clone(),
+            grant: self.grant.clone(),
+            scope: self.scope.clone(),
+            policy_revision: self.request.policy_revision.clone(),
+        }
+    }
+
+    pub(crate) fn wait_payload(&self, wait: &ExternalWait) -> Result<Value, ToolError> {
+        crate::ExternalWaitContext {
+            issued: self.issued(),
+            wait: wait.clone(),
+        }
+        .validate(&self.scope)?;
+        Ok(
+            json!({"schema_version":1,"effect_id":self.request.effect_id,
+            "input":self.input(),"authorization":self.authorization,
+            "prepared_grant":self.grant,"wait":wait}),
+        )
+    }
+
+    pub(crate) fn validate_wait(&self, payload: &Value) -> Result<ExternalWait, ToolError> {
+        let wait: ExternalWait = serde_json::from_value(payload["wait"].clone()).map_err(failed)?;
+        if *payload != self.wait_payload(&wait)? {
+            return Err(failed("external wait historical authority differs"));
+        }
+        Ok(wait)
+    }
+
     pub(crate) fn prepared_payload(&self) -> Result<Value, ToolError> {
         let mut payload = serde_json::to_value(&self.request).map_err(failed)?;
         payload["binding_kind"] = json!("prepared_tool_v1");
@@ -127,13 +157,16 @@ impl PreparedEvidence {
             "authorization": self.authorization, "prepared_grant": self.grant});
         let (status, outcome) = match result {
             Ok(output) => {
-                if output.call_id != self.prepared.call().id {
-                    return Err(failed("tool result identity mismatch; effect is uncertain"));
-                }
+                self.issued().validate_result(output).map_err(failed)?;
                 payload["output"] = json!(output);
                 (ReceiptStatus::Completed, json!({"output": output}))
             }
             Err(error) => {
+                if matches!(error, ToolError::Uncertain { .. }) {
+                    return Err(failed(
+                        "uncertain effect cannot produce a definitive receipt",
+                    ));
+                }
                 let error = encode_error(error);
                 payload["error"] = error.clone();
                 (ReceiptStatus::Failed, json!({"error": error}))
@@ -261,6 +294,7 @@ fn encode_error(error: &ToolError) -> Value {
         ToolError::Cancelled => json!({"kind": "cancelled"}),
         ToolError::TimedOut => json!({"kind": "timed_out"}),
         ToolError::PolicyDenied { message } => json!({"kind": "policy_denied", "message": message}),
+        ToolError::Uncertain { message } => json!({"kind": "uncertain", "message": message}),
     }
 }
 

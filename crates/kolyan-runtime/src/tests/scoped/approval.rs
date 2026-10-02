@@ -1,7 +1,9 @@
 use super::*;
+mod contracts;
 use futures_util::stream;
 use kolyan_core::{
-    ToolError, ToolExecutor, ToolFuture, ToolInvocation, ToolPreparationFuture, TurnExecutor,
+    ApprovalConfirmation, ResumeInput, ToolError, ToolExecutor, ToolFuture, ToolInvocation,
+    ToolOutcome, ToolPreparationFuture, TurnExecutor,
 };
 use kolyan_model::{
     ContentBlock, ModelEvent, ModelEventStream, ModelProvider, ModelRequest, ModelResponse,
@@ -103,11 +105,11 @@ impl ToolExecutor for ApprovedTool {
             let call = invocation.prepared.call().clone();
             assert_eq!(call.name, "file.write");
             self.0.fetch_add(1, Ordering::SeqCst);
-            Ok(ToolResult {
+            Ok(ToolOutcome::Completed(ToolResult {
                 call_id: call.id,
                 content: "written".into(),
                 is_error: false,
-            })
+            }))
         })
     }
 }
@@ -146,13 +148,37 @@ async fn approval_checkpoint_resumes_after_reconstruction_using_only_scoped_read
         )
         .await
         .unwrap();
-    let DurableTurnResult::AwaitingApproval {
-        approval,
+    let DurableTurnResult::Suspended {
+        suspension,
         trajectory,
     } = result
     else {
         panic!("expected approval checkpoint");
     };
+    let approval = suspension.waiting.approvals[0].clone();
+    let saved = &suspension.checkpoint.approvals[0];
+    let confirmation = ApprovalConfirmation {
+        approval_id: approval.approval_id.clone(),
+        prepared_digest: saved.prepared.digest().into(),
+        policy_revision: saved.policy_revision.clone(),
+        scope: saved.scope.clone(),
+        evidence_id: "target-host-approve".into(),
+    };
+    ledger
+        .append(LedgerEvent {
+            event_id: confirmation.evidence_id.clone(),
+            idempotency_key: confirmation.evidence_id.clone(),
+            execution_id: "target".into(),
+            turn_id: "turn".into(),
+            cursor: 0,
+            kind: LedgerEventKind::ApprovalResolved,
+            payload: approval_decision_payload(
+                &suspension.checkpoint.checkpoint_id,
+                &confirmation,
+                "approve",
+            ),
+        })
+        .unwrap();
     assert_eq!(models.load(Ordering::SeqCst), 1);
     assert_eq!(tools.load(Ordering::SeqCst), 0);
     // An unrelated checkpoint with the same approval id must never be selected.
@@ -178,7 +204,7 @@ async fn approval_checkpoint_resumes_after_reconstruction_using_only_scoped_read
         rebuilt
             .load_approval("target", &approval.approval_id)
             .unwrap(),
-        *approval
+        approval
     );
     assert!(
         rebuilt
@@ -186,7 +212,8 @@ async fn approval_checkpoint_resumes_after_reconstruction_using_only_scoped_read
                 executor(models.clone(), tools.clone()),
                 "wrong-session",
                 "target",
-                &approval.approval_id
+                &suspension.checkpoint.checkpoint_id,
+                ResumeInput::ApprovalConfirmed(confirmation.clone())
             )
             .await
             .is_err()
@@ -196,7 +223,8 @@ async fn approval_checkpoint_resumes_after_reconstruction_using_only_scoped_read
             executor(models.clone(), tools.clone()),
             "session",
             "target",
-            &approval.approval_id,
+            &suspension.checkpoint.checkpoint_id,
+            ResumeInput::ApprovalConfirmed(confirmation.clone()),
         )
         .await
         .unwrap();
@@ -218,7 +246,8 @@ async fn approval_checkpoint_resumes_after_reconstruction_using_only_scoped_read
                 executor(models.clone(), tools.clone()),
                 "session",
                 "target",
-                &approval.approval_id
+                &suspension.checkpoint.checkpoint_id,
+                ResumeInput::ApprovalConfirmed(confirmation)
             )
             .await
             .is_err()
