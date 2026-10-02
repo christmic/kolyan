@@ -871,6 +871,7 @@ dependencies = [
  "kolyan-runtime",
  "kolyan-server",
  "kolyan-storage",
+ "kolyan-tools",
  "kolyan-trace",
  "serde",
  "serde_json",

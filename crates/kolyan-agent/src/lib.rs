@@ -9,6 +9,7 @@ pub mod binding;
 mod catalog;
 pub mod context;
 mod definition;
+mod goals;
 mod invoke;
 mod permission;
 pub mod provider;
@@ -21,6 +22,7 @@ pub use binding::{
 };
 pub use catalog::{AgentCatalog, AgentSelector, Registration, resolve_self};
 pub use definition::{AgentDefinition, AgentDefinitionInput};
+pub use goals::{FileWriteCommittedChecker, FileWriteCommittedPredicateV1};
 pub use invoke::{
     AGENT_INVOKE_NAME, AgentInvokeInput, ChildInvocationInput, InvocationTarget,
     InvokePrepareError, InvokePrepareLimits, PreparedAgentInvocation, ResolvedChildIntent,

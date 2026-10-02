@@ -1,0 +1,21 @@
+[
+ {"id":"valid","pointer":"","value":null,"expected":true},
+ {"id":"unsupported_version","pointer":"/schema_version","value":2,"expected":false},
+ {"id":"unknown_field","pointer":"/extra","value":true,"expected":false},
+ {"id":"untrusted_revision","pointer":"/tool_revision","value":"file-worker-v2/untrusted","expected":false},
+ {"id":"uppercase_hash","pointer":"/expected_sha256","value":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","expected":false},
+ {"id":"short_hash","pointer":"/expected_sha256","value":"123","expected":false},
+ {"id":"parent_leaf","pointer":"/leaf","value":"../outside","expected":false},
+ {"id":"dot_leaf","pointer":"/leaf","value":".","expected":false},
+ {"id":"nul_leaf","pointer":"/leaf","value":"bad\u0000leaf","expected":false},
+ {"id":"long_leaf_not_host_id","pointer":"/leaf","value":"LONG_FILENAME","expected":true},
+ {"id":"relative_directory","pointer":"/parent/physical_path","value":"relative","expected":false},
+ {"id":"dot_alias_directory","pointer":"/parent/physical_path","value":"/historical/./workspace","expected":false},
+ {"id":"double_slash_alias_directory","pointer":"/parent/physical_path","value":"/historical//workspace","expected":false},
+ {"id":"parent_escape","pointer":"/parent/physical_path","value":"/historical/other","expected":false},
+ {"id":"empty_identity_chain","pointer":"/workspace/identity_chain","value":[],"expected":false},
+ {"id":"parent_identity_mismatch","pointer":"/parent/identity_chain/2/ino","value":42,"expected":false},
+ {"id":"missing_identity","pointer":"/parent/identity_chain","value":[{"dev":1,"ino":1}],"expected":false},
+ {"id":"wrong_byte_type","pointer":"/expected_bytes","value":"5","expected":false},
+ {"id":"negative_bytes","pointer":"/expected_bytes","value":-1,"expected":false}
+]

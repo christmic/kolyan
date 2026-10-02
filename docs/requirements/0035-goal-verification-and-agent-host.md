@@ -605,11 +605,14 @@ production host acceptance remain open and cannot be inferred from this gate.
 
 ### Server 目标证据集成验证
 
-Server enforcing slice 已接入 Main `b5bc995` 后的候选源码，尚未提交或完成
-整体宿主验收。主控独立模块回归终态退出 0：Server 122 passed、Agent
+Server enforcing slice 已通过正常 hooks 分批提交为 `22dcb6d` 与 `763755a`，
+尚未完成整体宿主验收。主控独立模块回归终态退出 0：Server 122 passed、Agent
 98 passed，均 0 failed、0 ignored；日志 `/tmp/kolyan-task-goals-main-v1.log`。
 两 crate 全目标严格 Clippy 终态退出 0，日志
-`/tmp/kolyan-task-goals-main-strict-v1.log`。全仓回归另行运行，未结束前不计通过。
+`/tmp/kolyan-task-goals-main-strict-v1.log`。随后主控全仓回归在 `41ac3f4`
+对应生产源码终态退出 0：82 个结果组，共 827 passed、0 failed、63 ignored；
+日志 `/tmp/kolyan-task-goals-workspace-main-v1.log`。这份全仓结果不包含随后
+集成的计量适配器或独立 MiniMax 自我迭代入口，也不证明 ignored 网络用例通过。
 
 新增三组框架在 Memory/SQLite 各执行 13 行 source、25 行 assessment 和
 6 行 Service reconstruction，共 88 个数据行；模型及工具为明确声明的本机
@@ -624,3 +627,19 @@ Server enforcing slice 已接入 Main `b5bc995` 后的候选源码，尚未提�
 completion 均重新核验，不以 submitted verdict 或纯模型结束状态代替成功。
 具体 FileWrite checker、Agent 目标准入/收尾、有限纠错及生产宿主与真实模型
 验收仍须完成；这份回归不证明需求 0035 或演进计划整体完成。
+
+### 文件写入目标验证器集成验证
+
+主控核对隔离冻结清单后集成 11 个 Agent 文件，父 lib.rs 只合并新增导出，
+保留 Main 已有能力；Cargo.lock 仅增加 Agent 对既有 Tools 的依赖边。
+联合模块回归终态退出 0：Agent 100 passed、Server 122 passed，均无失败
+或 ignored；日志 `/tmp/kolyan-file-goals-main-module-v1.log`。Agent、Server
+和 Integration 全目标严格 Clippy 终态退出 0，日志
+`/tmp/kolyan-file-goals-main-strict-v1.log`。
+
+新增验证器使用 Server 已验证的历史 source，按预先声明的物理目录身份、
+叶名称、工具版本、字节数和摘要核对受治理写入；不读当前文件、不把最终
+自然语言回答当成功。24 行契约与 60 行历史数据共 84 行观察先导出并物理
+读回，覆盖明确匹配、完整缺失、不完整来源与损坏证据。历史用例的模型及
+工具为本机脚本适配器，不能声称已经验证原生 worker 或实际网络目标闭环。
+Root 输入/收尾接线、纠错和真实宿主仍是未完成的后续工作。
