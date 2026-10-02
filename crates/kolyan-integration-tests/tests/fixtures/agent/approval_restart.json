@@ -1,0 +1,17 @@
+{
+  "schema_version":1,
+  "id":"root_approval_restart",
+  "selectors":["named","inline"],
+  "approval_tools":["file.write","file.edit","shell"],
+  "max_suspensions":8,
+  "turns":[
+    {"id":"establish","model_requests":5,"waits":[
+      {"tool":"file.write","model_requests":1,"receipts":0,"file_before":null},
+      {"tool":"file.edit","model_requests":2,"receipts":1,"file_before":"ORIGIN-agent-proof"},
+      {"tool":"shell","model_requests":4,"receipts":3,"file_before":"VERIFIED-agent-proof"}
+    ]},
+    {"id":"recall","model_requests":3,"waits":[
+      {"tool":"shell","model_requests":2,"receipts":1,"file_before":"VERIFIED-agent-proof"}
+    ]}
+  ]
+}

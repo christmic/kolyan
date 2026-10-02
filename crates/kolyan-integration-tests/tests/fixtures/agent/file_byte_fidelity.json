@@ -1,0 +1,10 @@
+[
+  {"id":"write_no_newline","operation":"write","seed":null,"content":"alpha","expected":"alpha"},
+  {"id":"write_one_newline","operation":"write","seed":null,"content":"alpha\n","expected":"alpha\n"},
+  {"id":"write_two_newlines","operation":"write","seed":null,"content":"alpha\n\n","expected":"alpha\n\n"},
+  {"id":"write_trailing_whitespace","operation":"write","seed":null,"content":"alpha \t  ","expected":"alpha \t  "},
+  {"id":"edit_no_newline","operation":"edit","seed":"prefix|old","content":"alpha","expected":"prefix|alpha"},
+  {"id":"edit_one_newline","operation":"edit","seed":"prefix|old","content":"alpha\n","expected":"prefix|alpha\n"},
+  {"id":"edit_two_newlines","operation":"edit","seed":"prefix|old","content":"alpha\n\n","expected":"prefix|alpha\n\n"},
+  {"id":"edit_trailing_whitespace","operation":"edit","seed":"prefix|old","content":"alpha \t  ","expected":"prefix|alpha \t  "}
+]

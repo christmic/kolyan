@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "expected_rows": 8,
+  "expected_max_children": 1,
+  "timeout_ms": 10000,
+  "max_request_bytes": 262144,
+  "max_output_tokens": 8192,
+  "input": "Inspect only the advertised tool inventory. This loopback response is synthetic and does not execute tools.",
+  "profiles": [
+    {"id":"full","retain_environment":true,"retain_named":true,"allow_inline":true,"allow_self":true,"expected_tools":["file.read","agent.invoke"],"expected_targets":["self_call","named","inline"]},
+    {"id":"self_only","retain_environment":true,"retain_named":false,"allow_inline":false,"allow_self":true,"expected_tools":["file.read","agent.invoke"],"expected_targets":["self_call"]},
+    {"id":"no_delegation","retain_environment":true,"retain_named":false,"allow_inline":false,"allow_self":false,"expected_tools":["file.read"],"expected_targets":[]},
+    {"id":"no_environment_self","retain_environment":false,"retain_named":false,"allow_inline":false,"allow_self":true,"expected_tools":["agent.invoke"],"expected_targets":["self_call"]}
+  ],
+  "protocols": [
+    {"id":"openai_responses","path":"/v1/responses","schema_field":"parameters","response":"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture-done\",\"output\":[{\"type\":\"message\",\"content\":[{\"type\":\"output_text\",\"text\":\"synthetic fixture\"}]}]}}\n\n"},
+    {"id":"anthropic_messages","path":"/v1/messages","schema_field":"input_schema","response":"event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"fixture-done\"}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"synthetic fixture\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "groups": [
+    {"scope":"delegation","cases":["single-named","single-inline","single-self","parent-result-restart"]},
+    {"scope":"parallel","cases":["readonly_two_children_overlap","writable_two_children_serial"]},
+    {"scope":"topology","cases":["deep_two_self_calls","two_child_approvals_restart"]}
+  ]
+}

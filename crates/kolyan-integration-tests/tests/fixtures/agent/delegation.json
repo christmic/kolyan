@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "expected_parent_read_receipts": 0,
+  "expected_result_consumptions": 1,
+  "expected_offline_parent_requests": 2,
+  "child_input": "Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate.",
+  "instructions": "When the private user input asks to read a file without delegation, read it once and finish. Otherwise follow the requested single agent.invoke delegation. Never substitute parent file access. Wait for the actual child result; failed or cancelled child results must be reported honestly. Do not repeat admitted calls.",
+  "parent_frames": [
+    {"reasoning":"Delegate once under the explicit host ceiling.","content":[{"type":"tool_call","call":{"id":"delegate-once","name":"agent.invoke","arguments":{"parallel":false,"children":[{"target":"$TARGET","input":"Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}}],"usage":{"input_tokens":10,"output_tokens":5}},
+    {"reasoning":"Report the actual verified child terminal feedback.","content":[{"type":"text","text":"The verified child terminal result has been received."}],"usage":{"input_tokens":12,"output_tokens":6}}
+  ],
+  "child_frames": [
+    {"reasoning":"Read the explicit private file, not parent history.","content":[{"type":"tool_call","call":{"id":"child-read","name":"file.read","arguments":{"path":"safe/child-proof.txt"}}}],"usage":{"input_tokens":7,"output_tokens":3}},
+    {"reasoning":"Finish with the actual file content.","content":[{"type":"text","text":"CHILD-REAL-PROOF"}],"usage":{"input_tokens":8,"output_tokens":4}}
+  ],
+  "cases": [
+    {"id":"single-named","target":"named","parent_input":"PARENT-PRIVATE-MARKER. Use agent.invoke exactly once, parallel false, with registered child-definition revision r1. Child input: Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate. Give it only file.read and no delegation. Wait for its verified result then finish; do not read the file yourself.","fault":"none","restart":false,"live":true,"expected_terminal":"completed","expected_error":false,"expected_reads":1},
+    {"id":"single-inline","target":"inline","parent_input":"PARENT-PRIVATE-MARKER. Use agent.invoke exactly once, parallel false, with the complete inline definition supplied below. Child input: Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate. Give it only file.read and no delegation. Wait for its verified result then finish; do not read the file yourself.","fault":"none","restart":false,"live":true,"expected_terminal":"completed","expected_error":false,"expected_reads":1},
+    {"id":"single-self","target":"self","parent_input":"PARENT-PRIVATE-MARKER. Use agent.invoke exactly once, parallel false, with target self_call. Child input: Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate. Give it only file.read and no delegation. Wait for its verified result then finish; do not read the file yourself.","fault":"none","restart":false,"live":true,"expected_terminal":"completed","expected_error":false,"expected_reads":1},
+    {"id":"typed-failed-child","target":"named","parent_input":"PARENT-PRIVATE-MARKER. Delegate once to child-definition r1 and honestly report its terminal result.","fault":"provider_open_failure","restart":false,"live":false,"expected_terminal":"failed","expected_error":true,"expected_reads":0},
+    {"id":"typed-cancelled-child","target":"named","parent_input":"PARENT-PRIVATE-MARKER. Delegate once to child-definition r1 and honestly report its terminal result.","fault":"cancel_on_model_open","restart":false,"live":false,"expected_terminal":"cancelled","expected_error":true,"expected_reads":0},
+    {"id":"parent-result-restart","target":"named","parent_input":"PARENT-PRIVATE-MARKER. Use agent.invoke exactly once, parallel false, with registered child-definition revision r1. Child input: Read safe/child-proof.txt once using file.read and return the actual observed content. Do not delegate. Give it only file.read and no delegation. Wait for its verified result then finish; do not read the file yourself.","fault":"none","restart":true,"live":true,"expected_terminal":"completed","expected_error":false,"expected_reads":1}
+  ]
+}

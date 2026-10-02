@@ -1,0 +1,1 @@
+{"tasks":1,"logical_owners":1,"invocations":10,"continuations":9,"attempts":10,"minimum_steps":20,"offline_steps":30,"offline_receipts":20,"private_projections":9,"minimum_wait_restarts":10,"minimum_waits_with_prior_receipt":1,"artifact":"safe/long-proof.txt","context_reduction_acceptance":false}

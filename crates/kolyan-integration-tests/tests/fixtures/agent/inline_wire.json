@@ -1,0 +1,17 @@
+{
+  "definition":{"definition_id":"child-definition","revision":"r1","display_name":null,"model":{"provider":"fixture","model":"actual-selected-model"},"instructions":"Read exactly once.","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},
+  "cases":[
+    {"field":"display_name","remove":true,"value":null,"valid":true,"equal":true},
+    {"field":"display_name","remove":false,"value":null,"valid":true,"equal":true},
+    {"field":"display_name","remove":false,"value":"Changed name","valid":true,"equal":false},
+    {"field":"definition_id","remove":true,"value":null,"valid":false,"equal":false},
+    {"field":"revision","remove":true,"value":null,"valid":false,"equal":false},
+    {"field":"model","remove":true,"value":null,"valid":false,"equal":false},
+    {"field":"instructions","remove":true,"value":null,"valid":false,"equal":false},
+    {"field":"permissions","remove":true,"value":null,"valid":false,"equal":false},
+    {"field":"revision","remove":false,"value":"r2","valid":true,"equal":false},
+    {"field":"instructions","remove":false,"value":"Read exactly once. ","valid":true,"equal":false},
+    {"field":"permissions","remove":false,"value":{"tools":["file.write"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}},"valid":true,"equal":false},
+    {"field":"unknown","remove":false,"value":null,"valid":false,"equal":false}
+  ]
+}
