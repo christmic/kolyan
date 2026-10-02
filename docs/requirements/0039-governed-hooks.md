@@ -324,7 +324,7 @@ native-tool regression; it does not close the outstanding C/D consumer gates.
 Main inspected Core's actual `turn/dispatch.rs`: it computes the minimum of
 the Turn deadline, tool timeout and grant timeout, then applies that cutoff to
 the outer execution future. The existing ToolInvocation does not carry it.
-The next Core increment adds mandatory `window: ToolExecutionWindow`, with a
+Core now carries mandatory `window: ToolExecutionWindow`, with a
 private monotonic Instant, an explicit `at_deadline` constructor and read-only
 `deadline`/`remaining` accessors. An exhausted window returns zero. The type is
 not serializable, not a grant and has no default or timeout-renewing fallback.
@@ -341,4 +341,32 @@ Runtime preparation fixture is owned by Main with the concurrent opening
 Driver migration, avoiding overlapping worker edits. Separate new tests must
 verify each winning cutoff, budget consumed before the wrapper, expired windows
 and unchanged control/authority across forwarding. Original cases and assertions
-remain intact. These are approved contracts, not completed consumer evidence.
+remain intact. The cutoff contract is integrated; actual Runtime hook consumers
+remain outstanding.
+
+### Main execution window verification
+
+Main verified all fifteen frozen file digests before importing the Core contract,
+forwarding fixtures and independent dataset. Main also migrated the Runtime
+preparation fixture with an explicit cutoff. Existing cases and assertions were
+retained; no default window or serializable authority was added.
+
+The module gate exited 0 in `/tmp/kolyan-tool-window-main-module-v1.log`:
+Agent 112, Core 109, Runtime 65 and Tools 71 passed, with zero failures or ignored
+tests. Main physically reloaded six actual rows at
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-tool-window-52698.jsonl`.
+Five dispatcher cases verify the Turn, tool and grant winning cutoffs, absent
+Turn limit and forwarded cancellation. All require identical inner/outer cutoff,
+unchanged authority, decreasing remaining budget, complete actual response and
+one dropped pending future. The separate expired-window row records zero budget.
+These use a declared synthetic model and pending tool, not vendor requests or
+native hook execution. They establish the shared live window required for C/D;
+they do not establish that C/D consumers are implemented.
+
+Workspace/all-target strict Clippy exited 0 in
+`/tmp/kolyan-tool-window-main-strict-v1.log`; formatting, source-layout and diff
+checks exited 0. The same frozen source completed full workspace regression with
+exit 0 in `/tmp/kolyan-tool-window-main-workspace-v1.log`: 90 result groups,
+901 passed, zero failed and 69 ignored, including helper-subprocess groups.
+Ignored vendor-network entries were not executed. This gate retains actual local
+native-tool, long-task and approval regression; it is not new MiniMax acceptance.

@@ -12,6 +12,7 @@ pub(crate) mod preparation;
 mod prepared_authority;
 mod provider_mapping;
 mod suspension;
+mod window;
 use preparation::{fixture_key, fixture_policy, fixture_prepare, fixture_validate};
 
 async fn resume_confirmed<P: ModelProvider, T: ToolExecutor>(

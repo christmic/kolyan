@@ -1,0 +1,7 @@
+[
+  {"id":"turn-cutoff","turn_ms":40,"tool_ms":2000,"grant_ms":2000,"winner":"turn","cancel":false},
+  {"id":"tool-cutoff","turn_ms":2000,"tool_ms":40,"grant_ms":2000,"winner":"tool","cancel":false},
+  {"id":"grant-cutoff","turn_ms":2000,"tool_ms":2000,"grant_ms":40,"winner":"grant","cancel":false},
+  {"id":"no-turn-limit","turn_ms":null,"tool_ms":null,"grant_ms":40,"winner":"grant","cancel":false},
+  {"id":"forwarded-control","turn_ms":null,"tool_ms":2000,"grant_ms":2000,"winner":"cancel","cancel":true}
+]
