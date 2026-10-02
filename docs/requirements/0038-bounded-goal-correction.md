@@ -100,10 +100,169 @@ criterion's invocation_id in a temporary clone is not a valid ownership proof.
 Correction must not widen the saved Agent definition, permissions or Skill/MCP
 bindings, and rebuild must recheck the current execution authority.
 
-The exact C1 Rust DTOs and narrow checker-interface migration will be frozen
-after C0 and production opening admission integrate. No implementation may bypass
-the current root-only checker contract before that migration. Complete all C1
-constraints before enabling automatic correction in the Host.
+The following C1 contract is approved for isolated implementation. Production
+opening admission remains an integration prerequisite, not a reason to defer
+disjoint policy and ownership work. No implementation may bypass the current
+root-only checker before the complete interface migration. C2 is not enabled
+until the enforcing C1 contract and production authority adapter are verified.
+
+### Policy and exact public inputs
+
+New DTOs reject unknown fields. GoalCorrectionPolicy carries policy_id,
+policy_revision, root_invocation_id and max_corrections. Identities follow the
+existing bounded identity rules; max_corrections is 1..=128. Configure through
+TaskCoordinator::configure_goal_correction(task_id, fact_id, policy), after Task
+registration and before the first invocation admission. All Goal criteria must
+anchor the same declared Root. The later real Root must match that immutable
+anchor and the registered Task Agent/constraints. Identical fact retry is
+idempotent; another policy/revision/anchor/limit conflicts. Absent policy means
+correction admission is unavailable, not unlimited. Configuration grants no work.
+
+GoalAssessmentSelection contains criterion_id, assessment_reference: FactRef and
+assessment_digest. GoalCorrectionAdmission contains root_invocation_id,
+predecessor: AttemptBinding, ordinal: u32, unsatisfied: Vec<GoalAssessmentSelection>,
+successor: InvocationDefinition and policy_reference: FactRef. The host submits
+it through TaskCoordinator::admit_goal_correction(task_id, fact_id, candidate).
+Selections are nonempty, sorted and unique, at most 128; digests are 64 lowercase
+hex characters. Configuring correction for more than 128 Goal criteria refuses
+rather than truncates. The serialized candidate is bounded to 256 KiB; input
+source bodies retain their existing independent 16 MiB limit and are referenced,
+not duplicated in the edge. Submitted DTOs are candidates, not authority.
+
+GoalEvaluationOwner explicitly distinguishes Root { invocation_id } from
+Correction { invocation_id, ordinal, edge: FactRef }. GoalEvaluationCoordinate
+contains root_invocation_id and owner. GoalAssessment requires evaluation with
+no default; its digest includes the coordinate. Root uses the explicit Root
+variant. Preserve existing attempt/source/predicate/checker fields. Do not accept
+old assessment formats, manufacture an edge or temporarily rewrite a criterion.
+
+TaskSnapshot reconstructs a required nullable policy with exact reference,
+correction-edge history and a criterion-owner map. Registration initializes
+None/empty; actual Root admission initializes owners even when correction is
+not configured. State comes only from committed facts.
+
+### Atomic admission and replay
+
+New critical Task events are GoalCorrectionConfigured and GoalCorrectionAdmitted,
+with kinds task.goal_correction_configured and task.goal_correction_admitted.
+Their subject kinds are task.goal-correction-policy and task.goal-correction;
+subject IDs are task_id and successor.invocation_id respectively. Use the
+existing versioned envelope, reducer and journal CAS. A single admission fact
+validates the edge, admits the successor, spends the ordinal and transfers the
+selected owners. Do not separately append InvocationAdmitted for that successor.
+
+Admission and replay enforce the same invariants:
+
+- The Task is active with no cancellation/recovery barrier; the exact policy
+  reference belongs to the observed prefix. Ordinal is the last committed
+  ordinal plus one using checked arithmetic, within the immutable ceiling.
+- The unique actual Root matches the policy and immutable criteria. All selected
+  criteria currently belong to the same predecessor's latest Completed attempt,
+  whose exact binding and source match its physical observation.
+- Every selection identifies that owner's latest verified Unsatisfied assessment
+  with exact reference/digest/checker/predicate and complete source coverage.
+  Satisfied, Indeterminate and CheckerFailed cannot transfer ownership. Different
+  current owners require separate successors, not an implicit merged predecessor.
+- The new successor is a Continuation, parented to and dependent only on the
+  predecessor, with an already committed Derived input source. It obeys existing
+  invocation/topology bounds. Ordinary Continuation never transfers goal ownership.
+- The source retains exact policy, assessment, predecessor-completion, original
+  initialization/ownership and frozen context/projection provenance. Source
+  publication precedes edge publication. Full reference identity and actual
+  committed contents are checked, not just fact IDs.
+- Correction does not consume the predecessor result. Actual start still requires
+  exact result consumption, private initialization and a new C0 budget reservation.
+  It cannot replay effects from the stopped attempt.
+
+Required edge causes include the prior Task fact, policy, Derived source, selected
+assessments and predecessor completion. Existing input-source admission and
+causal-closure checks must recognize this atomic event. Same fact ID/payload
+retry resolves to the committed state; different payload conflicts. Concurrent
+different candidates for one ordinal have at most one winner. Return CAS Conflict
+without implicit retry or execution; read-only reload may identify the winner.
+
+### Strong model and effect source verification
+
+GoalSourceReader and LedgerTaskGoalVerifier require the actual FactJournal and
+explicit ModelOpeningInspectionLimits in addition to the existing source limits.
+No no-op store or default proof is permitted. Use Runtime inspect_model_openings
+over the reader's verified exact scoped observed end, including event ID and
+cursor. Preserve terminal identity and post-terminal activity checks. Every
+actual request must have a matching completed preparation/opening/Step chain;
+the final FinalAnswer must match it too. Empty Steps or zero tools are not proof.
+
+NotAdmitted refusal, Uncertain, missing/unknown/corrupted evidence or unresolved
+effects cannot make work correctable. Storage, identity and protocol failures are
+operational errors, not a new Unsatisfied assessment. Exhausted bounded reading
+may yield explicit Indeterminate but never infer absence or authorize correction.
+Historical complete business mismatches remain Unsatisfied; later physical file
+changes cannot rewrite the old assessment.
+
+VerifiedGoalSource privately retains VerifiedModelOpenings. Assessment stores
+bounded recomputable opening coordinates/digest separately from checker proof:
+input admission, inspected-through coordinate and ordered preparation/opening/
+completion references. The reader supplies them; replay recomputes them. Caller
+proof JSON is never promoted to model-opening authority.
+
+VerifiedGoalEvaluationBinding has private fields and no Deserialize. Only the
+verifier constructs its immutable criterion Root anchor, exact evaluated attempt
+and Root/correction coordinate. GoalChecker::assess receives the original
+GoalCriterion, this verified binding and VerifiedGoalSource. FileWriteCommittedChecker
+checks the immutable Root anchor and exact source/evaluation attempt before
+selecting receipts. It does not borrow another invocation's successful write.
+
+### Definition authority and current execution authority
+
+Add an enforcing GoalCorrectionAuthorityVerifier::verify_candidate(prefix,
+candidate, verified_input_source) port, configured by the coordinator's explicit
+with_goal_correction_authority builder. Configuration, correction admission and
+correction replay refuse absent implementation. The port validates immutable
+definition and source commitments; it must not consult current ACL during
+historical replay. Actual start independently checks current execution authority.
+Revocation must not make past facts unreadable or prevent persistent Deny.
+
+Server does not decode private Agent sources or treat equal definition_id as
+permission equality. The Agent adapter verifies exact definition revision,
+effective authority ceilings, original Skills/MCP bindings and private input
+initialization/context. No expansion is permitted. Instances may differ, so their
+complete constraints digests need not be equal. A synthetic Server test verifier
+is explicitly not production Agent-authority acceptance. C2 requires the real
+adapter and guarded Runner/Host assembly before automatic dispatch is enabled.
+
+### Latest owners and retained history
+
+Each owner generation may publish at most one assessment per criterion. Admission
+requires the current owner; an older owner cannot publish delayed success. An
+edge immediately makes selected criteria wait for the new owner. Unselected
+criteria retain their owners and evidence; history is never deleted. Completion
+requires exact current-owner Satisfied assessments, all admitted invocations
+physically completed, required results consumed and complete strong sources.
+Replay evaluates each assessment against its historical prefix; current
+completion evaluates current owners. Ordinary Continuation cannot contribute
+GoalSatisfied simply because its file happens to match.
+
+### Implementation ownership and mandatory cases
+
+The isolated Server policy/edge slice owns new tasks/correction modules and
+independent tests/data, plus narrow tasks.rs, tasks/types.rs, tasks/coordinator.rs,
+tasks/reducer.rs, tasks/input.rs and tasks/reducer/completion.rs changes. It does
+not modify Sagan's Session/service files or Runtime. The second slice owns
+goal-source, goal types/registry/transitions and independent opening tests.
+Main coordinates the Agent checker signature and all constructor/fixture
+migrations, preserving old assertions. Shared public exports are narrow Main
+changes; Runner/Host orchestration remains C2, not an implicit extra loop.
+
+Both Memory and reopened SQLite must exercise pre-work policy, exact retry,
+changed/late policy, Root mismatch, two corrections to success, partial criteria,
+ordinary Continuation, stale/foreign assessment, source corruption, permission
+expansion, ordinal/Steps/deadline exhaustion, cancellation and recovery barriers.
+Add missing/unknown/uncertain opening/effect, refusal, post-terminal activity and
+read-bound exhaustion. Real CAS barriers cover same-candidate idempotency and
+different-candidate single winner. Rebuild cuts surround source/edge/start/
+assessment publication. Export full candidates, sources, facts, physical evidence
+and results before assertions; sync/close and physically reread every actual row.
+Rejected admissions create no new fact, instance, grant, model or effect. C1
+tests cannot claim production orchestration or real-model C2 acceptance.
 
 ## C2 production orchestration and outcomes
 
