@@ -1,0 +1,15 @@
+{
+  "call":{"id":"parent/source-proof","name":"agent.invoke","arguments":{"parallel":false,"children":[
+    {"target":{"kind":"self_call"},"input":"First exact private child input","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}},
+    {"target":{"kind":"self_call"},"input":"Second distinct private child input","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}
+  ]}},
+  "cases":[
+    {"id":"exact_saved_child_source","mutation":"none","expected_error":false},
+    {"id":"target_definition_substituted","mutation":"target_definition","expected_error":true},
+    {"id":"child_role_substituted","mutation":"child_role","expected_error":true},
+    {"id":"parent_ownership_forged","mutation":"parent_ownership","expected_error":true},
+    {"id":"parent_attempt_source_substituted","mutation":"parent_attempt_source","expected_error":true},
+    {"id":"child_index_swapped","mutation":"child_index","expected_error":true},
+    {"id":"child_source_body_unknown","mutation":"body_unknown","expected_error":true}
+  ]
+}

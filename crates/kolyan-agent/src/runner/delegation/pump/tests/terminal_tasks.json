@@ -1,0 +1,4 @@
+[
+  {"id":"failed_child_typed_task","max_steps":3,"call_id":"parent/failed-child","fault":"failed","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Private failing child input","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}},
+  {"id":"cancelled_child_typed_task","max_steps":3,"call_id":"parent/cancelled-child","fault":"cancelled","arguments":{"parallel":false,"children":[{"target":{"kind":"self_call"},"input":"Private cancelled child input","permissions":{"tools":["file.read"],"delegation":{"named_targets":[],"allow_inline":false,"allow_self":false}}}]}}
+]

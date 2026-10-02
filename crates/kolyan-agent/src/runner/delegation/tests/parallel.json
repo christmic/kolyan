@@ -1,0 +1,7 @@
+[
+  {"id":"readonly_bound_two","targets":["named","inline","self","named"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed","slots":2,"attested":true,"token_ceiling":null,"barrier":2,"prepared_parallel_bound":2,"expected_peak":2},
+  {"id":"readonly_bound_four","targets":["named","inline","self","named"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed","slots":4,"attested":true,"token_ceiling":null,"barrier":4,"prepared_parallel_bound":4,"expected_peak":4},
+  {"id":"prepared_bound_below_host","targets":["named","inline","self","named"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed","slots":4,"attested":true,"token_ceiling":null,"barrier":2,"prepared_parallel_bound":2,"expected_peak":2},
+  {"id":"tokens_require_reservation","targets":["named","inline"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed","slots":2,"attested":true,"token_ceiling":50,"barrier":null,"prepared_parallel_bound":2,"expected_peak":1},
+  {"id":"unattested_factory_stays_serial","targets":["named","inline"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed","slots":2,"attested":false,"token_ceiling":null,"barrier":null,"prepared_parallel_bound":2,"expected_peak":1}
+]

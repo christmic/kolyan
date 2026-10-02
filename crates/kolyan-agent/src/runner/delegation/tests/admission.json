@@ -1,0 +1,13 @@
+[
+  {"id":"named_child","targets":["named"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed"},
+  {"id":"inline_child","targets":["inline"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed"},
+  {"id":"saved_self_child","targets":["self"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed"},
+  {"id":"multi_child_serial","targets":["named","self"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed"},
+  {"id":"parallel_intent_unproved_serial","targets":["named","inline"],"parallel":true,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"completed"},
+  {"id":"foreign_scope_no_admission","targets":["named"],"parallel":false,"mutation":"scope","max_invocations":5,"allowed":false,"model_outcome":"completed"},
+  {"id":"changed_limits_no_admission","targets":["named"],"parallel":false,"mutation":"limits","max_invocations":5,"allowed":false,"model_outcome":"completed"},
+  {"id":"cancelled_before_admission","targets":["named"],"parallel":false,"mutation":"cancel","max_invocations":5,"allowed":false,"model_outcome":"completed"},
+  {"id":"shared_invocation_budget","targets":["named"],"parallel":false,"mutation":"none","max_invocations":1,"allowed":false,"model_outcome":"completed"},
+  {"id":"failed_child_typed_feedback","targets":["named"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"failed"},
+  {"id":"cancelled_child_typed_feedback","targets":["named"],"parallel":false,"mutation":"none","max_invocations":5,"allowed":true,"model_outcome":"cancelled"}
+]
