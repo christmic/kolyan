@@ -2573,3 +2573,361 @@ offline native exports are `kolyan-native-effect-yGZfL5/actual.jsonl`,
 The receipt-loss row remains RecoveryRequired, and finalization refuses a success
 verdict. The RootOnly row has a real suspended-parent TurnCancelled before the
 child is released; its native receipt stays child-owned and parent consumption
+is refused. The implementation uses the existing Session stopped-suspension
+path before whole-Task cancellation, because Task command intent alone does not
+publish that physical terminal. No native-running PID/start/reap claim is made.
+
+These are real OS worker effects with scripted Provider output, not actual-Provider
+acceptance. The coverage inventory now points to the three concrete declarations
+and still retains the native-inflight gap. Its static audit does not execute them.
+
+#### Additional actual-Provider native fault matrix (approved scope, not run)
+
+Add an independent entrypoint planned as
+`native_effects::actual_model_native_effects_matrix` in `agent_root` for every
+configured deployment and each of the three approved native fault cases: nineteen
+deployments times three cases equals 57 new rows. These rows supplement, never
+replace, the prior complete matrices; one attempt per row, new immutable run
+installation and fresh stores. Network is held until main accepts the complete
+migrated workspace gate 80663 and authorizes its execution. This paragraph defines
+scope, not an assertion that this new entrypoint is already implemented or run.
+
+Keep the same observation/comparison framework and production Runner/services/OS
+tools. Data must contain distinct root-write and parent-delegation objectives,
+exact target path/content expectations and named child identity/permission input.
+The actual Provider produces all root/child ToolCalls. Do not send the fixture's
+offline call ID, insert a call or manufacture Completed. The root-write cases
+select the actual validated write invocation under its independently admitted
+scope; the late-child case selects the actual child write only after a real
+parent external wait exists. Bind the host fault once to that invocation's native
+call ID, prepared digest, exact scope/grant and receipt identity. Required path
+and content remain strict; optional spelling or generated IDs cannot authorize
+another target/effect. Invalid routing, wrong arguments and extra writes are
+failed rows, never coerced outputs or hidden retries.
+
+Live Provider opening, request planning and descriptors must delegate to the
+actual configured Provider. Preserve raw neutral requests and all stream events,
+reasoning, partial responses, reported usage/cache fields and errors. Use Inspect
+with the honest Unsupported counter; no estimated-token admission fallback.
+Missing credentials, transport failures, schema failures, unexpected approvals,
+missing child waits or fault boundaries never reached are explicit failed rows.
+Export failure evidence even when there is no receipt or model terminal.
+
+Do not impose the scripted case's exact number of model Steps on arbitrary live
+reasoning. Retain exact expected native effect/receipt/consumption counts and
+unchanged request/effect/authorization counts across the recovery interval.
+Physical stop is checked using the same real stopped-suspension path, not inferred
+from intent. The host may inject the approved receipt-publication failure or
+cancellation only after the selected real boundary is observed. All rows export
+before assertions; a missing boundary cannot be reported as NotRun or Passed.
+
+The prior inventory currently contains 418 rows (nineteen times twenty-two),
+whereas main's intended fresh base allocation is 380 (nineteen times twenty).
+Retain all existing inventory declarations and have main explicitly identify its
+execution subset; do not silently remove one 38-row historical/baseline entry.
+The additional native scope is always 57: 437 rows if main explicitly selects
+380 base rows, or 475 if it executes the complete 418-row inventory. Neither
+number is a run result. The affected plan separates this planned, unregistered
+addition from executable existing entrypoints until implementation and its fresh
+offline/strict gates are complete.
+
+An independently approved optional nonblocking Sandbox/Tools observer and native
+Shell port are being designed by their production owner. After the public API is
+frozen, add distinctly labelled shell-native cases using the same test framework.
+Shell PID/stop observations cannot satisfy the file-worker native-inflight gap;
+keep both capability claims and evidence identities separate.
+
+#### Native fault causal assertions and actual Provider entry implementation
+
+The first receipt-preservation scenario cancels a Runtime execution, not the
+whole Task. It must return a typed `TurnError::Cancelled` through the Runner's
+execution error chain, with exactly one actual `TurnCancelled`. Its committed
+receipt cursor is strictly less than `ExecutionCancelled`, which is strictly
+less than the stopped Turn cursor. The Task is `Failed`, not `TaskCancelled`:
+no coordinator Task cancellation was requested. An error string alone proves
+none of this. Older artifacts without these fields are retained historical
+observations, not acceptance of the strengthened contract.
+
+The lost-receipt row requires exactly one `EffectStarted` followed by exactly
+one `EffectUncertain`, no `EffectReceipt`, no `EffectReconciled`, and no
+`TurnCompleted`. A physical write does not imply durable success. The RootOnly
+row must observe the real parent's stopped Turn before calling coordinator
+Task cancellation. In the journal, the exact stopped observation position must
+precede the Task cancellation position and be its causal reference. Ledger
+cursors and journal positions are separate coordinate systems, never compared
+to each other. The late native receipt remains bound to the independently
+verified admitted child's execution and the entire actual issued scope.
+
+The independent `native_effects::actual_model_native_effects_matrix` entry now
+exists and is registered in the affected inventory: nineteen configured actual
+deployments times these three original cases, one attempt per row. This is
+implementation, not a claim of actual network acceptance. Its live source
+delegates the unchanged model request and every actual stream event/error to
+the configured Provider; it neither consumes script frames nor inserts calls.
+Building the live port does not open a stream. Inspect retains the unsupported
+counter with no token estimate; the dataset's 32768 inspection window is an
+explicit host assumption, not trusted model-specific token admission.
+
+The dataset separately declares strict write arguments and a parent-delegation
+objective. Fault selection binds the first actual prepared write, generated call
+ID, exact independent execution/snapshot, digest, grant, and receipt identity.
+Wrong arguments/routing and repeated writes are explicit refusals and fail the
+row, never repaired or silently deduplicated. Before child drive, strict original
+`AgentInvokeInput` must equal the declared named target, private input, write-only
+permissions, empty delegation ceiling and serial request; actual Runner wait
+verification supplies the admitted child's identity. Reconstruction opens the
+same stores and immutable worker reference, and must cause no additional effects
+or model requests.
+
+The live child orchestration wait/drive allowance is declared as 600000ms in
+the dataset to accommodate actual Provider calls. This is separate from the
+unchanged 10000ms held-admission handshake and 30000ms native tool deadline;
+offline orchestration retains its 40000ms drive bound. There is no tool deadline
+increase, network replay, retry or native warm loop. All rows persist actual
+requests, events, physical state, ledger/journal and failure observations before
+any row comparison. New entry registration does not authorize network execution:
+fresh complete offline/strict and main's migrated workspace release are required.
+
+Owner verification for the causal/actual-entry implementation (no network):
+focused handle 18855 exited 0 with four tests; the subsequent complete Root
+handle 81653 exited 101 with 27 passed, one failed, one ignored and eight
+filtered. Its log is `/tmp/kolyan-agent-native-actual-entry-full-offline-v2.log`.
+The native-effects three-row report and all four independent unit tests passed,
+as did the inventory audit. The remaining failing test belongs to the separately
+implemented native-running shell module; this is not a complete Root acceptance.
+Strict Root handle 36516 exited 0, with log
+`/tmp/kolyan-agent-native-actual-entry-strict-v2.log`. Actual Provider entry remains
+unexecuted; neither these unit tests nor real OS scripted Provider rows prove
+the 57 actual-network rows.
+
+The new three native JSONL artifacts are `kolyan-native-effect-A0t8jP`,
+`kolyan-native-effect-YRTeZV` and `kolyan-native-effect-v7e4tA` under the retained
+OS temporary directory. The first has receipt/cancel/stopped cursors 17/18/21,
+one stopped Turn, typed returned cancellation and Task Failed. The second has
+Started/Uncertain cursors 16/17, zero receipts/reconciliation/TurnCompleted and
+Task RecoveryRequired. The third has root stopped cursor 40, stopped observation
+journal position 7 preceding Task cancellation position 8 with its exact causal
+reference, and one late native receipt in the independently verified child scope.
+
+The failed full-v1 log and artifacts remain unchanged. In `lcw2Kw` and `ulWb0i`,
+the faulty test predicate looked for nonexistent `input.grant` rather than the
+actual top-level `prepared_grant`. Actual matching receipts were present, injected
+fault counts were zero, the Runner returned no start error and Task Completed.
+This establishes a test-owned receipt-contract error, not a model failure or
+inferred scheduling race. The corrected predicate preserves exact grant equality
+at the real field, plus original call ID, prepared digest and full scope equality.
+
+### Worktree self iteration acceptance
+
+The human authorized a separate worktree experiment: Kolyan itself implements a
+small capability, then the host independently verifies and reviews it before any
+mainline integration. This supplements long-task acceptance; it does not replace
+the configured deployment matrices or authorize automatic merging.
+
+The candidate is a pure `InvocationState::is_terminal` query, matching exactly
+Completed, Failed and Cancelled. Admitted, Running, Suspended and RecoveryRequired
+are not terminal. It must not change transitions, retry admission, authorization,
+serialization or Task success rules. The host checked that this helper does not
+already exist. All seven states require separate data-driven assertions in a
+test file, not production inline tests. The allowed patch is limited to the type
+module, its explicit test module declaration and an independent test/data file.
+
+Decompose the task into inspection and planning, implementation, test addition,
+and review of independent validation. A real configured Provider generates every
+read/write/edit/shell call through production bound Agent factories and isolated
+tools. The existing public API chain is Runner input-source preparation, bound
+Provider and tool factories, Server task admission and execution, then Runner
+finalization. There is no invented Runner continuation-start method. This task
+withholds Shell rather than falsely treating its workspace-write authority as
+read-only. A Codex subagent may implement the test host, but must not author the
+candidate patch or fabricate Kolyan tool calls. Restore a fresh Runner from the
+same durable stores at stage boundaries; where a Continuation is used, preserve
+the predecessor source and completion proof rather than copying model prose into
+an unbound request. Retain actual requests, reasoning, calls, results, physical
+file digests, journal/ledger and stage outcomes before comparison.
+
+The worktree starts from main's exact Git revision plus a copied, frozen source
+snapshot of the in-flight implementation. Record that baseline separately from
+Kolyan's candidate diff. Copy only tracked and nonignored project files; never
+copy credentials, build outputs or Git administration. Never commit the inherited
+large migration as the small candidate patch. Git control, worker installation,
+state stores and credential handling remain host-owned and inaccessible to tools.
+
+Model tools retain the existing sandbox and production deadlines. Do not expose
+the home directory, Rust credentials, package registries or network merely to
+make Cargo work inside Shell. The host runs fixed allowlisted Cargo checks after
+the candidate is complete and supplies their real exit status and bounded logs
+as explicitly host-produced input for the final review stage. Kolyan may perform
+workspace-local shell inspection, but cannot issue Git commit, merge or push.
+
+Keep committed case data separate from run configuration. Worktree/private paths,
+branch/revision and frozen baseline pins belong to a project-local ignored
+`tests/config/*.local.json` file, explicitly selected by
+`KOLYAN_SELF_ITERATION_RUN_CONFIG`; never discover them through a global config or
+silently fall back to another checkout. Model credentials remain environment-only.
+The host owns a separate fixed seven-state executable oracle outside the writable
+worktree; candidate tests alone cannot certify their own implementation.
+
+Acceptance requires unchanged files outside the candidate allowlist; exact
+terminal semantics; separate tests for all seven states; fresh focused tests,
+formatting and strict checks; and an independently reviewed candidate diff.
+Snapshot inheritance and a successful Provider response alone are not acceptance.
+On failure retain the worktree and all evidence. Mainline integration requires
+the human's confirmation after review. The first actual experiment ran and failed
+during inspection; it is not accepted.
+
+### Complete task inputs for self iteration
+
+Every stage receives the complete data-owned task specification: all four admitted
+candidate paths, their initial and current presence, exact seven-state semantics,
+dataset schema, all stage restrictions and the current stage's authority. Verified
+module entries include `src/tasks.rs` and `src/lib.rs`, with their pinned physical
+content clearly identified as host observations rather than model tool results.
+Initially absent test files are intentional new artifacts, not required reads.
+This does not prescribe or rewrite a model's tool calls. An independent offline
+test checks the complete specification for every stage and rejects changed module
+facts against the frozen inventory.
+
+The first actual trace is retained at
+`/tmp/kolyan-self-iteration-host.RjVdol/self-iteration-run-KRNdv2/actual.jsonl`.
+Both admitted existing files were successfully read. The next model step requested
+the nonexistent `src/tasks/mod.rs`; the actual module is `src/tasks.rs`. The native
+file operation returned a not-found error and the configured Turn failure policy
+stopped inspection. The candidate inventory was unchanged; no candidate validation
+ran. The input referred to four admitted files without enumerating them in this
+stage, and the model's recorded reasoning explicitly identified that omission.
+This establishes incomplete host task context and an actual incorrect model path,
+not lost earlier tool results or a Provider decoding failure. The revised fixture
+is a distinct case revision; it cannot erase or count the failed run as passed.
+
+The revised actual experiment finished in 272.10 seconds with exit 101. Its
+complete trace remains at
+`/tmp/kolyan-self-iteration-host.RjVdol/self-iteration-run-aOfGHL/actual.jsonl`.
+The actual model wrote exactly the four admitted files through file tools. The
+production helper adds six lines and has the correct seven-state semantics.
+The independent host executed all seven fixed commands: full Server tests
+(116 passed), focused candidate tests, strict checks, library build, oracle
+compilation and oracle execution exited zero. The oracle exported seven correct
+rows including repeated results and unchanged Copy values. Formatting exited one
+for the candidate test file. All original test modules were preserved, and the
+candidate dataset matched the independent exact schema and state expectations.
+
+Independent review also found candidate assertions for repeated calls and Copy
+preservation before the complete observation export. The candidate output omits
+those repeated and preservation observations, then compares newly executed calls
+rather than the exported results. These violate the task's evidence requirement
+even though the boolean results pass. The final model review returned without an
+actual model-generated read receipt in that stage; the host rejected it rather
+than manufacturing calls or accepting prose as tool evidence. This experiment is
+not accepted and the candidate has not been merged. A bounded repair continuation
+with preserved validation feedback and fresh independent checks is the next
+workflow improvement; it must not silently retry this run or erase its failures.
+
+### Bounded repair after independent validation
+
+System improvements discovered through Kolyan self iteration are authored and
+verified by the supervising development agent, not delegated back to the candidate
+as a condition for fixing its host. Keep separate provenance for model-authored
+candidate changes and developer-authored system or test-framework changes. The
+developer identifies the actual failing contract, writes a regression, implements
+the scoped correction, and runs independent checks before another explicitly
+versioned experiment. Failed evidence remains immutable. Candidate integration
+still requires independent acceptance. The human has authorized the supervising
+developer to merge after that acceptance, without a further routine confirmation.
+
+The first developer-authored feedback batch corrects host failure closure and
+incremental native-effects matrix evidence. A rejection records the existing
+coordinator's durable Task failure with a stable fact identity, preserves actual
+invocation outcomes, and reports a closure failure separately from the original
+error. A failure before Task admission does not manufacture a Task. Existing
+terminal facts are retained. The matrix records its full plan before any network
+row, persists each actual observation and row state immediately, and still runs
+every planned row once without discarding later cases when an earlier one fails.
+Add separate regressions without changing old cases or expected verdicts.
+
+Implement this batch in the isolated `codex/agent-feedback` worktree while the
+mainline actual matrices continue on their frozen implementation. This is not a
+host-authored repair of Kolyan's retained four-file candidate and does not turn
+the old failed experiment or matrices into passed results.
+
+This first feedback batch is implemented in the separate feedback worktree, not
+merged into main. Its complete Root offline target passed 50 tests with 13
+explicitly ignored tests; strict checks and formatting passed. Three independent
+matrix regressions prove the upfront plan, failure isolation, incremental exports
+and interrupted-row evidence. Three failure-closure tests cover unadmitted tasks,
+durable rejection and idempotent reconstruction, preserved cancellation, and
+storage failure reported without replacing the original rejection.
+
+A separately executed pinned actual-artifact test copied the retained failed
+self-iteration journal and replayed host closure. It passed: all four completed
+invocations and their attempts were identical, the aggregate Task changed from
+Ready to Failed through one added fact, and source journal and trace hashes stayed
+unchanged. The new copied-store trace is
+`kolyan-feedback-actual-closure-YaNZp1/actual.jsonl`. This is a real-artifact
+regression with zero network calls, not a fresh actual-model run. The feedback
+implementation still requires fresh live validation before complete acceptance;
+the mainline network matrices continue on their older frozen code. An initial
+feedback compile failure from an incorrect AgentIdentity import was retained;
+the corrected import uses the verified public Server type, not a new duplicate.
+
+The frozen mainline ordinary Root matrix subsequently finished 37 of 38 rows
+passed, with one failed named Qwen OpenAI-compatible case lacking a real Shell
+receipt. Its report remains `kolyan-r1-matrix-Teycao/report.json`; no retry is
+performed. The batch continued into the separately planned approval-restart
+matrix. These actual outcomes are independent of the feedback worktree's passing
+offline checks and cannot be retroactively changed by the developer's fixes.
+
+A revised experiment must admit its full bounded workflow before execution,
+rather than increase an existing immutable Task limit after failure. Reserve at
+most six invocations and attempts: inspection, implementation, tests, initial
+review, at most one repair, and final review. The initial and final reviews remain
+read-only. A review without actual model-generated reads and successful matching
+receipts fails immediately; missing evidence must not trigger a hidden retry.
+
+Only a completed, evidenced initial review may authorize the predefined repair
+stage when independent validation or review finds candidate defects. Bind the
+repair input to the candidate digests, actual failed validation logs, review
+observations and predecessor completion proof. Reconstruct its host from durable
+stores and prepare a lawful Continuation within the same Task, with the same
+four-path candidate scope and no additional authority. The actual model must
+generate every corrective edit. After repair rerun all fixed checks and the
+independent oracle, then require evidenced final review. A second failure ends
+the experiment without success finalization. The existing failed four-stage Task
+cannot gain extra capacity or have its baseline reset to the modified candidate.
+
+This workflow is now being implemented, but has no executed acceptance yet. Keep
+the current failed candidate intact while selecting a separately pinned original
+snapshot for the revised experiment. Candidate inheritance must be explicit; no
+host-authored repair can be presented as Kolyan self iteration.
+
+The revised read-only review returns one bounded JSON object in its final Text
+content, not its Reasoning: `schema_version` is 1, `candidate_digests` maps each
+of the four admitted candidate paths to its exact current SHA-256, `verdict` is
+`accept` or `repair`, and `findings` is a list of objects containing only `path`
+and nonempty `issue`. Deny unknown fields, wrong types, duplicate candidate keys,
+unknown paths, mismatched digests, more than 16 findings and more than 32768 bytes
+of final Text. Accept requires no findings; repair requires at least one finding.
+Malformed review or missing fresh successful file.read receipts for any of the
+four paths rejects the experiment immediately, without a repair retry. Bind the
+verdict to the exported read receipts and current immutable candidate inventory.
+Model review is a bounded input for repair scheduling, not independent correctness
+proof: it cannot override a failed fixed check or the developer's merge audit.
+Even an accepted initial review cannot skip independently failed validation.
+Final review must accept and all post-repair fixed checks must pass; otherwise
+close the Task as Failed without altering prior successful invocation facts.
+
+A fresh original-snapshot worktree is prepared for this version at
+`Kolyan-self-iteration-r3`, branch `codex/kolyan-self-iteration-r3`. Its 669-file
+manifest and binary diff match the originally pinned snapshot. The two initially
+absent test files remain absent; baseline source copies are experiment setup,
+not developer-authored candidate repairs. The previous failed candidate is not
+modified. Its private host directory and explicit ignored project-local config
+are separate from the prior run; this setup is not a live-run acceptance claim.
+
+Irrecoverable host rejection must also record a durable Task failure through the
+existing coordinator command, using a stable fact identity and explicit reason.
+It must preserve actual invocation outcomes and cannot invent stopped workers or
+successful validation. In the retained revised run, all four invocation exports
+left the aggregate Task Ready and the host rejected acceptance without recording
+that final failure. This is a test-host lifecycle gap to correct in the revised
+workflow, not evidence that the original run finalized as Failed or Completed.
