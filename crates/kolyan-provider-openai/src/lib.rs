@@ -15,6 +15,8 @@ use serde_json::{Value, json};
 pub struct OpenAiProvider {
     client: OpenAiClient,
     planner: Option<kolyan_model::RequestPlanner>,
+    count_profile: kolyan_model::CountProfile,
+    accounting_owner: std::sync::Arc<()>,
 }
 
 impl OpenAiProvider {
@@ -22,6 +24,8 @@ impl OpenAiProvider {
         Self {
             client,
             planner: None,
+            count_profile: kolyan_model::CountProfile::default(),
+            accounting_owner: std::sync::Arc::new(()),
         }
     }
 
@@ -30,6 +34,7 @@ impl OpenAiProvider {
         mut self,
         table: kolyan_model::ParameterTable,
     ) -> Result<Self, ProviderError> {
+        self.accounting_owner = std::sync::Arc::new(());
         self.planner = Some(kolyan_model::RequestPlanner::new(
             table,
             "openai_responses",
@@ -56,20 +61,10 @@ impl OpenAiProvider {
 impl ModelProvider for OpenAiProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
-        let planner = self.planner.clone();
         Box::pin(async move {
-            let plan = match planner {
-                Some(planner) => planner.plan(&request)?,
-                None => kolyan_model::PlannedRequest::unconfigured(request)?,
-            };
-            let omit_tool_choice = plan.omitted("tool_choice");
+            let (plan, wire, _prepared) = self.plan_wire(&request)?;
             let request = plan.request;
-            validate_request(&request)?;
             let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
-            let mut wire = Self::request(&request);
-            if omit_tool_choice {
-                wire.tool_choice = None;
-            }
             let response = client
                 .stream_response_with_extensions(&wire, &plan.wire_extensions)
                 .await
@@ -667,6 +662,14 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
         _ => None,
     };
     let (kind, phase) = match error.root() {
+        kolyan_protocol_openai::OpenAiError::Count(failure) => match failure {
+            kolyan_protocol_openai::CountFailure::Timeout => {
+                (ProviderErrorKind::Transport, ProviderErrorPhase::Open)
+            }
+            kolyan_protocol_openai::CountFailure::ResponseLimit => {
+                (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
+            }
+        },
         kolyan_protocol_openai::OpenAiError::Configuration(_) => {
             (ProviderErrorKind::InvalidRequest, ProviderErrorPhase::Open)
         }
@@ -709,5 +712,6 @@ fn openai_error(error: kolyan_protocol_openai::OpenAiError) -> ProviderError {
 #[cfg(test)]
 mod tests;
 
+mod accounting;
 #[cfg(test)]
 mod opening_diagnostic_tests;

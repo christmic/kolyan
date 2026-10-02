@@ -1,0 +1,197 @@
+{
+  "request": {
+    "request_id": "local-accounting",
+    "model": {
+      "provider": "fixture",
+      "model": "fixture-model"
+    },
+    "system": [
+      {
+        "text": "系统🦀\u0000",
+        "cache": false
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "读取中文🦀\n"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "read",
+        "description": "reads",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 128,
+    "reasoning": null,
+    "prompt_cache": null,
+    "output_format": null,
+    "extensions": null
+  },
+  "stream_response": "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"fixture\",\"status\":\"completed\",\"output\":[{\"type\":\"message\",\"role\":\"assistant\",\"content\":[{\"type\":\"output_text\",\"text\":\"{}\"}]}]}}\n\n",
+  "count_fields": [
+    "conversation",
+    "input",
+    "instructions",
+    "model",
+    "parallel_tool_calls",
+    "personality",
+    "previous_response_id",
+    "reasoning",
+    "text",
+    "tool_choice",
+    "tools",
+    "truncation"
+  ],
+  "rows": [
+    {
+      "id": "registered_text",
+      "mode": "registered",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "unknown_opaque_field_not_counted",
+      "mode": "opaque",
+      "expected": "unsupported"
+    },
+    {
+      "id": "second_registered_text",
+      "mode": "registered",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "reported_zero",
+      "mode": "zero",
+      "expected": "success",
+      "tokens": 0
+    },
+    {
+      "id": "default_unsupported_minimax",
+      "mode": "unsupported",
+      "expected": "unsupported"
+    },
+    {
+      "id": "foreign_instance_same_endpoint",
+      "mode": "foreign",
+      "expected": "unsupported"
+    },
+    {
+      "id": "foreign_endpoint",
+      "mode": "endpoint",
+      "expected": "unsupported"
+    },
+    {
+      "id": "profile_revision_changed",
+      "mode": "profile_changed",
+      "expected": "unsupported"
+    },
+    {
+      "id": "registered_wrong_model",
+      "mode": "model",
+      "expected": "unsupported"
+    },
+    {
+      "id": "registered_wrong_mapping_revision",
+      "mode": "revision",
+      "expected": "unsupported"
+    },
+    {
+      "id": "planner_rebound_clone",
+      "mode": "planner_changed",
+      "expected": "unsupported"
+    },
+    {
+      "id": "unknown_extension_retained",
+      "mode": "extension",
+      "expected": "unsupported",
+      "extension": {
+        "wire_name": "temperature",
+        "value": 0.7
+      }
+    },
+    {
+      "id": "opaque_modality",
+      "mode": "image",
+      "expected": "unsupported"
+    },
+    {
+      "id": "structured_reasoning_tool_history",
+      "mode": "complex",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "remote_history",
+      "mode": "extension",
+      "expected": "unsupported",
+      "extension": {
+        "wire_name": "previous_response_id",
+        "value": "response-fixture"
+      }
+    },
+    {
+      "id": "explicit_null_must_not_disappear",
+      "mode": "extension",
+      "expected": "unsupported",
+      "extension": {
+        "wire_name": "parallel_tool_calls",
+        "value": null
+      }
+    },
+    {
+      "id": "cache_not_proven_excluded",
+      "mode": "cache",
+      "expected": "unsupported"
+    }
+    ,
+    {
+      "id": "count_http_529_not_retried",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "http529",
+      "error_kind": "unavailable",
+      "error_phase": "open"
+    },
+    {
+      "id": "count_schema_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "schema",
+      "error_kind": "protocol",
+      "error_phase": "decode"
+    },
+    {
+      "id": "count_response_cap_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "oversize",
+      "error_kind": "protocol",
+      "error_phase": "decode"
+    },
+    {
+      "id": "count_body_timeout_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "body_timeout",
+      "error_kind": "transport",
+      "error_phase": "open"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "forbidden_fragments": [
+    "FICT-USER-13",
+    "FICT-PASS-37",
+    "FICT-PASS-38",
+    "FICT-QUERY-81",
+    "FICT-QUERY-82",
+    "FICT-API-KEY-1",
+    "https://",
+    "example.invalid"
+  ],
+  "rows": [
+    {
+      "id": "identical_endpoint",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?key=FICT-QUERY-81",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?key=FICT-QUERY-81",
+      "expected": "success"
+    },
+    {
+      "id": "different_password",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?key=FICT-QUERY-81",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-38@example.invalid/proxy?key=FICT-QUERY-81",
+      "expected": "refused"
+    },
+    {
+      "id": "different_query",
+      "base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?key=FICT-QUERY-81",
+      "target_base_url": "https://FICT-USER-13:FICT-PASS-37@example.invalid/proxy?key=FICT-QUERY-82",
+      "expected": "refused"
+    }
+  ]
+}

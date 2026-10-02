@@ -1,0 +1,176 @@
+{
+  "request": {
+    "request_id": "local-accounting",
+    "model": {
+      "provider": "fixture",
+      "model": "fixture-model"
+    },
+    "system": [
+      {
+        "text": "系统🦀\u0000",
+        "cache": false
+      }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "读取中文🦀\n"
+          }
+        ]
+      }
+    ],
+    "tools": [
+      {
+        "name": "read",
+        "description": "reads",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    ],
+    "tool_choice": "auto",
+    "max_output_tokens": 128,
+    "reasoning": null,
+    "prompt_cache": null,
+    "output_format": null,
+    "extensions": null
+  },
+  "stream_response": "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"fixture\",\"role\":\"assistant\",\"model\":\"fixture-model\",\"content\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":0}}}\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"{}\"}}\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\"},\"usage\":{\"output_tokens\":1}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n",
+  "count_fields": [
+    "model",
+    "messages",
+    "system",
+    "tools",
+    "tool_choice",
+    "thinking",
+    "output_config",
+    "cache_control"
+  ],
+  "rows": [
+    {
+      "id": "registered_text",
+      "mode": "registered",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "unknown_opaque_field_not_counted",
+      "mode": "opaque",
+      "expected": "unsupported"
+    },
+    {
+      "id": "second_registered_text",
+      "mode": "registered",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "reported_zero",
+      "mode": "zero",
+      "expected": "success",
+      "tokens": 0
+    },
+    {
+      "id": "default_unsupported_minimax",
+      "mode": "unsupported",
+      "expected": "unsupported"
+    },
+    {
+      "id": "foreign_instance_same_endpoint",
+      "mode": "foreign",
+      "expected": "unsupported"
+    },
+    {
+      "id": "foreign_endpoint",
+      "mode": "endpoint",
+      "expected": "unsupported"
+    },
+    {
+      "id": "profile_revision_changed",
+      "mode": "profile_changed",
+      "expected": "unsupported"
+    },
+    {
+      "id": "registered_wrong_model",
+      "mode": "model",
+      "expected": "unsupported"
+    },
+    {
+      "id": "registered_wrong_mapping_revision",
+      "mode": "revision",
+      "expected": "unsupported"
+    },
+    {
+      "id": "planner_rebound_clone",
+      "mode": "planner_changed",
+      "expected": "unsupported"
+    },
+    {
+      "id": "unknown_extension_retained",
+      "mode": "extension",
+      "expected": "unsupported",
+      "extension": {
+        "wire_name": "temperature",
+        "value": 0.7
+      }
+    },
+    {
+      "id": "opaque_modality",
+      "mode": "image",
+      "expected": "unsupported"
+    },
+    {
+      "id": "structured_reasoning_tool_history",
+      "mode": "complex",
+      "expected": "success",
+      "tokens": 42
+    },
+    {
+      "id": "cache_breakpoints_preserved",
+      "mode": "cache",
+      "expected": "success",
+      "tokens": 42
+    }
+    ,
+    {
+      "id": "count_http_529_not_retried",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "http529",
+      "error_kind": "unavailable",
+      "error_phase": "open"
+    },
+    {
+      "id": "count_schema_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "schema",
+      "error_kind": "protocol",
+      "error_phase": "decode"
+    },
+    {
+      "id": "count_response_cap_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "oversize",
+      "error_kind": "protocol",
+      "error_phase": "decode"
+    },
+    {
+      "id": "count_body_timeout_not_stream",
+      "mode": "registered",
+      "expected": "other",
+      "fault": "body_timeout",
+      "error_kind": "transport",
+      "error_phase": "open"
+    }
+  ]
+}

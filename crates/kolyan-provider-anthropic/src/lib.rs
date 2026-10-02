@@ -13,6 +13,8 @@ mod blocks;
 pub struct AnthropicProvider {
     client: AnthropicClient,
     planner: Option<kolyan_model::RequestPlanner>,
+    count_profile: kolyan_model::CountProfile,
+    accounting_owner: std::sync::Arc<()>,
 }
 
 impl AnthropicProvider {
@@ -20,6 +22,8 @@ impl AnthropicProvider {
         Self {
             client,
             planner: None,
+            count_profile: kolyan_model::CountProfile::default(),
+            accounting_owner: std::sync::Arc::new(()),
         }
     }
     /// Bind endpoint/model policy once; every invocation is planned before HTTP I/O.
@@ -27,6 +31,7 @@ impl AnthropicProvider {
         mut self,
         table: kolyan_model::ParameterTable,
     ) -> Result<Self, ProviderError> {
+        self.accounting_owner = std::sync::Arc::new(());
         self.planner = Some(kolyan_model::RequestPlanner::new(
             table,
             "anthropic_messages",
@@ -69,38 +74,10 @@ impl AnthropicProvider {
 impl ModelProvider for AnthropicProvider {
     fn stream(&self, request: ModelRequest) -> ProviderFuture<'_> {
         let client = self.client.clone();
-        let planner = self.planner.clone();
         Box::pin(async move {
-            let configured = planner.is_some();
-            let plan = match planner {
-                Some(planner) => planner.plan(&request)?,
-                None => kolyan_model::PlannedRequest::unconfigured(request)?,
-            };
-            let omit_tool_choice = plan.omitted("tool_choice");
+            let (plan, wire, _prepared) = self.plan_wire(&request)?;
             let request = plan.request;
-            if request
-                .prompt_cache
-                .as_ref()
-                .is_some_and(|cache| cache.key.is_some() || cache.retention.is_some())
-            {
-                return Err(ProviderError::new(
-                    ProviderErrorKind::Unsupported,
-                    ProviderErrorPhase::Open,
-                    "Anthropic cache mapping supports breakpoints, not key or retention",
-                ));
-            }
-            if configured && request.max_output_tokens.is_none() {
-                return Err(ProviderError::new(
-                    ProviderErrorKind::InvalidRequest,
-                    ProviderErrorPhase::Open,
-                    "Anthropic requires supported max_output_tokens from request or parameter table default",
-                ));
-            }
             let validator = kolyan_model::OutputValidator::new(request.output_format.as_ref())?;
-            let mut wire = Self::request(&request);
-            if omit_tool_choice {
-                wire.tool_choice = None;
-            }
             let response = client
                 .stream_message_with_extensions(&wire, &plan.wire_extensions)
                 .await
@@ -444,6 +421,14 @@ fn anthropic_error(error: kolyan_protocol_anthropic::AnthropicError) -> Provider
         kolyan_protocol_anthropic::AnthropicError::OpeningBudgetExhausted => {
             (ProviderErrorKind::Transport, ProviderErrorPhase::Open)
         }
+        kolyan_protocol_anthropic::AnthropicError::Count(failure) => match failure {
+            kolyan_protocol_anthropic::CountFailure::Timeout => {
+                (ProviderErrorKind::Transport, ProviderErrorPhase::Open)
+            }
+            kolyan_protocol_anthropic::CountFailure::ResponseLimit => {
+                (ProviderErrorKind::Protocol, ProviderErrorPhase::Decode)
+            }
+        },
         kolyan_protocol_anthropic::AnthropicError::Configuration(_) => {
             (ProviderErrorKind::InvalidRequest, ProviderErrorPhase::Open)
         }
@@ -487,5 +472,6 @@ fn parse_json(text: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests;
 
+mod accounting;
 #[cfg(test)]
 mod opening_diagnostic_tests;
