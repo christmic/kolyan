@@ -131,6 +131,11 @@ CAS 场景各运行两个后端，共 78 行。实际观察先写入、flush/syn
 冲突、容量、损坏及 metadata 路径不读正文；尚不证明 ToolResult 回填、
 动态 grant 或真实模型加载，后者必须由 B/C 实际执行证明。
 
+相同冻结主干源码完整 workspace 回归终态 exit0，日志
+`/tmp/kolyan-skills-a-main-workspace-v1.log`；统计为 82 个结果组，864 passed、
+0 failed、66 ignored。包含本机长任务及原有整仓回归，显式 ignored 的
+供应商网络用例未在这次运行，不能据此声称 B/C 或真实 Skills 矩阵通过。
+
 ## 验收
 
 数据驱动覆盖幂等、冲突、重建、撤销、容量、未知 schema、损坏内容、外来

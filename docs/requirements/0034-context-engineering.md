@@ -631,3 +631,76 @@ ID/key/kind/execution 损坏及 active-skip，不能由源码检查冒称这些�
 同一集成源码的 workspace all-target 严格 Clippy 退出 0，日志
 `/tmp/kolyan-evolution-integrated-strict-v1.log`；fmt、布局与 diff 检查通过。
 实际 Agent 计量策略、模型开启准入、缩减消费者及完整真实矩阵仍需后续交付。
+
+## 模型开启证明与重试边界
+
+下一批采用强制的新 durable opening 协议，不保留旧执行缺字段回退。
+InputAdmission 增加 required opening_protocol，唯一合法值 1；旧测试构造器
+显式迁移，场景和断言保留。Standalone Core 和低层 SDK 不被迫使用持久
+协议，但生产 durable start/resume 必须执行，不能注册一个默认无操作的
+绑定实现绕过。沿用现有 ModelProvider 的 stream future，覆盖真实 prepare、
+count、准入和生成，不增设另一套 Core 开启 trait 或模型 loop。
+
+ModelOpeningEventRef 使用 event_id/cursor，严格区别于 Journal 的 FactRef。
+Runtime recorder 保存每次实际 ModelRequested 的 exact ledger coordinate、
+step_id 和完整 neutral digest；禁止按 latest request 猜绑定。ModelContextPrepared
+使用 critical schema1 的 model.context_prepared fact，subject 为精确 execution。
+payload 必须包含协议版本、ExecutionKey、step_id、model_requested coordinate、
+neutral_digest、完整 mapping identity、count_profile_digest、generation_wire_digest、
+generation_wire_bytes、count_input_digest、unsupported_count_fields 和 accounting。
+所有字段严格解析，未知字段拒绝，nullable 字段缺失也拒绝。
+
+accounting 为两个明确分支：ProviderReported 携带 counter_revision、
+input_tokens 和宿主 max_input_tokens；WireBytes 携带 policy_revision 和
+max_generation_wire_bytes。前者绑定实际 count report 的身份与所有摘要，
+要求 coverage 完整并满足显式预算，不因此变为 Strict 的可信计数；后者
+明确是字节策略，MiniMax 不支持计数时不探测未知 endpoint、不捏造 token。
+将来 ExactProviderCount 需要独立已验证保证等级，不在首版悄悄提升。
+完整 generation/count body 不写入单事实：最大请求可达 16 MiB，而 Fact
+payload 有 128 KiB 上限。摘要事实不能作为重建并重发未知 GEN 的来源。
+
+ModelOpeningAdmitted 是 ledger kind，稳定 ID/idempotency key 为
+execution_id/model-opening/step_id。payload 为 schema_version、opening_protocol、
+execution、step_id、model_requested、preparation FactRef、neutral_digest、
+generation_wire_digest、generation_wire_bytes、count_profile_digest 和必需
+nullable deadline_at_ms。Runtime 核对当前真实 prepared object 与已回读的
+准备事实，再通过 append_unless_cancelled 提交。确认成功后只返回私有、
+不可 Clone/Deserialize 的单次 permit；重复准入、未知提交结果不发新 permit。
+permit 消费前重新检查同一 TurnDeadline，不扩大截止时间。
+
+durable StepCompleted 由 recorder 注入 opening_protocol、model_requested
+和 model_opening coordinate；不改 Core StepResult，也不从模型响应取引用。
+顺序要求 InputAdmission < StepStarted < ModelRequested < ModelOpeningAdmitted
+< StepCompleted < physical terminal。跨 Journal 的因果关系按 exact reference
+回读验证，不能把 Journal position 与 ledger cursor 数值比较。SSE completed、
+usage 或普通 Turn terminal 不能代替 Core 验证 EOF 后的 StepCompleted。
+
+共享只读 inspect_model_openings(ledger, facts, request) 返回 opaque
+VerifiedModelOpenings；request 包含 execution、exact through coordinate 和
+显式行数/总字节/单 payload 限制。它实际分页读取固定 prefix、回读精确
+准备 FactRef，核对每个 Step 唯一 request/opening/completion 链与 typed
+StepResult，不调用 Task snapshot、模型、reconciliation 或任何写操作。
+状态为 NotAdmitted、Completed、Uncertain；错误区分 InvalidRequest、
+UnsupportedProtocol、MissingEvidence、BindingMismatch、OrderingMismatch、
+InvalidPayload、BoundsExceeded 和保留真实 Ledger/Fact cause 的 Storage。
+Verified 结果不可反序列化或由调用方构造。
+
+NotAdmitted 必须有真实新协议准入、完整固定 prefix 和合法事件顺序；
+空账本、缺 marker、未知 schema、损坏或读不完不能推导为“没调用模型”。
+准入后缺可信 completion 一律 Uncertain，即使没有工具效果、超时/取消，
+或网络是否发送不明也禁止自动重发。恢复入口、Task 失败投影与 retry 必须
+消费同一个 inspector；当前 retry 只检查 tool effects，存在 unknown GEN
+被误认为 safe retry 的源码反例，不能仅新增错误名称来声称已堵住。
+
+重试核对 frozen ledger prefix，并保留授权前后重新读取精确比较。公开
+coordinator authorize_retry 和 safe_to_retry=true 旁路同步收窄为可信验证
+结果的消费者；不以仅 service façade 检查宣称全部入口 enforcing。模型
+completed 仍不能跳过 tool effect、取消、预算和 idle 检查。本协议不承诺
+跨崩溃 exactly-once，也不将 Task cancel 与 ledger cancel 宣称为原子事务。
+
+先交付严格数据契约和真实 Ledger/Journal inspector 的 Memory/SQLite 新
+数据门，再由主控装配强制 attempt binding、写入、实际 counted consumer
+及 Task retry/failure 消费。基础切片未接线前不得计为开启准入已实现。
+新增场景包含 count await 取消、准入后崩溃、timeout/cancel 缺 completion、
+全部工具 NotCommitted 但模型 unknown、可信完成、marker/来源损坏及授权
+竞态；逐行完整事实和错误导出后物理回读，保持旧场景和断言。
