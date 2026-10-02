@@ -5,7 +5,8 @@
 本需求落实阶段计划 E3：模型先看到有界元数据，按精确版本调用 skill.load，
 正文作为真实 ToolResult 回填到现有 Turn 的下一 Step。Skills 提供任务知识，
 不能授予权限、执行脚本或创建另一套 Agent loop。A 批基础能力已集成并通过
-主干模块验证，B 批执行接线与独立数据门已接入主干；完整能力尚未验收，不把目录
+主干模块验证，B 批执行接线与独立数据门已接入主干；C 批 Host 场景与真实矩阵
+已集成，但仍有真实行未达标，因此完整能力尚未验收，不把目录
 类型或局部存储测试当作完整 Skills 能力。
 
 ## 数据与存储边界
@@ -198,3 +199,50 @@ scope；未选正文零读取，选中仅对应读取，精确 UTF-8、摘要和
 及 Goal facts，不能用最终回答计通过；未发生预期交互明确失败。撤销竞态
 和恶意内容先以确定性数据验证，真实模型行为另记。网络结果与离线证明
 分开记录，密钥只在环境，项目本地私有配置与日志不提交。
+
+## Production Host integration and actual model feedback
+
+Main verified all nine C-source digests before import. The existing root target
+only adds `mod skills`; the new framework, data and expectations remain separate.
+No original input, expected result or assertion was weakened. The network runner
+additionally persists its plan before execution and synchronizes/closes actual
+JSONL after every row, retaining partial findings before the final comparison.
+
+On 2026-10-03 the focused offline gate exited 0 in
+`/tmp/kolyan-skills-c-main-offline-v1.log`: two tests passed, two entries ignored;
+the helper subprocess separately executed all eight actual Host cases. Physical
+readback at
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-skills-c-host-d0Qlg4/actual.jsonl`
+confirmed complete requests, artifacts, receipts, facts and native outcomes.
+Coverage includes both protocols, approval/rebuild/Accept, revoked or changed-ACL
+Deny, malicious knowledge without shell/delegation authority, revoked load, and
+revocation before the next generation. The latter retains two request intents
+but one actual localhost HTTP opening; intent is not dispatch proof.
+
+Main then ran the four actual MiniMax-M3 rows exactly once. The gate exited 101,
+not success, in `/tmp/kolyan-skills-c-main-minimax-v1.log`. Actual trajectory:
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/kolyan-skills-c-minimax-YlvrOu/actual.jsonl`.
+OpenAI named/inline and Anthropic named each produced four Steps, exactly one
+Skill load/write/read receipt, exact 20-byte file content, Satisfied and Completed.
+Anthropic inline produced four Steps and all three receipts, but its actual write
+argument included literal surrounding double quotes: 22 bytes instead of 20.
+The checker retained Unsatisfied and the Task remained Waiting after a completed
+physical FinalAnswer. This is an unmet model-generated task result, not a passing
+row or evidence of protocol corruption. C's full live matrix remains unaccepted.
+
+The private log records the actual protocol request bodies through the existing
+diagnostic path, without credentials or authentication headers; these are distinct
+from neutral ModelRequested facts in JSONL. The 22-byte receipt, subsequent read,
+physical file and immutable goal predicate agree. No response repair, parameter
+rewrite, expected-value change or scenario retry was used. Preserve this finding
+for the separately specified bounded goal-correction increment 0038; it is not a
+reason to block unrelated functional development or require self-modification.
+
+The focused Skills strict gate exited 0 in
+`/tmp/kolyan-skills-c-main-strict-v1.log`. The joint frozen Skills/approval-consumer
+source passed workspace all-target strict Clippy in
+`/tmp/kolyan-skills-budget-main-strict-v1.log`, then the full workspace regression
+exited 0 in `/tmp/kolyan-skills-budget-main-workspace-v1.log`: 90 result groups,
+900 passed, zero failed and 69 ignored, including explicit helper-subprocess
+results. Formatting, source-layout and diff checks exited 0. That offline result
+does not erase the separately executed 3/4 actual MiniMax outcome.

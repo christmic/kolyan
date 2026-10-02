@@ -16,6 +16,7 @@ mod providers;
 mod restart;
 mod root_goals;
 mod self_iteration;
+mod skills;
 mod tools;
 mod usage;
 
