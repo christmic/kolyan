@@ -4181,3 +4181,39 @@ Invalid 错误载荷为有界 UTF-8 文本，最长 1024 字节，截断显式�
 
 三项均完成且通过原完整规格的逐项审计后，才能宣布目标达成。单测、静态检查、
 一次成功运行或这一清单的记录本身，均不构成完整验收。
+
+### 0031 首批集成后的 MiniMax 真实回归
+
+使用 Main `0f4f053` 加已冻结 0032/0033 源码构建的 Agent 测试二进制；该源码
+随后分别提交为 `9ea1392` 与 `e93464c`。运行过程中未改变用例或断言，未重新
+编译运行中的二进制。后续 Runtime effect-proof 改动不被算入这份旧二进制证明。
+
+实际命令：`cargo test --offline --locked -p kolyan-integration-tests --test
+agent_root minimax_live::actual_minimax_ -- --ignored --nocapture --test-threads=1`。
+这个 substring 同时选择三个嵌套模块，实际是五个函数，不只是 root/approval。
+终态退出 101，耗时 580.84 秒：Rust 函数 2 passed、3 failed；数据行 15/24 通过，
+9 行失败。日志 `/tmp/kolyan-evolution-minimax-root-approval-v1.log`。
+
+| 矩阵 | 数据结果 | 实际 report 临时目录 |
+| --- | --- | --- |
+| named/inline root | 4/4 | `kolyan-r1-matrix-SkF67J` |
+| named/inline 审批重建 | 4/4 | `kolyan-r1-matrix-7ilVsF` |
+| named/inline/self 委派与 parent-result 重建 | 1/8 | `kolyan-r1-matrix-iXTefb` |
+| 两子并行/串行策略 | 3/4 | `kolyan-r1-matrix-kjAW3S` |
+| 两层自调用与双子审批重建 | 3/4 | `kolyan-r1-matrix-bb9EEL` |
+
+每个目录下 report.json 为实际结果，父目录
+`/var/folders/0p/65d_m6956tj7726tbvdgr2gh0000gn/T/`；完整请求、模型事件、事实及
+工具过程的 JSONL 路径由对应日志记录。具名与内联、两个协议均有实际执行，
+不是只检查模型回复字符串。原失败矩阵与候选拒绝记录保持不变。
+
+九个失败中，五个报告明确为严格解析的 named_targets 空字符串，分类现在为
+ToolError::Failed。主控读取首个 actual.jsonl 的 Provider Completed metadata.output
+及中立 ToolCallCompleted，二者均含原始 `named_targets:""`；该次出站 schema
+明确要求 array 且说明使用 []，未发现 Provider 将合法数组改成字符串的证据。
+这只定位该次模型产物与当前失败原因，不证明模型的普遍行为，也不改变严格解析。
+其余四个报告缺少预期效果收据；不能仅据零计数统一归因，须继续逐行核对。
+
+另行启动精确选择的十六行 host-feedback 矩阵，验证真实错误回填与新调用纠正。
+日志 `/tmp/kolyan-evolution-minimax-host-feedback-v1.log`；未取得终态前不记为通过。
+它不覆盖本次九个失败，也不代替 goal/host/context 的新主线验收。
